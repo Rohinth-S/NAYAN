@@ -1,0 +1,16 @@
+{
+  "runType": "synthetic-deterministic-chrome",
+  "recordedAt": "2026-09-15",
+  "requestCount": 3,
+  "detectorBackends": ["wasm", "wasm", "wasm"],
+  "visualFallbacks": ["none", "none", "none"],
+  "redactionCounts": [9, 9, 9],
+  "redactionKinds": ["password", "sensitive-field", "pii-text", "uninspectable-media", "face"],
+  "outboundBytes": [97744, 98031, 98110],
+  "serializedCanariesAbsent": true,
+  "phase": "done",
+  "message": "Synthetic task complete",
+  "status": "Enrollment submitted successfully.",
+  "submitted": true,
+  "elapsedMs": 3406
+}

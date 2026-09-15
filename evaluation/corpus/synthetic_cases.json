@@ -1,0 +1,409 @@
+{
+  "schemaVersion": "1.0",
+  "corpusId": "sih26171-synthetic-v1",
+  "description": "Entirely synthetic privacy-agent fixtures. Values resemble Indian PII formats only to exercise detectors and must never be treated as real identities or credentials.",
+  "license": "CC0-1.0",
+  "cases": [
+    {
+      "caseId": "structured-form-indian-pii",
+      "synthetic": true,
+      "description": "Prefilled form with visible Indian-format identifiers, a password, title and URL leaks, and hidden DOM attributes.",
+      "viewport": { "width": 1280, "height": 720 },
+      "rawFixture": {
+        "page": {
+          "origin": "https://portal.example.test",
+          "url": "https://portal.example.test/profile?contact=sih.alice%2Bcanary%40example.test#ABCDE1234F",
+          "title": "Profile for Ananya Demo — sih.alice+canary@example.test"
+        },
+        "task": "Submit the prefilled privacy registration form.",
+        "elements": [
+          {
+            "sourceRef": "profile-name",
+            "tag": "input",
+            "role": "textbox",
+            "label": "Full name",
+            "value": "Ananya Demo",
+            "attributes": { "autocomplete": "name", "name": "full_name" },
+            "bounds": { "x": 180, "y": 120, "width": 280, "height": 36 }
+          },
+          {
+            "sourceRef": "profile-email",
+            "tag": "input",
+            "role": "textbox",
+            "label": "Email",
+            "value": "sih.alice+canary@example.test",
+            "attributes": { "autocomplete": "email", "data-user-email": "sih.alice+canary@example.test" },
+            "bounds": { "x": 180, "y": 176, "width": 320, "height": 36 }
+          },
+          {
+            "sourceRef": "profile-password",
+            "tag": "input",
+            "role": "textbox",
+            "label": "Password",
+            "value": "SIH_TEST_PASSWORD_!7",
+            "attributes": { "type": "password", "autocomplete": "current-password" },
+            "bounds": { "x": 180, "y": 232, "width": 280, "height": 36 }
+          },
+          {
+            "sourceRef": "profile-phone",
+            "tag": "input",
+            "role": "textbox",
+            "label": "Mobile",
+            "value": "+91 98765 43210",
+            "attributes": { "autocomplete": "tel", "inputmode": "tel" },
+            "bounds": { "x": 180, "y": 288, "width": 240, "height": 36 }
+          },
+          {
+            "sourceRef": "profile-pan",
+            "tag": "input",
+            "role": "textbox",
+            "label": "PAN",
+            "value": "ABCDE1234F",
+            "attributes": { "name": "pan_number" },
+            "bounds": { "x": 180, "y": 344, "width": 220, "height": 36 }
+          },
+          {
+            "sourceRef": "profile-submit",
+            "tag": "button",
+            "role": "button",
+            "label": "Submit registration",
+            "bounds": { "x": 180, "y": 420, "width": 190, "height": 42 }
+          }
+        ]
+      },
+      "canaries": [
+        { "canaryId": "form-name", "kind": "PERSON_NAME", "value": "Ananya Demo", "minimumPrivacyGrade": 3 },
+        { "canaryId": "form-email", "kind": "EMAIL", "value": "sih.alice+canary@example.test", "minimumPrivacyGrade": 2 },
+        { "canaryId": "form-password", "kind": "PASSWORD", "value": "SIH_TEST_PASSWORD_!7", "minimumPrivacyGrade": 1 },
+        { "canaryId": "form-phone", "kind": "INDIAN_PHONE", "value": "+91 98765 43210", "minimumPrivacyGrade": 2 },
+        { "canaryId": "form-pan", "kind": "PAN", "value": "ABCDE1234F", "minimumPrivacyGrade": 1 }
+      ],
+      "annotations": [
+        {
+          "annotationId": "name-visible",
+          "kind": "PERSON_NAME",
+          "source": "dom-value",
+          "sourceRef": "profile-name",
+          "field": "value",
+          "bounds": { "x": 180, "y": 120, "width": 280, "height": 36 },
+          "canaryId": "form-name",
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 3
+        },
+        {
+          "annotationId": "email-visible",
+          "kind": "EMAIL",
+          "source": "dom-value",
+          "sourceRef": "profile-email",
+          "field": "value",
+          "bounds": { "x": 180, "y": 176, "width": 320, "height": 36 },
+          "canaryId": "form-email",
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 2
+        },
+        {
+          "annotationId": "password-field",
+          "kind": "PASSWORD",
+          "source": "dom-heuristic",
+          "sourceRef": "profile-password",
+          "field": "value",
+          "bounds": { "x": 180, "y": 232, "width": 280, "height": 36 },
+          "canaryId": "form-password",
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        },
+        {
+          "annotationId": "phone-visible",
+          "kind": "INDIAN_PHONE",
+          "source": "dom-value",
+          "sourceRef": "profile-phone",
+          "field": "value",
+          "bounds": { "x": 180, "y": 288, "width": 240, "height": 36 },
+          "canaryId": "form-phone",
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 2
+        },
+        {
+          "annotationId": "pan-visible",
+          "kind": "PAN",
+          "source": "dom-value",
+          "sourceRef": "profile-pan",
+          "field": "value",
+          "bounds": { "x": 192, "y": 352, "width": 112, "height": 20 },
+          "canaryId": "form-pan",
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        },
+        {
+          "annotationId": "email-dom-attribute",
+          "kind": "EMAIL",
+          "source": "dom-attribute",
+          "sourceRef": "profile-email",
+          "field": "attributes.data-user-email",
+          "canaryId": "form-email",
+          "countsForDetection": false,
+          "requiresMask": false,
+          "minimumPrivacyGrade": 2
+        },
+        {
+          "annotationId": "email-page-title",
+          "kind": "EMAIL",
+          "source": "page-title",
+          "sourceRef": "page",
+          "field": "title",
+          "canaryId": "form-email",
+          "countsForDetection": false,
+          "requiresMask": false,
+          "minimumPrivacyGrade": 2
+        },
+        {
+          "annotationId": "pan-url-fragment",
+          "kind": "PAN",
+          "source": "page-url",
+          "sourceRef": "page",
+          "field": "url.fragment",
+          "canaryId": "form-pan",
+          "countsForDetection": false,
+          "requiresMask": false,
+          "minimumPrivacyGrade": 1
+        }
+      ],
+      "wireExpectations": {
+        "originAliasPattern": "^https://site-[0-9a-f]{20}\\.invalid$",
+        "forbiddenRawFields": ["url", "value", "attributes", "html", "selector"],
+        "expectedRedactionKinds": ["PERSON_NAME", "EMAIL", "PASSWORD", "INDIAN_PHONE", "PAN"],
+        "expectedActionSequence": [
+          { "type": "click", "targetSourceRef": "profile-submit" },
+          { "type": "done" }
+        ],
+        "successCondition": "The synthetic portal displays registration-complete."
+      }
+    },
+    {
+      "caseId": "canvas-image-aadhaar-face",
+      "synthetic": true,
+      "description": "Pixel-only identity preview with synthetic identifier canaries and faces. Identifier text is not an OCR target in v1; the entire uninspectable canvas is expected to be masked.",
+      "viewport": { "width": 1024, "height": 768 },
+      "rawFixture": {
+        "page": {
+          "origin": "https://portal.example.test",
+          "url": "https://portal.example.test/identity-preview",
+          "title": "Synthetic identity preview"
+        },
+        "task": "Close the identity preview and finish.",
+        "elements": [
+          {
+            "sourceRef": "identity-canvas",
+            "tag": "canvas",
+            "role": "img",
+            "label": "Identity card preview",
+            "drawnText": ["2345 6789 0123", "vision.canary@example.test"],
+            "bounds": { "x": 120, "y": 90, "width": 720, "height": 500 }
+          },
+          {
+            "sourceRef": "identity-photo",
+            "tag": "img",
+            "role": "img",
+            "label": "Two synthetic avatar faces",
+            "attributes": { "alt": "Synthetic avatar group", "data-id-hint": "2345 6789 0123" },
+            "bounds": { "x": 560, "y": 150, "width": 230, "height": 180 }
+          },
+          {
+            "sourceRef": "identity-close",
+            "tag": "button",
+            "role": "button",
+            "label": "Close preview",
+            "bounds": { "x": 760, "y": 620, "width": 140, "height": 42 }
+          }
+        ]
+      },
+      "canaries": [
+        { "canaryId": "canvas-aadhaar", "kind": "AADHAAR", "value": "2345 6789 0123", "minimumPrivacyGrade": 1 },
+        { "canaryId": "canvas-email", "kind": "EMAIL", "value": "vision.canary@example.test", "minimumPrivacyGrade": 2 }
+      ],
+      "annotations": [
+        {
+          "annotationId": "uninspectable-canvas-region",
+          "kind": "UNINSPECTABLE_MEDIA",
+          "source": "fail-closed-region",
+          "sourceRef": "identity-canvas",
+          "field": "pixels",
+          "bounds": { "x": 120, "y": 90, "width": 720, "height": 500 },
+          "countsForDetection": false,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        },
+        {
+          "annotationId": "aadhaar-canvas-text",
+          "kind": "AADHAAR",
+          "source": "synthetic-pixel-canary",
+          "sourceRef": "identity-canvas",
+          "field": "pixels",
+          "bounds": { "x": 180, "y": 410, "width": 210, "height": 28 },
+          "canaryId": "canvas-aadhaar",
+          "sourceColorRgb": [1, 254, 129],
+          "countsForDetection": false,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        },
+        {
+          "annotationId": "email-canvas-text",
+          "kind": "EMAIL",
+          "source": "synthetic-pixel-canary",
+          "sourceRef": "identity-canvas",
+          "field": "pixels",
+          "bounds": { "x": 180, "y": 460, "width": 280, "height": 28 },
+          "canaryId": "canvas-email",
+          "sourceColorRgb": [2, 213, 252],
+          "countsForDetection": false,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 2
+        },
+        {
+          "annotationId": "face-left",
+          "kind": "FACE",
+          "source": "local-vision",
+          "sourceRef": "identity-photo",
+          "field": "pixels",
+          "bounds": { "x": 585, "y": 180, "width": 72, "height": 92 },
+          "sourceColorRgb": [253, 1, 231],
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        },
+        {
+          "annotationId": "face-right",
+          "kind": "FACE",
+          "source": "local-vision",
+          "sourceRef": "identity-photo",
+          "field": "pixels",
+          "bounds": { "x": 685, "y": 178, "width": 74, "height": 94 },
+          "sourceColorRgb": [251, 97, 3],
+          "countsForDetection": true,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        },
+        {
+          "annotationId": "aadhaar-image-attribute",
+          "kind": "AADHAAR",
+          "source": "dom-attribute",
+          "sourceRef": "identity-photo",
+          "field": "attributes.data-id-hint",
+          "canaryId": "canvas-aadhaar",
+          "countsForDetection": false,
+          "requiresMask": false,
+          "minimumPrivacyGrade": 1
+        }
+      ],
+      "wireExpectations": {
+        "originAliasPattern": "^https://site-[0-9a-f]{20}\\.invalid$",
+        "forbiddenRawFields": ["drawnText", "attributes", "url"],
+        "expectedRedactionKinds": ["uninspectable-media", "face"],
+        "expectedActionSequence": [
+          { "type": "click", "targetSourceRef": "identity-close" },
+          { "type": "done" }
+        ],
+        "successCondition": "The synthetic portal displays preview-closed."
+      }
+    },
+    {
+      "caseId": "non-sensitive-controls",
+      "synthetic": true,
+      "description": "Negative control with order numbers, dates, prices, and ordinary buttons that should remain usable.",
+      "viewport": { "width": 1280, "height": 720 },
+      "rawFixture": {
+        "page": {
+          "origin": "https://portal.example.test",
+          "url": "https://portal.example.test/orders",
+          "title": "Demo orders"
+        },
+        "task": "Open order ORD-2026-00042.",
+        "visibleText": ["ORD-2026-00042", "15 September 2026", "₹1,250.00", "Ready for review"],
+        "elements": [
+          {
+            "sourceRef": "order-open",
+            "tag": "button",
+            "role": "button",
+            "label": "Open order ORD-2026-00042",
+            "bounds": { "x": 160, "y": 260, "width": 240, "height": 40 }
+          }
+        ]
+      },
+      "canaries": [],
+      "annotations": [],
+      "wireExpectations": {
+        "originAliasPattern": "^https://site-[0-9a-f]{20}\\.invalid$",
+        "forbiddenRawFields": ["url", "visibleText"],
+        "expectedRedactionKinds": [],
+        "expectedActionSequence": [
+          { "type": "click", "targetSourceRef": "order-open" },
+          { "type": "done" }
+        ],
+        "successCondition": "The synthetic portal displays order-opened."
+      }
+    },
+    {
+      "caseId": "inaccessible-cross-origin-frame",
+      "synthetic": true,
+      "description": "A visually present but uninspectable cross-origin frame that must be covered wholesale before egress.",
+      "viewport": { "width": 1280, "height": 720 },
+      "rawFixture": {
+        "page": {
+          "origin": "https://portal.example.test",
+          "url": "https://portal.example.test/frame-test",
+          "title": "Frame masking test"
+        },
+        "task": "Continue below the embedded panel.",
+        "elements": [
+          {
+            "sourceRef": "external-frame",
+            "tag": "iframe",
+            "role": "document",
+            "crossOrigin": true,
+            "simulatedPixelCanary": "FRAME-CANARY-SECRET-44",
+            "bounds": { "x": 120, "y": 130, "width": 640, "height": 280 }
+          },
+          {
+            "sourceRef": "frame-continue",
+            "tag": "button",
+            "role": "button",
+            "label": "Continue",
+            "bounds": { "x": 120, "y": 450, "width": 140, "height": 42 }
+          }
+        ]
+      },
+      "canaries": [
+        { "canaryId": "frame-secret", "kind": "INACCESSIBLE_CONTENT", "value": "FRAME-CANARY-SECRET-44", "minimumPrivacyGrade": 1 }
+      ],
+      "annotations": [
+        {
+          "annotationId": "cross-origin-frame-region",
+          "kind": "INACCESSIBLE_FRAME",
+          "source": "fail-closed-region",
+          "sourceRef": "external-frame",
+          "field": "pixels",
+          "bounds": { "x": 120, "y": 130, "width": 640, "height": 280 },
+          "sourceColorRgb": [199, 17, 117],
+          "countsForDetection": false,
+          "requiresMask": true,
+          "minimumPrivacyGrade": 1
+        }
+      ],
+      "wireExpectations": {
+        "originAliasPattern": "^https://site-[0-9a-f]{20}\\.invalid$",
+        "forbiddenRawFields": ["url", "crossOrigin", "simulatedPixelCanary"],
+        "expectedRedactionKinds": ["uninspectable-frame"],
+        "expectedActionSequence": [
+          { "type": "click", "targetSourceRef": "frame-continue" },
+          { "type": "done" }
+        ],
+        "successCondition": "The synthetic portal displays continued."
+      }
+    }
+  ]
+}

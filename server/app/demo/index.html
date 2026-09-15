@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbital Benefits Portal — Aarav Sharma</title>
+  <link rel="stylesheet" href="/demo/assets/app.css">
+</head>
+<body>
+  <main class="shell" data-customer-reference="SIH-ATTR-CANARY-8841">
+    <header>
+      <div>
+        <p class="eyebrow">Synthetic SIH evaluation portal</p>
+        <h1>Orbital Benefits Enrollment</h1>
+        <p>This page contains fictional PII designed to test local redaction.</p>
+      </div>
+      <img class="portrait" src="/demo/assets/face.svg" alt="Synthetic profile portrait of Aarav Sharma">
+    </header>
+
+    <section class="card" aria-labelledby="profile-heading">
+      <h2 id="profile-heading">Employee profile</h2>
+      <dl>
+        <div><dt>Name</dt><dd>Aarav Sharma</dd></div>
+        <div><dt>Email</dt><dd>aarav.sharma@example.test</dd></div>
+        <div><dt>Phone</dt><dd>+91 98765 43210</dd></div>
+        <div><dt>PAN</dt><dd>ABCDE1234F</dd></div>
+        <div><dt>Aadhaar</dt><dd>2345 6789 1234</dd></div>
+      </dl>
+    </section>
+
+    <form id="enrollment" class="card" autocomplete="off">
+      <h2>Confirm enrollment</h2>
+      <label for="employee-code">Employee code</label>
+      <input id="employee-code" name="employeeCode" value="ORB-2048" readonly>
+
+      <label for="account-password">Portal password</label>
+      <input
+        id="account-password"
+        name="password"
+        type="password"
+        value="SIH-Canary-Password-93!"
+        autocomplete="current-password"
+        data-private-owner="Aarav Sharma">
+
+      <label class="check-row" for="consent">
+        <input id="consent" name="consent" type="checkbox" required>
+        <span>I confirm the benefit selection shown above.</span>
+      </label>
+
+      <button id="submit-enrollment" type="submit">Submit enrollment</button>
+      <p id="status" role="status" aria-live="polite">Waiting for confirmation.</p>
+    </form>
+
+    <a class="canary-link" href="/demo?customer=SIH-URL-CANARY-7719">Synthetic statement link</a>
+  </main>
+  <script src="/demo/assets/app.js" defer></script>
+</body>
+</html>

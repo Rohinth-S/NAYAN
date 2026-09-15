@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sih26171.example.test/schemas/evaluation-corpus-1.0.json",
+  "title": "SIH26171 synthetic evaluation corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "corpusId", "description", "cases"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "corpusId": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "license": { "type": "string" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "canary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canaryId", "kind", "value"],
+      "properties": {
+        "canaryId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "value": { "type": "string", "minLength": 1 },
+        "minimumPrivacyGrade": {
+          "type": "integer",
+          "enum": [1, 2, 3],
+          "default": 1,
+          "description": "Lowest cumulative privacy grade at which this canary must be absent."
+        }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "annotationId",
+        "kind",
+        "source",
+        "sourceRef",
+        "field",
+        "countsForDetection",
+        "requiresMask"
+      ],
+      "properties": {
+        "annotationId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "sourceRef": { "type": "string", "minLength": 1 },
+        "field": { "type": "string", "minLength": 1 },
+        "bounds": { "$ref": "#/$defs/bounds" },
+        "canaryId": { "type": "string", "minLength": 1 },
+        "sourceColorRgb": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+        },
+        "countsForDetection": { "type": "boolean" },
+        "requiresMask": { "type": "boolean" },
+        "minimumPrivacyGrade": {
+          "type": "integer",
+          "enum": [1, 2, 3],
+          "default": 1,
+          "description": "Lowest cumulative privacy grade at which this annotation must be detected or masked."
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId",
+        "synthetic",
+        "description",
+        "viewport",
+        "rawFixture",
+        "canaries",
+        "annotations",
+        "wireExpectations"
+      ],
+      "properties": {
+        "caseId": { "type": "string", "minLength": 1 },
+        "synthetic": { "const": true },
+        "description": { "type": "string", "minLength": 1 },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "rawFixture": {
+          "type": "object",
+          "description": "Synthetic portal source material; this object must never enter a reasoning request."
+        },
+        "canaries": { "type": "array", "items": { "$ref": "#/$defs/canary" } },
+        "annotations": { "type": "array", "items": { "$ref": "#/$defs/annotation" } },
+        "wireExpectations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "originAliasPattern",
+            "forbiddenRawFields",
+            "expectedRedactionKinds",
+            "expectedActionSequence",
+            "successCondition"
+          ],
+          "properties": {
+            "originAliasPattern": {
+              "const": "^https://site-[0-9a-f]{20}\\.invalid$",
+              "description": "Keyed, session-scoped origin alias format emitted by the extension."
+            },
+            "forbiddenRawFields": { "type": "array", "items": { "type": "string" } },
+            "expectedRedactionKinds": { "type": "array", "items": { "type": "string" } },
+            "expectedActionSequence": { "type": "array", "items": { "type": "object" } },
+            "successCondition": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

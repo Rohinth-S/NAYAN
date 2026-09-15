@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "replace-with-observed-run-id",
+  "environment": {
+    "browser": null,
+    "extensionBuild": null,
+    "detectorModel": null,
+    "reasoningModel": null,
+    "hardware": null
+  },
+  "observations": []
+}

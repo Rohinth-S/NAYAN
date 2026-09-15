@@ -1,0 +1,27 @@
+{
+  "runType": "synthetic-live-ollama-chrome",
+  "recordedAt": "2026-09-15",
+  "phase": "done",
+  "steps": 3,
+  "detector": "wasm",
+  "masks": 9,
+  "lastReasoningLatencyMs": 12107,
+  "postCount": 3,
+  "pollCount": 5,
+  "requestCount": 8,
+  "requestStatuses": [
+    "POST:202",
+    "GET:202",
+    "GET:200",
+    "POST:202",
+    "GET:200",
+    "POST:202",
+    "GET:202",
+    "GET:200"
+  ],
+  "pollBodiesEmpty": true,
+  "wireCanariesAbsent": true,
+  "lastActionType": "done",
+  "submitted": true,
+  "elapsedMs": 38617
+}

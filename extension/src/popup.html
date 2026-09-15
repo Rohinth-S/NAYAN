@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Private Browser Agent</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Private Browser Agent</h1>
+          <p>SIH26171 local privacy boundary</p>
+        </div>
+        <span id="state" class="badge">idle</span>
+      </header>
+
+      <label>
+        Task
+        <textarea id="task" rows="3" maxlength="2000" placeholder="Example: submit this form after checking the details"></textarea>
+      </label>
+
+      <label>
+        Privacy grade
+        <select id="privacyGrade">
+          <option value="1">Grade 1 — Essential</option>
+          <option value="2">Grade 2 — Balanced</option>
+          <option value="3" selected>Grade 3 — Strict</option>
+        </select>
+      </label>
+      <p id="gradeSummary" class="grade-summary"></p>
+
+      <div class="row">
+        <label class="grow">
+          Reasoning endpoint
+          <input id="endpoint" type="url" value="http://127.0.0.1:8765/v1/reason" spellcheck="false" />
+        </label>
+        <label class="steps">
+          Steps
+          <input id="maxSteps" type="number" min="1" max="30" value="10" />
+        </label>
+      </div>
+
+      <label>
+        Optional API key (memory only)
+        <input id="apiKey" type="password" autocomplete="off" maxlength="1000" />
+      </label>
+
+      <details>
+        <summary>Privacy controls</summary>
+        <div class="grade-guide">
+          <p><strong>Grade 1</strong> hides credentials, secrets, official and financial identifiers, faces, custom private values, and uninspectable content.</p>
+          <p><strong>Grade 2</strong> also hides contact details, address, date of birth, IP address, and customer/account identifiers.</p>
+          <p><strong>Grade 3</strong> also hides names, usernames, employee identifiers, and unknown populated fields.</p>
+        </div>
+        <label>
+          Known private values, one per line (memory only)
+          <textarea id="canaries" rows="3" maxlength="10000" placeholder="Values are detected locally and must not appear in the request"></textarea>
+        </label>
+        <label class="check">
+          <input id="fallback" type="checkbox" />
+          If face detection is unavailable, send a fully black image and DOM structure
+        </label>
+      </details>
+
+      <div class="actions">
+        <button id="preview" type="button" class="secondary">Privacy preview</button>
+        <button id="start" type="button">Start agent</button>
+        <button id="stop" type="button" class="danger" disabled>Stop</button>
+      </div>
+
+      <section class="status" aria-live="polite">
+        <p id="message">Ready</p>
+        <dl>
+          <div><dt>Step</dt><dd id="step">0</dd></div>
+          <div><dt>Detector</dt><dd id="detector">missing</dd></div>
+          <div><dt>Masks</dt><dd id="redactions">0</dd></div>
+          <div><dt>Server</dt><dd id="latency">—</dd></div>
+        </dl>
+      </section>
+
+      <figure id="previewPane" hidden>
+        <figcaption>Sanitized pixels eligible for transmission</figcaption>
+        <img id="previewImage" alt="Sanitized page preview" />
+      </figure>
+
+      <p class="footnote">The preview is produced locally. Website traffic remains controlled by the website.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
