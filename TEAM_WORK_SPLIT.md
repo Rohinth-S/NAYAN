@@ -49,6 +49,23 @@ Work in this order because it protects the SIH score and the privacy claim:
 4. **P1 reliability:** Firefox live workflow, durable jobs, restart recovery, cancellation, observability, and performance budgets.
 5. **P2 capability:** richer planning, accessibility fusion, safe navigation/download/upload support, and additional model providers.
 
+## Ownership update — Mithul is primary for local perception and model portability
+
+The following cross-cutting tasks are explicitly assigned to **Mithul** as the primary implementer. Prajjwal supports server wiring and CI integration where needed, but Mithul owns the detector/model implementation, its privacy review, and its accuracy evidence.
+
+| Assigned task | Mithul's responsibility | Required handoff |
+| --- | --- | --- |
+| OCR for images, canvas, SVG, video, and PDFs | Select, package, benchmark, and integrate an offline browser-compatible OCR model | Give Prajjwal the detector output contract and test fixtures |
+| Local NER for unlabelled names and addresses | Integrate local NER and connect confidence/category output to Grade 1/2/3 policy | Give Rohinth the policy/version migration note |
+| Multilingual PII detection | Add supported languages, normalization, and language-specific fixtures | Give Prajjwal corpus labels and per-language metrics |
+| General visual understanding on the client | Evaluate a lightweight local visual model for page/media semantics without replacing fail-closed masking | Give Rohinth a measured latency/resource decision record |
+| OCR for QR and barcodes | Decode locally and classify their contents as sensitive before egress | Give Prajjwal positive/negative payload fixtures |
+| Qwen/Ollama model digest pinning | Record and verify the exact reasoning model digest, prompt version, and rollback metadata | Give Prajjwal the server configuration and verification hook |
+| Cloud/offline model adapters | Define and implement the client-compatible sanitized protocol adapter contract for hosted and air-gapped deployments | Give Prajjwal the server adapter integration and deployment tests |
+| Independent detector evaluation | Own the labeled corpus, detector instrumentation, grade-wise precision/recall, and redaction metrics | Give Rohinth the release evidence; Prajjwal automates CI publication |
+
+Mithul must not merge these features as “best effort.” Each detector must either produce a verified local result or trigger zero egress/full opaque fallback according to the existing policy.
+
 ## Mithul — client privacy, local models, browser reliability, and UX
 
 Mithul owns the trusted client boundary and therefore has the largest workstream. Every implementation must preserve the invariant protection floor and must be measured on the team laptop (RTX 3050 plus CPU/WASM fallback).
@@ -147,6 +164,20 @@ Measure model initialization/reuse, capture, redaction, PNG encoding, peak memor
 
 Minimize permissions, pin dependencies, verify model checksums, generate reproducible metadata, sign Chrome/Firefox packages, and document installation/update/rollback. Remove development-only permissions from the release manifest.
 
+### M8. Own the local perception and model-portability track — P0/P1
+
+This is the consolidated task for the eight areas in the ownership table above. Work in this order:
+
+1. Establish the detector interface and versioned registry without changing the single-egress contract.
+2. Add OCR and NER behind feature flags, with local-only inference and explicit confidence thresholds.
+3. Add multilingual normalization and QR/barcode decoding, then cover image, canvas, SVG, video, and PDF surfaces.
+4. Evaluate a lightweight visual-understanding model only after the fail-closed path is proven; it must never be allowed to send raw pixels or override the privacy policy.
+5. Pin the Qwen/Ollama model by digest and prompt version. Record the digest in release metadata and reject a mismatch at startup.
+6. Define the sanitized protocol adapter used by local Ollama, offline servers, and hosted providers. The adapter must accept only `SanitizedObservation` and return only the strict action schema.
+7. Build the independent labeled corpus and publish precision, recall, F1, redaction IoU, excess-area, latency, and memory results by detector, language, backend, and grade.
+
+**M8 acceptance criteria:** raw OCR/NER/model output is absent from every serialized request, log, prompt, and evidence artifact; detector/model failures cause zero egress or a verified opaque mask; the model digest and policy version are reproducible; and held-out metrics are reviewed by Rohinth and independently checked by Prajjwal.
+
 ## Prajjwal — server, model serving, evaluation, and operations
 
 Prajjwal owns the receiving boundary and the measurement system. The server must remain safe even when the client, page, model, or network is malicious.
@@ -176,7 +207,7 @@ Implement durable status transitions, worker leases, retry budgets, expiration, 
 
 ### P3. Harden model adapters and outputs — P0/P1
 
-Create a common adapter interface for Ollama, offline packaged models, and future hosted providers. Pin model and prompt versions, verify model digests rather than mutable tags, enforce output token/image limits, validate strict JSON, and document rollback/air-gapped operation.
+Prajjwal owns server-side wiring and deployment tests for the adapter contract. Mithul is the primary implementer for the client-compatible sanitized protocol adapter, Qwen/Ollama digest pinning, and prompt/model provenance. Together, create a common interface for Ollama, offline packaged models, and future hosted providers. Pin model and prompt versions, verify model digests rather than mutable tags, enforce output token/image limits, validate strict JSON, and document rollback/air-gapped operation.
 
 Add malformed, delayed, refusal, prompt-injection, model-timeout, and wrong-snapshot fixtures. The action guard must remain authoritative after model parsing.
 
@@ -190,7 +221,7 @@ Generate or share the invariant detector registry with the extension. Add receiv
 
 ### P5. Expand evaluation and security automation — P0/P1
 
-Extend the evaluator with multilingual, adversarial, OCR, NER, media, and geometry fixtures. Report grade-wise precision/recall/F1, IoU, excess redaction area, coverage, p50/p95 latency, memory/CPU/GPU use, browser/backend/model dimensions, request counts, and zero-egress failures.
+Mithul owns the detector corpus, OCR/NER/media fixtures, and independent accuracy results. Prajjwal owns evaluator implementation, CI publication, fuzzing, and regression gates. Together, extend the evaluator with multilingual, adversarial, OCR, NER, media, and geometry fixtures. Report grade-wise precision/recall/F1, IoU, excess redaction area, coverage, p50/p95 latency, memory/CPU/GPU use, browser/backend/model dimensions, request counts, and zero-egress failures.
 
 Add JSON/PNG/DOM/model-output fuzzing, malicious-page tests, compromised-model tests, dependency vulnerability scanning, secret scanning, SBOM generation, lockfile verification, and root-level test isolation so excluded upstream checkouts are never collected.
 
@@ -435,8 +466,8 @@ Maintain a deterministic synthetic portal and reset path. Add health/readiness c
 
 ### Days 3–7: measure and integrate
 
-- Mithul: integrate OCR/NER behind fail-closed thresholds, complete action-safety tests, and collect WebGPU/WASM resource data.
-- Prajjwal: build labeled-corpus/evaluator extensions, model-adapter tests, and the first deployment profile.
+- Mithul: integrate OCR/NER, multilingual and QR/barcode detection behind fail-closed thresholds; begin client visual-model evaluation, model digest pinning, adapter contract work, and detector metrics.
+- Prajjwal: wire the server adapter, automate corpus/evaluator publication, and add deployment and model-provenance tests that consume Mithul's contracts.
 - Rohinth: integrate grade previews, failure demonstrations, browser evidence, and PR reviews.
 
 ### Days 8–11: reliability hardening
