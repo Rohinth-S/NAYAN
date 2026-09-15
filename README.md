@@ -242,7 +242,7 @@ For Firefox:
 2. Use the popup's **Quick start** menu to choose **Review and submit a form**, or enter `Check the confirmation checkbox, then submit the enrollment.` yourself. The generated task remains editable and is filled locally.
 3. Open `.runtime\api-key.txt`, copy its contents, and paste that value into **Optional API key**. Paste the key value, not the file path.
 4. Optionally add the fictional demo values under **Known private values** to exercise canary checks.
-5. Select **Privacy preview** and inspect the locally generated image. Enter a task as usual; preview still makes no reasoning request.
+5. Select **Privacy preview** and inspect the locally generated image. Use **Expand** and then **Open full view** for a fit-to-screen viewer in a separate extension tab. Enter a task as usual; preview still makes no reasoning request.
 6. Select Grade 1, Grade 2, or Grade 3 and review its disclosure description.
 7. Select **Start agent** and approve the local endpoint if the browser asks.
 8. Confirm the page reaches `Enrollment submitted successfully.`

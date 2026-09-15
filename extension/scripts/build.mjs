@@ -50,6 +50,7 @@ for (const [target, manifest] of [['chrome', chromeManifest], ['firefox', firefo
       background: join(root, 'src', 'background.ts'),
       content: join(root, 'src', 'content.ts'),
       popup: join(root, 'src', 'popup.ts'),
+      preview: join(root, 'src', 'preview.ts'),
       ...(target === 'chrome' ? { offscreen: join(root, 'src', 'offscreen.ts') } : {}),
     },
     bundle: true,
@@ -67,6 +68,8 @@ for (const [target, manifest] of [['chrome', chromeManifest], ['firefox', firefo
   });
   await cp(join(root, 'src', 'popup.html'), join(outdir, 'popup.html'));
   await cp(join(root, 'src', 'popup.css'), join(outdir, 'popup.css'));
+  await cp(join(root, 'src', 'preview.html'), join(outdir, 'preview.html'));
+  await cp(join(root, 'src', 'preview.css'), join(outdir, 'preview.css'));
   if (target === 'chrome') await cp(join(root, 'src', 'offscreen.html'), join(outdir, 'offscreen.html'));
   await writeFile(join(outdir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await copyRuntimeAssets(outdir);

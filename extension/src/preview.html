@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sanitized preview · Private Browser Agent</title>
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <main class="viewer">
+      <header class="viewer-header">
+        <div>
+          <p class="eyebrow">LOCAL ONLY · NO DATA SENT</p>
+          <h1>Sanitized page preview</h1>
+          <p>Sensitive regions were replaced on this device before the preview was made available.</p>
+        </div>
+        <span class="local-pill"><i></i> Local filter active</span>
+      </header>
+      <section class="stage" aria-live="polite">
+        <p id="message">Loading local preview…</p>
+        <img id="preview" alt="Sanitized page preview" hidden />
+      </section>
+      <footer><span>Nothing on this page is sent to the reasoning server.</span><button id="close" type="button">Close tab</button></footer>
+    </main>
+    <script src="preview.js"></script>
+  </body>
+</html>

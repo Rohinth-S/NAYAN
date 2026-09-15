@@ -28,7 +28,35 @@ const detector = byId<HTMLElement>('detector');
 const redactions = byId<HTMLElement>('redactions');
 const latency = byId<HTMLElement>('latency');
 const previewPane = byId<HTMLElement>('previewPane');
+const previewFrame = byId<HTMLDivElement>('previewFrame');
 const previewImage = byId<HTMLImageElement>('previewImage');
+const expandPreview = byId<HTMLButtonElement>('expandPreview');
+const previewModal = byId<HTMLDivElement>('previewModal');
+const previewModalImage = byId<HTMLImageElement>('previewModalImage');
+const previewClose = byId<HTMLButtonElement>('previewClose');
+const openPreviewTab = byId<HTMLButtonElement>('openPreviewTab');
+
+let previewReturnFocus: HTMLElement | null = null;
+
+function openPreviewViewer(): void {
+  const source = previewImage.currentSrc || previewImage.src;
+  if (!source) return;
+  previewReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  previewModalImage.src = source;
+  previewModal.hidden = false;
+  document.body.classList.add('preview-open');
+  previewClose.focus();
+}
+
+function closePreviewViewer(): void {
+  if (previewModal.hidden) return;
+  previewModal.hidden = true;
+  document.body.classList.remove('preview-open');
+  previewModalImage.removeAttribute('src');
+  const target = previewReturnFocus;
+  previewReturnFocus = null;
+  if (target?.isConnected) target.focus();
+}
 
 // Starter tasks make the first run discoverable without sending anything to
 // the server. The selected text remains editable and is persisted only when
@@ -128,6 +156,7 @@ function render(current: AgentStatus): void {
   stop.disabled = !current.running;
   if (current.previewDataUrl) {
     previewImage.src = current.previewDataUrl;
+    if (!previewModal.hidden) previewModalImage.src = current.previewDataUrl;
     previewPane.hidden = false;
   }
 }
@@ -149,6 +178,24 @@ async function run(type: 'START' | 'PREVIEW'): Promise<void> {
 start.addEventListener('click', () => void run('START'));
 preview.addEventListener('click', () => void run('PREVIEW'));
 stop.addEventListener('click', () => void send({ type: 'STOP' }).then(render));
+previewFrame.addEventListener('click', openPreviewViewer);
+previewFrame.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openPreviewViewer();
+  }
+});
+expandPreview.addEventListener('click', openPreviewViewer);
+previewClose.addEventListener('click', closePreviewViewer);
+openPreviewTab.addEventListener('click', () => {
+  void ext.tabs.create({ url: ext.runtime.getURL('preview.html') });
+});
+previewModal.addEventListener('click', (event) => {
+  if (event.target instanceof HTMLElement && event.target.dataset.previewClose === 'true') closePreviewViewer();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !previewModal.hidden) closePreviewViewer();
+});
 privacyGrade.addEventListener('change', () => {
   popupError = null;
   const grade = normalizePrivacyGrade(Number(privacyGrade.value));

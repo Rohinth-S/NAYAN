@@ -107,9 +107,39 @@
       </section>
 
       <figure id="previewPane" hidden>
-        <figcaption><span>Sanitized preview</span><span class="preview-note">eligible for transmission</span></figcaption>
-        <div class="preview-frame"><img id="previewImage" alt="Sanitized page preview" /></div>
+        <figcaption>
+          <span>Sanitized preview</span>
+          <span class="preview-caption-actions">
+            <span class="preview-note">eligible for transmission</span>
+            <button id="expandPreview" class="preview-expand" type="button" aria-label="Open sanitized preview full screen">Expand</button>
+          </span>
+        </figcaption>
+        <div id="previewFrame" class="preview-frame" role="button" tabindex="0" aria-label="Open sanitized preview full screen">
+          <img id="previewImage" alt="Sanitized page preview. Activate to open a larger view." />
+          <span class="preview-frame-hint" aria-hidden="true">Click to expand</span>
+        </div>
       </figure>
+
+      <div id="previewModal" class="preview-modal" hidden>
+        <div class="preview-modal-backdrop" data-preview-close="true"></div>
+        <section class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="previewDialogTitle" aria-describedby="previewDialogDescription">
+          <header class="preview-dialog-header">
+            <div>
+              <p class="preview-dialog-eyebrow">LOCAL ONLY · NO DATA SENT</p>
+              <h2 id="previewDialogTitle">Sanitized page preview</h2>
+              <p id="previewDialogDescription">Sensitive regions are replaced locally before this image can leave the device.</p>
+            </div>
+            <button id="previewClose" class="preview-close" type="button" aria-label="Close full-screen preview">×</button>
+          </header>
+          <div class="preview-modal-stage">
+            <img id="previewModalImage" class="preview-modal-image" alt="Expanded sanitized page preview" />
+          </div>
+          <footer class="preview-dialog-footer">
+            <span><i aria-hidden="true"></i> Sanitized locally</span>
+            <span class="preview-dialog-actions"><button id="openPreviewTab" class="preview-open-tab" type="button">Open full view</button><span>Press <kbd>Esc</kbd> to close</span></span>
+          </footer>
+        </section>
+      </div>
 
       <p class="footnote"><span aria-hidden="true">⌁</span> Preview is generated locally. Website traffic remains controlled by the website.</p>
     </main>

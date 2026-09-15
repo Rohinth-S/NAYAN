@@ -207,14 +207,23 @@ function collectMediaRedactions(): LocalRedaction[] {
   const candidates = new Set<Element>();
   for (const element of document.querySelectorAll('img, picture, canvas, video, svg, object, embed, input[type="image"]')) candidates.add(element);
   const allBodyElements = Array.from(document.querySelectorAll('body *'));
-  const styled = [document.documentElement, document.body, ...allBodyElements.slice(0, 2_000)].filter(Boolean);
+  // Root backgrounds are page chrome, not inspectable media. Treating a
+  // gradient or wallpaper on <body> as media would redact the entire viewport
+  // (and produce an apparently blank preview). Actual media descendants are
+  // still covered below, including CSS backgrounds on cards and components.
+  const styled = allBodyElements.slice(0, 2_000);
   for (const element of styled) {
     const htmlElement = element as Element;
     const tag = htmlElement.tagName.toLowerCase();
-    const hasBackground = getComputedStyle(htmlElement).backgroundImage !== 'none';
+    // CSS gradients are page chrome, not an uninspectable media payload. The
+    // previous `backgroundImage !== 'none'` check classified every gradient
+    // backdrop (including `body`) as media and merged it into a full-viewport
+    // redaction. Keep true image URLs protected while allowing the sanitized
+    // preview to retain the page's visual structure.
+    const hasBackground = /url\(/iu.test(getComputedStyle(htmlElement).backgroundImage);
     const before = getComputedStyle(htmlElement, '::before');
     const after = getComputedStyle(htmlElement, '::after');
-    const hasPseudoBackground = before.backgroundImage !== 'none' || after.backgroundImage !== 'none';
+    const hasPseudoBackground = /url\(/iu.test(before.backgroundImage) || /url\(/iu.test(after.backgroundImage);
     if (hasBackground || hasPseudoBackground || pseudoContentNeedsMask(before.content, after.content) || tag.includes('-') || htmlElement.shadowRoot) {
       candidates.add(htmlElement);
     }
