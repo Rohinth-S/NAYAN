@@ -39,6 +39,9 @@ h1 { margin: 0; color: #f5f8ff; font-size: 18px; font-weight: 760; letter-spacin
 .subtitle { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
 .badge { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; border: 1px solid rgba(118, 155, 205, .27); border-radius: 999px; padding: 5px 9px; color: #c9d8f1; background: rgba(41, 65, 98, .68); font-size: 11px; font-weight: 650; text-transform: lowercase; }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #8198b8; box-shadow: 0 0 0 3px rgba(129,152,184,.1); }
+.badge[data-phase="capturing"]::before, .badge[data-phase="sanitizing"]::before, .badge[data-phase="reasoning"]::before, .badge[data-phase="executing"]::before { background: var(--blue); box-shadow: 0 0 0 3px rgba(91,140,255,.13), 0 0 10px rgba(91,140,255,.7); }
+.badge[data-phase="done"]::before { background: var(--cyan); box-shadow: 0 0 0 3px rgba(85,214,197,.13), 0 0 10px rgba(85,214,197,.7); }
+.badge[data-phase="blocked"]::before, .badge[data-phase="error"]::before { background: var(--red); box-shadow: 0 0 0 3px rgba(255,102,128,.13), 0 0 10px rgba(255,102,128,.65); }
 
 .panel { margin: 0 0 10px; border: 1px solid rgba(52, 80, 116, .72); border-radius: 13px; padding: 13px 13px 11px; background: linear-gradient(145deg, rgba(17, 33, 55, .96), rgba(12, 25, 43, .94)); box-shadow: 0 10px 25px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255,255,255,.025); }
 .task-panel { border-color: rgba(78, 119, 185, .74); box-shadow: 0 10px 25px rgba(17, 53, 119, .14), inset 0 1px 0 rgba(255,255,255,.03); }
