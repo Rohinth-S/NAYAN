@@ -45,6 +45,19 @@ describe('local text privacy filter', () => {
     expect(kinds).toEqual(expect.arrayContaining(['NAME', 'ADDRESS', 'DOB', 'PASSPORT']));
   });
 
+  it('keeps the most protective category when findings overlap', () => {
+    const findings = detectPii('Username: dev@example.in');
+    expect(findings.map((finding) => finding.kind)).toEqual(expect.arrayContaining(['EMAIL']));
+    expect(sanitizeText('Username: dev@example.in', [], 300, 2)).toContain('[REDACTED:EMAIL]');
+    expect(sanitizeText('Username: dev@example.in', [], 300, 2)).not.toContain('dev@example.in');
+  });
+
+  it('keeps invariant and Grade 2 matches inside broad labeled values', () => {
+    const findings = detectPii('Name: +91 98765 43210, Account Number: 1234567890');
+    expect(findings.map((finding) => finding.kind)).toEqual(expect.arrayContaining(['PHONE', 'BANK_ACCOUNT']));
+    expect(sanitizeText('Name: +91 98765 43210', [], 300, 2)).not.toContain('98765 43210');
+  });
+
   it('classifies structured sensitive fields', () => {
     expect(isSensitiveField({ type: 'password' })).toBe('password');
     expect(isSensitiveField({ autocomplete: 'cc-number' })).toBe('sensitive-field');

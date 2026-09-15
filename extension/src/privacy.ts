@@ -1,5 +1,7 @@
 import type { Bounds, RedactionKind } from './types';
 import {
+  CATEGORY_MINIMUM_GRADE,
+  categoryForFinding,
   shouldRedactCategory,
   shouldRedactFinding,
   type PrivacyCategory,
@@ -15,12 +17,12 @@ export type TextFinding = Readonly<{
 const PATTERNS: readonly Readonly<{ kind: string; regex: RegExp }>[] = [
   { kind: 'SECRET', regex: /\b(?:password|passcode|one[- ]time (?:code|password)|otp|(?:login|transaction|security|atm|upi) pin|pin (?:number|code)|cvv|cvc|security code|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|auth(?:entication)?[-_ ]?token|private key|recovery code)\s*[:=-]\s*[^\s,;]{3,200}/giu },
   { kind: 'EMAIL', regex: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu },
-  { kind: 'AADHAAR', regex: /(?<!\d)(?:\d[ -]?){11}\d(?!\d)/gu },
+  { kind: 'AADHAAR', regex: /(?<![+\d])(?:\d[ -]?){11}\d(?!\d)/gu },
   { kind: 'PAN', regex: /\b[A-Z]{5}[0-9]{4}[A-Z]\b/giu },
   { kind: 'CARD', regex: /(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)/gu },
   { kind: 'SSN', regex: /\b\d{3}-\d{2}-\d{4}\b/gu },
   { kind: 'BANK_ACCOUNT', regex: /\b(?:bank )?account(?: number| no\.?| #)?\s*[:=-]\s*[A-Z0-9 -]{6,34}/giu },
-  { kind: 'UPI', regex: /\b(?:upi(?: id)?\s*[:=-]\s*)?[A-Z0-9._-]{2,256}@[A-Z][A-Z0-9.-]{1,63}\b/giu },
+  { kind: 'UPI', regex: /\bupi(?: id)?\s*[:=-]\s*[A-Z0-9._-]{2,256}@[A-Z][A-Z0-9.-]{1,63}\b/giu },
   { kind: 'IFSC', regex: /\b[A-Z]{4}0[A-Z0-9]{6}\b/giu },
   { kind: 'PHONE', regex: /(?<!\d)(?:\+?91[ -]?)?[6-9]\d{4}[ -]?\d{5}(?!\d)/gu },
   { kind: 'IP', regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/gu },
@@ -52,9 +54,33 @@ export function detectPii(text: string, knownValues: readonly string[] = []): Te
       offset += needle.length;
     }
   }
-  return findings
-    .sort((a, b) => a.start - b.start || b.end - a.end)
-    .filter((item, index, all) => index === 0 || item.start >= all[index - 1]!.end);
+  // Resolve overlaps by protection priority, rather than by detector order.
+  // A broad Grade 3 label (for example `Username: ...`) must never hide a
+  // narrower invariant or Grade 2 match (for example an email address).
+  // Grade filtering happens before this function's result is consumed, while
+  // priority remains useful for the full detector result and pixel redaction.
+  const priority = (kind: string): number => {
+    const category = categoryForFinding(kind);
+    return CATEGORY_MINIMUM_GRADE[category];
+  };
+  const ordered = findings.sort((a, b) =>
+    a.start - b.start || priority(a.kind) - priority(b.kind) ||
+    (b.end - b.start) - (a.end - a.start),
+  );
+  const accepted: TextFinding[] = [];
+  for (const candidate of ordered) {
+    const overlaps = accepted.filter((item) => item.start < candidate.end && candidate.start < item.end);
+    if (overlaps.length === 0) {
+      accepted.push(candidate);
+      continue;
+    }
+    const strongest = Math.min(...overlaps.map((item) => priority(item.kind)));
+    if (priority(candidate.kind) < strongest) {
+      for (const item of overlaps) accepted.splice(accepted.indexOf(item), 1);
+      accepted.push(candidate);
+    }
+  }
+  return accepted.sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
 export function findingsForGrade(text: string, knownValues: readonly string[], grade: PrivacyGrade): TextFinding[] {
