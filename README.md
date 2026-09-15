@@ -52,7 +52,7 @@ You do not need to build or fork an entire browser engine for this problem state
 Open PowerShell in this directory:
 
 ```powershell
-Set-Location 'C:\Users\HP\OneDrive\Desktop\sih-privacy-agent'
+Set-Location 'path\to\privacy-focused-browser-agent'
 .\Setup-Prototype.ps1
 .\Start-Prototype.ps1
 ```
@@ -72,7 +72,7 @@ Build and validate both extension packages:
 In Chrome, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select:
 
 ```text
-C:\Users\HP\OneDrive\Desktop\sih-privacy-agent\extension\dist\chrome
+<repo>\extension\dist\chrome
 ```
 
 For Firefox, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `extension\dist\firefox\manifest.json`.

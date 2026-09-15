@@ -9,8 +9,9 @@ screenshot. Unknown request fields are rejected. Request and response content is
 
 ## Local setup
 
-The project-wide Ollama helper installs models under `D:\SIH-LocalRuntime` on the current development machine.
-Start it from the project root and confirm the configured model is installed:
+The project-wide Ollama helper keeps a portable model directory under the ignored
+`.runtime` folder when a system Ollama installation is not available. Start it
+from the project root and confirm the configured model is installed:
 
 ```powershell
 .\Start-LocalOllama.ps1

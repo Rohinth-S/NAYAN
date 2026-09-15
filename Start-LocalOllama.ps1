@@ -15,18 +15,20 @@ if ([string]::IsNullOrWhiteSpace($RuntimePath)) {
     if ($installed) {
         $RuntimePath = $installed.Source
     } else {
-        $RuntimePath = 'D:\SIH-LocalRuntime\ollama-v0.34.0\ollama.exe'
+        $candidates = @(
+            (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'),
+            (Join-Path $env:ProgramFiles 'Ollama\ollama.exe'),
+            (Join-Path $PSScriptRoot '.runtime\ollama\ollama.exe')
+        )
+        $RuntimePath = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     }
 }
 if (-not (Test-Path -LiteralPath $RuntimePath -PathType Leaf)) {
-    throw "Ollama executable not found at '$RuntimePath'. Install Ollama or supply -RuntimePath."
+    throw 'Ollama executable was not found. Install Ollama, add it to PATH, or supply -RuntimePath.'
 }
 if ([string]::IsNullOrWhiteSpace($ModelsPath)) {
-    $portableModels = 'D:\SIH-LocalRuntime\models'
     if (-not [string]::IsNullOrWhiteSpace($env:OLLAMA_MODELS)) {
         $ModelsPath = $env:OLLAMA_MODELS
-    } elseif (Test-Path -LiteralPath (Join-Path $portableModels 'manifests') -PathType Container) {
-        $ModelsPath = $portableModels
     } else {
         $ModelsPath = Join-Path $PSScriptRoot '.runtime\ollama-models'
     }

@@ -15,7 +15,7 @@ anonymization. The current detector coverage and limits are listed below.
 Prerequisites: Node.js 20 or newer.
 
 ```powershell
-cd C:\Users\HP\OneDrive\Desktop\sih-privacy-agent\extension
+cd <repo>\extension
 npm install
 npm run check
 ```
