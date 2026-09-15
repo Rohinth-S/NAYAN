@@ -63,8 +63,12 @@ or Hide password to submit a form. A scroll needs direction and amount (for exam
 # screens). Qwen's visual tokens alone can overflow a 4096-token context.
 # Resize ONLY the validated, sanitized image at the model adapter; keep the
 # original preview/evaluation image and action IDs unchanged.
-MODEL_IMAGE_MAX_EDGE = 1280
-MODEL_IMAGE_MAX_PIXELS = 921_600
+# Keep the visual prompt comfortably below Qwen3-VL's 4096-token budget and
+# avoid multi-batch image encoding on laptop GPUs. DOM structure remains the
+# primary grounding signal, so this resolution is sufficient for visual-only
+# controls while materially reducing first-response latency.
+MODEL_IMAGE_MAX_EDGE = 960
+MODEL_IMAGE_MAX_PIXELS = 460_800
 
 
 def _model_image(observation: SanitizedObservation) -> tuple[str, int, int]:
