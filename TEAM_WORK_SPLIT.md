@@ -1,318 +1,255 @@
-# Team work split and production upgrade plan
+# SIH26171 team work split and production plan
 
-This document assigns the remaining work for the three-person team. It is a task contract for the current SIH26171 repository. The code already demonstrates the core privacy boundary; these workstreams expand its detector coverage, browser reliability, server resilience, evidence, and release controls.
+This document is the working task contract for Rohinth, Mithul, and Prajjwal. It describes what is already implemented, what remains, how each task should be implemented, and the evidence required before calling the prototype production-ready.
 
-## Ownership model
+The project is a controlled-demonstration prototype today. The core privacy boundary is implemented, but detector coverage, deployment controls, browser-matrix validation, and independent assurance still need work before the system handles real personal data.
 
-| Person | Primary ownership | Scope |
-| --- | --- | --- |
-| **Rohinth** | Integration, product direction, protocol, demo, and release | Keep the architecture coherent, review cross-boundary changes, coordinate the final demo, and own release decisions. |
-| **Mithul** | Privacy engine, local models, extension runtime, browser reliability, and user experience | The largest workstream: improve what is detected locally, prove that capture and redaction are correct, complete Chrome/Firefox behavior, and make the privacy controls understandable. |
-| **Prajjwal** | Server platform, model serving, evaluation infrastructure, and operations | Make the receiver safe to deploy, bound resource use, support reliable model execution, and produce repeatable measurements. |
+## Current baseline
 
-No task may weaken the invariant protection floor. A change that adds a detector, action, endpoint, serialized field, permission, or policy category must update its tests and the relevant protocol, privacy, or edge-case document.
+The latest integrated branch includes:
 
-## Integration status — 16 September 2026
+- A Chrome/Firefox extension that captures a page locally and owns the only reasoning egress path in `extension/src/egress.ts`.
+- DOM, field, regex, and local face detection with Grade 1/2/3 policy filtering.
+- Fresh semantic-redaction images, opaque full-mask fallback, PNG validation, canary checks, and serialized-body leak checks.
+- Stale-tab, origin, document-generation, editable-target, cross-origin, and duplicate-action protections.
+- A FastAPI receiver with strict schemas, request-size limits, authentication support, origin checks, safe access logging, and bounded sync/async model admission.
+- Ollama integration with strict action-output validation and a synthetic demo portal.
+- Extension, server, and evaluation test suites plus Chrome/Firefox package builds.
 
-The latest `main` includes the teammate branches and the integration fixes completed in this pass. The merged client work now covers grade-aware overlap priority, clipping-boundary detection, stale-tab/revision checks, editable-target enforcement, cross-origin click blocking, concurrent duplicate-action protection, detector fallback handling, and Chrome/Firefox package gates. The merged server work now covers SSN/IFSC defense-in-depth parity, one admission budget for synchronous and asynchronous model calls, bounded admission timeout errors, strict schemas and PNG checks, authenticated origin-bound requests, and container startup failure when a production API key is missing. Documentation and validation counts have been refreshed to 71 extension, 125 server, and 28 evaluation tests.
+Latest local validation baseline:
 
-The repository is a production-oriented, reviewable prototype. A real production deployment still requires the explicitly tracked follow-up work below: a durable shared job store for multi-instance operation, independently evaluated multilingual OCR/NER and media detectors, TLS termination and secret rotation at the deployment boundary, signed release artifacts, a larger labeled corpus with measured precision/recall, and an independent extension/security review. These are deployment and assurance gates rather than hidden implementation assumptions.
+| Area | Result |
+| --- | ---: |
+| Extension tests | 73 passed |
+| Server tests | 126 passed |
+| Evaluation tests | 28 passed |
+| Chrome package | Builds successfully |
+| Firefox package | Builds successfully |
+| Full `Test-Prototype.ps1` | Passed, exit code 0 |
 
-## Shared rules for every branch
+These tests prove the current contracts and synthetic scenarios. They do not prove universal PII detection, multilingual coverage, safe operation across every browser/device, or production deployment security.
 
-- Never add real personal data, credentials, API keys, cookies, screenshots, or browser profiles to GitHub.
-- Preserve the single reasoning egress owner in `extension/src/egress.ts`.
-- Keep the reasoning service limited to sanitized PNG data, sanitized labels, coarse roles/bounds/state, opaque IDs, redaction metadata, and the versioned grade.
-- Treat page text, model output, server responses, and upstream repositories as untrusted input.
-- Add positive, malformed, stale-context, and serialized-body leak tests for every new feature.
-- Keep Grade 1 → Grade 2 → Grade 3 monotonic. Invalid or missing grades must fail safe to Grade 3.
-- Use short-lived branches and pull requests. Suggested branches are `mithul/privacy-extension`, `mithul/browser-reliability`, `prajjwal/server-platform`, and `prajjwal/evaluation-ops`.
+## Non-negotiable rules
 
-## Mithul — privacy, detection, extension, and reliability
+1. Raw screenshots, DOM values, form values, cookies, credentials, real PII, API keys, and browser profiles must never enter Git or CI artifacts.
+2. `extension/src/egress.ts` remains the only reasoning endpoint caller. New network calls require Rohinth's protocol review.
+3. The server receives only the versioned sanitized protocol: sanitized PNG, safe labels, coarse roles/bounds/state, opaque IDs, redaction metadata, and the selected grade.
+4. Grade policy is monotonic. Missing or invalid policy settings fail safe to Grade 3. No model or page content may downgrade an invariant category.
+5. Page content, server responses, model output, upstream repositories, and model prompts are untrusted input.
+6. Every change to a detector, policy category, schema field, action, permission, endpoint, or model must include positive, negative, malformed, stale-context, and serialized-body leak tests.
+7. Use short-lived branches and pull requests. Suggested branches: `mithul/privacy-extension`, `mithul/browser-reliability`, `prajjwal/server-platform`, `prajjwal/evaluation-ops`, and `rohinth/integration-release`.
 
-Mithul owns the client-side trust boundary and receives the larger feature set because local detection and capture correctness determine whether privacy is real.
+## Priority order
 
-### M1. Fix the overlapping-detection privacy bug — P0
+Work in this order because it protects the SIH score and the privacy claim:
 
-**Problem:** the current detector resolves overlapping findings before applying grade thresholds. A broad Grade 3 finding can hide a narrower invariant or Grade 2 finding. For example, a `Username` label containing an email address can cause the email finding to be dropped at Grade 2, leaving pixels insufficiently redacted.
+1. **P0 privacy correctness:** detector coverage, capture identity, fail-closed behavior, action safety, and server policy parity.
+2. **P0 measurable evidence:** labeled corpus, grade-wise precision/recall, redaction IoU, zero-egress tests, and latency/resource measurements.
+3. **P0 deployment safety:** authentication, HTTPS, rate limits, model/output bounds, dependency checks, and secret handling.
+4. **P1 reliability:** Firefox live workflow, durable jobs, restart recovery, cancellation, observability, and performance budgets.
+5. **P2 capability:** richer planning, accessibility fusion, safe navigation/download/upload support, and additional model providers.
 
-**Implement:**
+## Mithul — client privacy, local models, browser reliability, and UX
 
-1. Apply the selected grade to every finding before overlap resolution, or resolve overlaps by protection priority.
-2. Always prefer invariant categories, then Grade 2, then Grade 3.
-3. Preserve the most protective category when rectangles overlap.
-4. Keep category-only placeholders stable after merging.
+Mithul owns the trusted client boundary and therefore has the largest workstream. Every implementation must preserve the invariant protection floor and must be measured on the team laptop (RTX 3050 plus CPU/WASM fallback).
 
-**Tests:** mixed `username + email`, `name + phone`, `address + account`, and nested DOM-node cases at all three grades. Assert both sanitized text and sanitized pixels.
+### M1. Add local OCR and NER — P0
 
-**Done when:** no lower-grade or invariant category can be suppressed by an overlapping higher-threshold category, and the monotonic policy tests pass.
+**Why:** Current detection is strongest for DOM fields, regex-visible text, and faces, but text inside images, canvas, video, SVG, PDFs, and multilingual pages is not fully understood. This is the largest remaining PII-recall and visual-context gap.
 
-### M2. Expand local text and visual detection — P0/P1
+**Implementation:**
 
-Add a local, browser-compatible OCR and NER pipeline. Prefer quantized ONNX or WASM models that can run offline; benchmark them on the team laptop before integrating them into the default path.
+1. Add a detector interface with `category`, `confidence`, `bounds`, `source`, `minimumPrivacyGrade`, and `modelVersion`.
+2. Add a quantized ONNX/WASM OCR baseline. Keep inference local and run it off the service worker's critical path where possible.
+3. Add NER for names, addresses, organizations, dates, age, and free-text identity context. Start with English and Hindi, then add languages the team can evaluate reliably.
+4. Add format detectors for Aadhaar, PAN, passport, voter ID, driving licence, GSTIN, vehicle number, UPI, IFSC, bank account, card, CVV, OTP, bearer token, API key, IPv4/IPv6, MAC, IMEI, QR, and barcode content.
+5. Cover `img`, `canvas`, `video`, `svg`, CSS backgrounds, pseudo-elements, PDF previews, accessibility labels, and media inside inspectable components.
+6. If the model is unavailable, corrupt, low-confidence, or returns invalid boxes, block egress or use the explicit full opaque mask. Never silently send unclassified pixels.
+7. Keep category names and invariant thresholds in a versioned registry consumed by both client tests and server validation.
 
-Cover:
+**Tests and evidence:** OCR/NER unit tests, malformed model-output tests, multilingual fixtures, adversarial formatting, and body-level leak checks. Publish precision, recall, F1, confidence intervals, and inference time by category and grade.
 
-- English plus Hindi and other target Indian languages
-- names, addresses, organizations, dates, age, and free-text identity context
-- Aadhaar, PAN, passport, voter ID, driving licence, GSTIN, vehicle number
-- UPI, IFSC, bank account, card, CVV, OTP, API token, bearer token, and private-key patterns
-- IPv4/IPv6, MAC, IMEI, device identifiers, QR codes, barcodes, and signatures
-- health, genetic, religious, political, sexual, and minor-related content where policy requires it
-- text in canvas, images, video, SVG, PDF previews, CSS backgrounds, pseudo-elements, and accessibility labels
+**Done when:** a held-out corpus demonstrates measured coverage; inference remains local; detector failure produces zero requests or a verified full mask; and the registry version is included in evidence.
 
-Maintain a detector registry so the client and server share category names, thresholds, and invariant classes. Unknown or low-confidence regions must remain masked.
+### M2. Close capture and redaction races — P0
 
-**Done when:** the model runs locally with a measured resource budget, detector failures block egress or use the explicit opaque fallback, and held-out tests publish precision/recall by category and grade.
+**Why:** A screenshot, DOM snapshot, and detector boxes can describe different page states if the page changes during capture. Sending a mismatched observation can expose pixels or cause unsafe actions.
 
-### M3. Complete capture and redaction correctness — P0
+**Implementation:**
 
-Harden the relationship between the screenshot, DOM snapshot, and detector boxes.
+1. Re-check active tab, window, origin, document generation, viewport, scroll position, zoom, and device-pixel ratio immediately before encoding and again immediately before egress.
+2. Invalidate work on navigation, resize, zoom, scroll, tab switch, animation/layout changes, and service-worker suspension.
+3. Validate CSS transforms, fractional coordinates, clipping, high-DPI scaling, and device-pixel conversion.
+4. Mask cross-origin frames, closed shadow DOM, plugins, media, and any region whose inspectability cannot be proven.
+5. Keep original screenshot pixels, private compositor buffers, and the fresh outbound PNG in separate objects. Do not reuse the original image blob.
 
-Implement:
+**Tests and evidence:** move text between detection and encode; resize/scroll during capture; fractional DPR; transformed elements; stale face boxes; cross-origin frame; closed shadow root; animation; and zero-egress assertions.
 
-- a final active-tab, window, document-generation, viewport, and scroll check immediately before egress;
-- rejection of stale face boxes and stale DOM geometry;
-- invalidation on zoom, resize, scroll, navigation, tab switch, and animation changes;
-- safe handling of CSS transforms, fractional device scale, clipped elements, and high-DPI screens;
-- conservative masking of cross-origin frames, closed shadow DOM, plugins, media, and uninspectable content;
-- tests for content moving between detection and encoding;
-- clear separation between original pixels, private compositor buffers, and the fresh outbound PNG.
+**Done when:** no changed page can produce an outbound observation, and every geometry case either receives the correct mask or fails closed.
 
-**Done when:** a changed page cannot produce an outbound observation, and every geometry case either receives the correct mask or fails closed.
+### M3. Complete action safety — P0
 
-### M4. Complete Chrome and Firefox live workflows — P0
+**Why:** The reasoning server and model are untrusted. The extension must remain safe if the model is compromised or returns a replayed action.
 
-Run the complete synthetic task in both browsers, not only package builds and unit tests.
+**Implementation:**
 
-Test:
+1. Validate schema, snapshot ID, document generation, tab, window, origin, and element ID.
+2. For `input`, require visible, enabled, editable controls and reject read-only/content-incompatible targets.
+3. For clicks, reject hidden, disabled, detached, cross-origin, or changed elements.
+4. Require confirmation for submit, navigation, download, upload, and other irreversible operations; make the policy configurable but fail safe.
+5. Add idempotency keys and an in-flight action key. Clear the key only after a failed action is safely retryable.
+6. Reject arbitrary JavaScript, selectors, URLs, keyboard injection, and unknown action fields.
 
-- Chrome MV3 and Firefox temporary add-on loading
-- WebGPU and WASM fallback
-- service-worker suspension and popup closure
-- permission prompts and configured reasoning origins
-- Grade 1, Grade 2, and Grade 3 behavior
-- cold and warm Ollama model starts
-- detector failure, server failure, timeout, and stale-action failure
+**Tests and evidence:** compromised-model fixtures, replayed actions, stale elements, duplicate concurrent actions, cross-origin links, disabled/read-only controls, and destructive-action confirmation tests.
 
-Record browser version, OS, backend, model, latency, redaction count, and task result in aggregate evidence.
+**Done when:** a malicious response cannot type into a read-only control, replay an action, execute script, navigate to an unapproved origin, or act on a changed page.
 
-**Done when:** both browsers complete the demo and show the same privacy invariants, with a reproducible evidence record.
+### M4. Run live Chrome and Firefox matrix — P0
 
-### M5. Strengthen client action safety — P0/P1
+**Implementation:**
 
-The client must independently validate actions because the server and model are untrusted.
+1. Load the MV3 extension in Chrome and the temporary add-on in Firefox.
+2. Run the same synthetic workflow at all three grades.
+3. Repeat with WebGPU, WASM fallback, cold Ollama, warm Ollama, detector failure, server timeout, malformed response, popup closure, and service-worker suspension.
+4. Test high-DPI, zoom, resize, long pages, many elements, slow CPU, and GPU memory pressure.
+5. Record browser version, OS, backend, model digest, grade, redaction count, request count, p50/p95 latency, and task result without recording page content.
 
-Implement:
+**Done when:** both browsers complete the workflow with identical privacy invariants and a reproducible aggregate evidence file.
 
-- client-side enforcement that `input` targets are editable and enabled;
-- final active-tab and document-generation recheck immediately before dispatch;
-- confirmation for submit, navigation, download, upload, and other irreversible actions;
-- idempotency and duplicate-action protection;
-- safe handling for links, new tabs, keyboard actions, dropdowns, and file controls;
-- rejection of arbitrary JavaScript, arbitrary selectors, unknown URLs, and cross-origin targets.
+### M5. Improve grade controls and privacy UX — P1
 
-**Done when:** a compromised model cannot type into a read-only control, replay an action, navigate to an unapproved origin, or act on a changed page.
+Add a side-by-side preview for Grades 1/2/3, category counts, masked-area percentage, safe “why hidden?” explanations, per-site policies, expiring temporary overrides, and policy simulation mode that performs zero network requests. Show the exact sanitized preview that will be sent.
 
-### M6. Improve the privacy user experience — P1
+**Done when:** a new user can understand the disclosure trade-off before starting and can verify the outbound representation without seeing or transmitting the source value.
 
-Add:
+### M6. Optimize client resource use — P1
 
-- a clear explanation of what each grade may disclose;
-- side-by-side privacy preview for all three grades;
-- category counts and masked-area percentages;
-- “why was this hidden?” explanations without showing the source value;
-- per-site policy settings with explicit user control;
-- a temporary grade override that expires automatically;
-- clear fail-closed messages when a model, capture, or endpoint check fails;
-- a policy simulation mode that sends no request.
+Measure model initialization/reuse, capture, redaction, PNG encoding, peak memory, GPU memory, main-thread time, and visible-tab jank. Add caching and incremental updates only if they preserve snapshot identity and privacy. Define budgets for WebGPU and WASM, then fail CI when a release exceeds them.
 
-**Done when:** a new user can understand the disclosure trade-off before starting the agent and can verify that the preview is the exact representation sent.
+### M7. Harden extension release artifacts — P1
 
-### M7. Client performance and package hardening — P1
-
-Measure and optimize:
-
-- model initialization and reuse;
-- WebGPU versus WASM inference;
-- screenshot and PNG encoding;
-- peak memory and GPU memory;
-- browser main-thread time and visible tab jank;
-- long pages, many elements, many redactions, and repeated steps.
-
-Pin dependencies, minimize permissions, verify the model checksum, generate signed packages, and publish reproducible build metadata.
+Minimize permissions, pin dependencies, verify model checksums, generate reproducible metadata, sign Chrome/Firefox packages, and document installation/update/rollback. Remove development-only permissions from the release manifest.
 
 ## Prajjwal — server, model serving, evaluation, and operations
 
-Prajjwal owns four consolidated work packages on the receiving boundary and the measurement system that proves it is safe under load and failure. Mithul owns seven client work packages, so the client privacy and reliability stream has the larger task load requested by the team.
+Prajjwal owns the receiving boundary and the measurement system. The server must remain safe even when the client, page, model, or network is malicious.
 
-### P1. Close the server authentication and exposure gaps — P0
+### P1. Enforce secure deployment configuration — P0
 
-Implement startup validation that requires a strong non-placeholder API key whenever the server binds beyond loopback. The current API key is optional in settings, and the Docker configuration can bind to `0.0.0.0` without authentication.
+**Implementation:**
 
-Also:
+1. Require a strong non-placeholder API key whenever binding beyond loopback.
+2. Require an explicit origin allowlist and reject credentials in URLs, redirects, and unapproved origins.
+3. Require HTTPS outside local development; document TLS termination and secure proxy headers.
+4. Add request/read timeouts, request-size limits, rate limits, per-client quotas, and maximum total task duration.
+5. Keep remote Ollama disabled unless explicitly opted in and authenticated.
+6. Add secret-manager integration and key-rotation instructions. Never log keys or authorization headers.
 
-- normalize configured localhost origins with ports;
-- make extension origins work only when explicitly configured and authenticated;
-- require HTTPS outside local development;
-- reject credentials in URLs, redirects, and unapproved origins;
-- rotate keys and support scoped deployment secrets;
-- keep remote Ollama disabled unless explicitly opted in.
+**Tests and evidence:** startup failure without a key, invalid origin/key, HTTP exposure, oversized body, slow body, rate-limit saturation, and log-redaction tests.
 
-**Done when:** an exposed deployment fails closed without a valid key, origin, and secure transport configuration.
+**Done when:** an exposed deployment fails closed without valid authentication, allowed origin, secure transport, and bounded request behavior.
 
-#### P1b. Bound every reasoning path — P0
+### P2. Make jobs durable and restart-safe — P1
 
-The asynchronous queue is bounded, but the synchronous `/v1/reason` path can call Ollama directly and bypass the concurrency limit.
+Replace the in-memory `ReasoningJobStore` with protected Redis or PostgreSQL for multi-instance deployment. Preserve opaque job IDs and bodyless polling.
 
-Implement one shared admission controller for synchronous and asynchronous requests, or disable synchronous reasoning in production. Add:
+Implement durable status transitions, worker leases, retry budgets, expiration, cleanup, per-user quotas, cancellation, restart recovery, duplicate/idempotency handling, and load tests for queue saturation. Keep the current in-memory store as an explicitly documented single-instance development profile.
 
-- request body and read timeouts;
-- rate limits and per-client quotas;
-- maximum queue wait and total task duration;
-- cancellation and shutdown handling;
-- duplicate request/idempotency handling;
-- health and readiness endpoints;
-- safe cleanup after process restart.
+**Done when:** a restart or second instance cannot lose, duplicate, or cross-wire a reasoning job.
 
-**Done when:** no request path can create unbounded concurrent model calls, and overload returns a controlled error without invoking the model.
+### P3. Harden model adapters and outputs — P0/P1
 
-### P2. Durable jobs, deployment, and observability — P1
+Create a common adapter interface for Ollama, offline packaged models, and future hosted providers. Pin model and prompt versions, verify model digests rather than mutable tags, enforce output token/image limits, validate strict JSON, and document rollback/air-gapped operation.
 
-Replace the single-process in-memory job store with a protected Redis or PostgreSQL-backed store. Preserve opaque job IDs and bodyless polling.
+Add malformed, delayed, refusal, prompt-injection, model-timeout, and wrong-snapshot fixtures. The action guard must remain authoritative after model parsing.
 
-Add:
+**Done when:** a changed or untrusted model cannot bypass the action schema, reconstruct redacted content, or make evidence claim a different model than the one executed.
 
-- durable status transitions;
-- worker leases and retry budgets;
-- expiration and cleanup;
-- multi-instance routing;
-- restart recovery;
-- per-user quotas;
-- load tests for queue saturation.
+### P4. Enforce server/client policy parity — P0
 
-**Done when:** a server restart or second instance cannot lose, duplicate, or cross-wire a reasoning job.
+Generate or share the invariant detector registry with the extension. Add receiver tests for every invariant category and every grade, including SSN, UPI, IFSC, bank account, token, government ID, password, face, and uninspectable regions. The receiver must reject a payload that violates the invariant floor even if the client regresses.
 
-### P3. Model adapter, supply-chain controls, and policy parity — P0/P1
+**Done when:** server policy is at least as strict as the versioned client invariant policy and a policy-version mismatch is rejected.
 
-Implement a model adapter interface so Ollama, an offline packaged model, and a future hosted provider use the same sanitized protocol.
+### P5. Expand evaluation and security automation — P0/P1
 
-Add:
+Extend the evaluator with multilingual, adversarial, OCR, NER, media, and geometry fixtures. Report grade-wise precision/recall/F1, IoU, excess redaction area, coverage, p50/p95 latency, memory/CPU/GPU use, browser/backend/model dimensions, request counts, and zero-egress failures.
 
-- model digest verification instead of checking only the mutable tag;
-- pinned model and prompt versions;
-- strict JSON schema validation;
-- output token and image-size limits;
-- malformed, delayed, refusal, and prompt-injection tests;
-- offline or air-gapped deployment documentation;
-- model rollback procedure.
+Add JSON/PNG/DOM/model-output fuzzing, malicious-page tests, compromised-model tests, dependency vulnerability scanning, secret scanning, SBOM generation, lockfile verification, and root-level test isolation so excluded upstream checkouts are never collected.
 
-**Done when:** a changed or untrusted model cannot silently alter the protocol, bypass the action allowlist, or make the deployment claim a different model than the evidence used.
+**Done when:** every release creates a reviewable synthetic report and CI fails on privacy, leak, performance, dependency, or protocol regressions.
 
-#### P3b. Server/client policy parity — P0
+### P6. Add privacy-preserving observability — P1
 
-Share or generate the invariant detector registry between client and server. Current parity gaps include SSN, UPI, IFSC, and bank-account patterns.
+Add structured logs and metrics containing only status, bounded timings, queue depth, error class, model version, and aggregate counters. Exclude raw content, URLs, labels, screenshots, request bodies, job IDs, and sensitive values. Add alerts for queue saturation, model failures, rejected payloads, and repeated auth failures. Document retention, deletion, backup, rollback, and incident response.
 
-Add server tests for every invariant category and every grade. The receiver should reject a payload that contains a client invariant category even if the client-side detector regresses.
+**Done when:** an operator can diagnose availability and latency without receiving the data the boundary is designed to protect.
 
-**Done when:** the server defense-in-depth policy is at least as strict as the versioned client invariant floor.
+## Rohinth — integration, governance, demo, and release
 
-### P4. Evaluation and security automation — P0/P1
+Rohinth coordinates the two implementation streams and owns the final product claim. Rohinth should not approve a feature based only on a unit test; every cross-boundary change requires an end-to-end and evidence update.
 
-Extend the evaluation harness with:
+### R1. Govern protocol and policy versions — P0
 
-- multilingual and adversarial fixtures;
-- OCR/NER and media fixtures;
-- grade-wise precision, recall, coverage, and excess-area metrics;
-- confidence intervals;
-- p50/p95 latency and resource measurements;
-- browser and backend dimensions;
-- request-count and zero-egress assertions for failures;
-- PNG, JSON, DOM, and model-output fuzzing;
-- malicious-page and compromised-model scenarios.
+Keep `PROTOCOL.md`, `PRIVACY_LEVELS.md`, `EDGE_CASE_MATRIX.md`, schemas, registry versions, and tests synchronized. Require a migration note for every schema or policy change. Review every new endpoint, permission, action, detector category, and serialized field.
 
-Add CI jobs for dependency vulnerabilities, secret scanning, SBOM generation, lockfile verification, and root-level test isolation. The root command should not accidentally collect tests from excluded upstream checkouts.
+### R2. Integrate and review pull requests — P0
 
-**Done when:** every release produces a reviewable synthetic report and fails CI when a privacy, leak, performance, or dependency gate regresses.
+For every PR, verify single-egress ownership, no raw-value logging, fail-closed behavior, stale-context checks, server/client parity, and updated evidence. Run the complete extension, server, evaluation, and package checks after merging both workstreams. Keep the release branch clean and make sure documentation counts are generated from CI rather than manually guessed.
 
-#### P2b. Deployment and observability — P1
+### R3. Own the SIH evidence package — P0
 
-Add a production deployment profile with:
+Prepare the same synthetic task at all three grades, a visible sanitized preview, a visible request summary, a detector-failure zero-egress demonstration, a stale-action rejection demonstration, and measured tables for visual accuracy, PII precision/recall, redaction precision, client resource use, and end-to-end latency. Include both Chrome and Firefox results, hardware details, model digest, limitations, and threat model.
 
-- TLS termination and secure headers;
-- secret-manager integration;
-- structured logs containing no content, URL, job ID, or sensitive labels;
-- aggregate counters and latency histograms;
-- alerting for queue saturation, model failures, and rejected payloads;
-- data retention and deletion policy;
-- backup, rollback, and incident-response runbooks.
+### R4. Coordinate security and release review — P0/P1
 
-**Done when:** operators can diagnose availability and latency without receiving the data the privacy boundary is designed to protect.
+Arrange an independent review of permissions, content scripts, model assets, dependencies, build scripts, server routes, malicious pages, prompt injection, and deployment configuration. Track findings to closure. Add a project license, signed artifacts, checksums, rollback instructions, and a release checklist.
 
-## Rohinth — integration and release gates
+### R5. Keep the demo reliable — P1
 
-Rohinth coordinates the shared work and owns the final integration path.
+Maintain a deterministic synthetic portal and reset path. Add health/readiness checks, startup diagnostics, friendly fail-closed UI states, a preflight checklist, and a recorded backup demo. The demo must never use real personal data or a live user's account.
 
-### R1. Protocol and policy governance
+## Two-week execution plan
 
-- Review every schema and policy change.
-- Keep `PROTOCOL.md`, `PRIVACY_LEVELS.md`, `EDGE_CASE_MATRIX.md`, and tests synchronized.
-- Version the detector bundle and privacy policy together.
-- Approve any new extension permission or network endpoint.
+### Days 1–2: close P0 correctness gaps
 
-### R2. End-to-end integration
+- Mithul: start OCR/NER baseline, capture-race tests, and Firefox live loading.
+- Prajjwal: add rate limits/timeouts, policy-registry parity tests, and security CI checks.
+- Rohinth: review protocol changes, correct documentation/evidence counts, and run the full baseline suite.
 
-- Integrate Mithul's local detector and capture changes with Prajjwal's receiver changes.
-- Run Chrome and Firefox workflows after every cross-boundary change.
-- Verify that the exact preview image and outbound image are equivalent.
-- Verify that no raw value appears in the request, logs, prompts, or evidence.
+### Days 3–7: measure and integrate
 
-### R3. SIH judging package
+- Mithul: integrate OCR/NER behind fail-closed thresholds, complete action-safety tests, and collect WebGPU/WASM resource data.
+- Prajjwal: build labeled-corpus/evaluator extensions, model-adapter tests, and the first deployment profile.
+- Rohinth: integrate grade previews, failure demonstrations, browser evidence, and PR reviews.
 
-Prepare:
+### Days 8–11: reliability hardening
 
-1. A three-grade synthetic demo using the same task.
-2. A privacy preview before every reasoning request.
-3. A visible sanitized request summary.
-4. A detector-failure demonstration with zero network requests.
-5. A stale-action rejection demonstration.
-6. Metrics for PII precision/recall, redaction precision, resource use, and end-to-end latency.
-7. A two-browser result table.
-8. Architecture, threat model, limitations, and production roadmap slides.
+- Add durable jobs or explicitly freeze a single-instance deployment profile.
+- Complete the Chrome/Firefox failure-mode matrix.
+- Add fuzzing, dependency scanning, secret scanning, SBOM, and package-signing rehearsal.
+- Run a malicious-page and compromised-model test day.
 
-## Suggested execution order
+### Days 12–14: freeze and present
 
-### Sprint 1: close correctness risks
+- Freeze protocol, detector registry, model/prompt versions, and privacy-grade wording.
+- Run the full synthetic evaluation and record checksums.
+- Package the demo, architecture, threat model, limitations, metrics, and rollback plan.
+- Do not add new capabilities after the release-candidate review unless they fix a P0 safety issue.
 
-1. Mithul fixes grade-overlap masking and capture/action races.
-2. Prajjwal fixes authentication exposure, synchronous queue bypass, and client/server detector parity.
-3. Rohinth reviews protocol changes and runs the existing full test suite.
+## Definition of done for a controlled production pilot
 
-### Sprint 2: increase coverage and browser confidence
+- All P0 work is complete and reviewed by someone other than the implementer.
+- Chrome and Firefox complete the same synthetic workflow.
+- Grades are monotonic and every invariant category is protected.
+- OCR/NER/media coverage has measured recall, or uninspectable regions remain conservatively masked.
+- No request is emitted after capture, inference, redaction, encoding, schema, canary, origin, or revision failure.
+- The server cannot be exposed without authentication and secure transport.
+- Every reasoning path is bounded; durable jobs survive restart in the chosen deployment profile.
+- Model identity, dependencies, packages, and checksums are reproducible.
+- Leak, fuzz, stale-action, malicious-page, and prompt-injection tests pass.
+- WebGPU and WASM performance budgets are published.
+- Incident response, rollback, retention, and deletion procedures exist.
+- The team can explain exactly what each grade discloses and what the system still cannot detect.
 
-1. Mithul adds an OCR/NER baseline and completes Firefox live testing.
-2. Prajjwal adds multilingual/adversarial evaluation, fuzzing, and resource measurements.
-3. Rohinth integrates the preview, failure demonstrations, and grade comparison.
-
-### Sprint 3: harden and package
-
-1. Add HTTPS, durable jobs, key management, model digest pinning, signed builds, SBOM, and dependency gates.
-2. Run a security review and malicious-page test day.
-3. Freeze the demo build, record checksums, and publish the final SIH evidence.
-
-## Release definition of done
-
-The product is ready for a controlled production pilot only when:
-
-- all P0 tasks are complete and reviewed by someone other than the implementer;
-- Chrome and Firefox complete the same synthetic workflow;
-- every grade is monotonic and every invariant category is protected;
-- OCR/NER and media coverage have measured recall, or those regions remain conservatively masked;
-- no request is emitted after capture, inference, redaction, encoding, schema, canary, origin, or revision failure;
-- the server cannot be exposed without authentication and secure transport;
-- every reasoning path is bounded and durable jobs survive restart;
-- model identity, dependencies, packages, and checksums are reproducible;
-- leak, fuzz, stale-action, malicious-page, and prompt-injection tests pass;
-- performance budgets are published for WebGPU and WASM;
-- incident response, rollback, retention, and deletion procedures exist;
-- the team can show the exact privacy trade-off and limitations to judges or users.
+Until these gates pass, demonstrate only with synthetic or explicitly approved test data.
