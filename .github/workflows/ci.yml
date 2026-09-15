@@ -24,6 +24,12 @@ jobs:
           cache-dependency-path: extension/package-lock.json
       - run: npm ci
       - run: npm run check
+      - name: Record reproducible package metadata
+        run: npm run release-metadata
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-release-metadata
+          path: extension/dist/RELEASE_METADATA.json
 
   server-and-evaluation:
     name: Server and evaluation checks

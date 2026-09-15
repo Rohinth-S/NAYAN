@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "package": "node scripts/build.mjs --package",
+    "release-metadata": "node scripts/release-metadata.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test && npm run package"
