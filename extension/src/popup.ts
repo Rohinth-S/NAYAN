@@ -116,6 +116,7 @@ async function send(command: PopupCommand): Promise<AgentStatus> {
 
 function render(current: AgentStatus): void {
   state.textContent = current.phase;
+  state.dataset.phase = current.phase;
   message.textContent = popupError ?? current.message;
   step.textContent = String(current.step);
   const hasRun = current.phase !== 'idle' || current.step > 0 || current.redactionCount > 0 || current.previewDataUrl !== null;

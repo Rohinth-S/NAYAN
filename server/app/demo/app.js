@@ -5,6 +5,7 @@ const consent = document.querySelector("#consent");
 const status = document.querySelector("#status");
 const password = document.querySelector("#account-password");
 const reveal = document.querySelector(".reveal");
+const submit = document.querySelector("#submit-enrollment");
 
 reveal?.addEventListener("click", () => {
   const isVisible = password.type === "text";
@@ -21,7 +22,7 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  form.querySelector("button").disabled = true;
+  submit.disabled = true;
   status.textContent = "Submitting…";
   delete status.dataset.error;
   try {
@@ -37,6 +38,6 @@ form.addEventListener("submit", async (event) => {
   } catch {
     status.textContent = "Submission failed. Try again.";
     status.dataset.error = "true";
-    form.querySelector("button").disabled = false;
+    submit.disabled = false;
   }
 });

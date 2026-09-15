@@ -23,8 +23,8 @@ $actualExecutable = $process.Path
 if ($actualExecutable -and [IO.Path]::GetFullPath($actualExecutable) -ne $expectedExecutable) {
     throw 'The recorded PID now belongs to a different executable; refusing to stop it.'
 }
-Stop-Process -Id $process.Id
-Wait-Process -Id $process.Id -Timeout 10 -ErrorAction SilentlyContinue
+$processId = [int]$process.Id
+Stop-Process -Id $processId -Force
+Wait-Process -Id $processId -Timeout 10 -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $pidFile -Force
 Write-Host 'Privacy server stopped. Ollama was left running for reuse.'
-
