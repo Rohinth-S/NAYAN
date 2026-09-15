@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
 import logging
+import math
 from typing import Any, Protocol
 
 import httpx
+from PIL import Image
 from pydantic import ValidationError
 
 from app.schemas import ReasoningResponse, SanitizedObservation
@@ -17,6 +21,10 @@ class ReasonerUnavailable(RuntimeError):
 
 
 class ReasonerInvalidResponse(RuntimeError):
+    pass
+
+
+class ReasonerContextLimit(ReasonerUnavailable):
     pass
 
 
@@ -46,7 +54,34 @@ hidden content. For a task that
 explicitly asks to submit, confirm, save, continue, finish, complete, enroll, register, or apply a form,
 inspect the structured element state before choosing the terminal button: click an enabled unchecked
 required checkbox first, then choose the submit-like button after the checkbox is checked. Never toggle an
-already checked required checkbox just to repeat an action."""
+already checked required checkbox just to repeat an action. The screenshot and element list describe only
+the current viewport. If the next control is not visible, scroll down to reveal it and inspect the next
+observation. A checked confirmation checkbox is progress, not task completion. Do not click Show password
+or Hide password to submit a form. A scroll needs direction and amount (for example down, 450)."""
+
+# Display captures can be several megapixels (especially on scaled/HiDPI
+# screens). Qwen's visual tokens alone can overflow a 4096-token context.
+# Resize ONLY the validated, sanitized image at the model adapter; keep the
+# original preview/evaluation image and action IDs unchanged.
+MODEL_IMAGE_MAX_EDGE = 1280
+MODEL_IMAGE_MAX_PIXELS = 921_600
+
+
+def _model_image(observation: SanitizedObservation) -> tuple[str, int, int]:
+    source = observation.image
+    scale = min(
+        1.0,
+        MODEL_IMAGE_MAX_EDGE / max(source.width, source.height),
+        math.sqrt(MODEL_IMAGE_MAX_PIXELS / (source.width * source.height)),
+    )
+    if scale >= 1:
+        return source.dataBase64, source.width, source.height
+    size = (max(1, int(source.width * scale)), max(1, int(source.height * scale)))
+    with Image.open(io.BytesIO(base64.b64decode(source.dataBase64, validate=True))) as image:
+        resized = image.convert("RGB").resize(size, Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        resized.save(output, format="PNG")
+    return base64.b64encode(output.getvalue()).decode("ascii"), *size
 
 # Ollama's grammar engine currently rejects Pydantic's $defs/anyOf/pattern schema. This deliberately small
 # schema still constrains JSON shape at generation time; ReasoningResponse performs the complete strict check.
@@ -75,26 +110,36 @@ OLLAMA_RESPONSE_FORMAT: dict[str, Any] = {
 }
 
 
-def _model_context(observation: SanitizedObservation) -> dict[str, Any]:
+def _model_context(observation: SanitizedObservation, width: int, height: int) -> dict[str, Any]:
+    def scaled_record(item: Any) -> dict[str, Any]:
+        record = item.model_dump()
+        record["bounds"] = {
+            key: round(value * (width / observation.image.width if key in {"x", "width"}
+                                else height / observation.image.height), 2)
+            for key, value in record["bounds"].items()
+        }
+        return record
+
     return {
         "schemaVersion": observation.schemaVersion,
         "snapshotId": observation.snapshotId,
         "documentId": observation.documentId,
         "page": observation.page.model_dump(),
         "task": observation.task,
-        "elements": [element.model_dump() for element in observation.elements],
+        "elements": [scaled_record(element) for element in observation.elements],
         "image": {
             "mime": observation.image.mime,
-            "width": observation.image.width,
-            "height": observation.image.height,
+            "width": width,
+            "height": height,
         },
-        "redactions": [redaction.model_dump() for redaction in observation.redactions],
+        "redactions": [scaled_record(redaction) for redaction in observation.redactions],
         "privacy": observation.privacy.model_dump(),
     }
 
 
 def build_ollama_request(observation: SanitizedObservation, model: str) -> dict[str, Any]:
-    context = _model_context(observation)
+    image, width, height = _model_image(observation)
+    context = _model_context(observation, width, height)
     return {
         "model": model,
         "stream": False,
@@ -104,14 +149,14 @@ def build_ollama_request(observation: SanitizedObservation, model: str) -> dict[
         # does not expand the network privacy boundary.
         "keep_alive": "10m",
         "format": OLLAMA_RESPONSE_FORMAT,
-        "options": {"temperature": 0, "num_ctx": 4096},
+        "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 384},
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": "Select the next safe action for this JSON observation:\n"
                 + json.dumps(context, ensure_ascii=True, separators=(",", ":")),
-                "images": [observation.image.dataBase64],
+                "images": [image],
             },
         ],
     }
@@ -148,6 +193,11 @@ class OllamaReasoner:
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPStatusError as exc:
+            # Never reflect/log backend response bodies; map this known
+            # capacity error to a stable diagnosis for the local UI.
+            if exc.response.status_code == 400 and "exceeds the available context size" in exc.response.text:
+                LOGGER.warning("backend_context_limit")
+                raise ReasonerContextLimit("reasoning_context_limit") from exc
             LOGGER.warning("backend_http_error status=%d", exc.response.status_code)
             raise ReasonerUnavailable("reasoning_backend_unavailable") from exc
         except (httpx.HTTPError, ValueError, TypeError) as exc:

@@ -7,6 +7,13 @@ const JOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-
 export const REASONING_TIMEOUT_MS = 100_000;
 export const REASONING_POLL_MS = 1_000;
 
+export type ReasoningRequestOptions = Readonly<{
+  /** Cancel a user-stopped run without waiting for the reasoning deadline. */
+  signal?: AbortSignal;
+  /** Content-free lifecycle state for the local popup. */
+  onProgress?: (stage: 'sending' | 'accepted') => void;
+}>;
+
 type PendingJob = Readonly<{
   schemaVersion: '1.0';
   snapshotId: string;
@@ -96,7 +103,8 @@ async function request(url: string, init: RequestInit, signal: AbortSignal): Pro
   try {
     return await fetch(url, { ...init, signal });
   } catch (error) {
-    if (signal.aborted) throw new Error('Reasoning server unavailable (timeout)', { cause: error });
+    // The caller distinguishes its own cancellation from the total deadline.
+    if (signal.aborted) throw error;
     throw new Error('Reasoning server unavailable', { cause: error });
   }
 }
@@ -106,7 +114,9 @@ export async function sendSanitizedObservation(
   apiKey: string,
   observation: SanitizedObservation,
   canaries: readonly string[],
+  options: ReasoningRequestOptions = {},
 ): Promise<ReasonResponse> {
+  if (options.signal?.aborted) throw new Error('Reasoning request cancelled');
   const endpoint = validateReasoningEndpoint(endpointRaw);
   validateObservation(observation);
   assertNoUnsafeKeys(observation);
@@ -114,6 +124,8 @@ export async function sendSanitizedObservation(
   assertNoCanaries(body, canaries);
 
   const controller = new AbortController();
+  const cancel = () => controller.abort();
+  options.signal?.addEventListener('abort', cancel, { once: true });
   const timeout = setTimeout(() => controller.abort(), REASONING_TIMEOUT_MS);
   const commonHeaders = {
     accept: 'application/json',
@@ -126,6 +138,7 @@ export async function sendSanitizedObservation(
     referrerPolicy: 'no-referrer' as const,
   };
   try {
+    options.onProgress?.('sending');
     const submitted = await request(endpoint.href, {
       ...commonInit,
       method: 'POST',
@@ -138,10 +151,12 @@ export async function sendSanitizedObservation(
     }, controller.signal);
 
     if (submitted.status === 200) {
+      options.onProgress?.('accepted');
       return parseReasonResponse(await readBoundedJson(submitted, canaries), observation.snapshotId);
     }
     if (submitted.status !== 202) throw new Error(`Reasoning server rejected the request (${submitted.status})`);
     const job = parsePendingJob(await readBoundedJson(submitted, canaries), observation.snapshotId);
+    options.onProgress?.('accepted');
     const statusUrl = pollUrl(endpoint, job.jobId);
 
     while (true) {
@@ -158,11 +173,13 @@ export async function sendSanitizedObservation(
       parsePendingJob(await readBoundedJson(polled, canaries), observation.snapshotId, job.jobId);
     }
   } catch (error) {
-    if (controller.signal.aborted && !(error instanceof Error && error.message.includes('(timeout)'))) {
+    if (options.signal?.aborted) throw new Error('Reasoning request cancelled', { cause: error });
+    if (controller.signal.aborted) {
       throw new Error('Reasoning server unavailable (timeout)', { cause: error });
     }
     throw error;
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', cancel);
   }
 }

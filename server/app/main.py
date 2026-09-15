@@ -19,7 +19,13 @@ from app.jobs import (
     ReasoningJobStore,
     ReasoningQueueFull,
 )
-from app.ollama import OllamaReasoner, Reasoner, ReasonerInvalidResponse, ReasonerUnavailable
+from app.ollama import (
+    OllamaReasoner,
+    Reasoner,
+    ReasonerContextLimit,
+    ReasonerInvalidResponse,
+    ReasonerUnavailable,
+)
 from app.schemas import (
     DemoState,
     DemoSubmit,
@@ -152,6 +158,8 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
                 response = await reasoner.reason(observation)
                 response = guard_reasoned_action(observation, response)
                 validate_action_for_observation(response.snapshotId, response.action, observation)
+            except ReasonerContextLimit:
+                raise ReasoningJobError(503, "reasoning_context_limit") from None
             except ReasonerUnavailable:
                 raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
             except (ReasonerInvalidResponse, ObservationRejected):

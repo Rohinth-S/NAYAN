@@ -1,5 +1,8 @@
 # Edge-case and failure matrix
 
+Protocol and policy version: **1.0**. Changes require the migration and release
+checks in `governance/PROTOCOL_MIGRATIONS.md`.
+
 This matrix defines the behavior of the privacy firewall at the boundaries that
 matter for the SIH26171 prototype. “Handled” means the implementation either
 sanitizes the case or blocks the request. It does not mean universal PII

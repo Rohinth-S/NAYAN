@@ -374,6 +374,15 @@ The bundled face model is `extension/models/version-RFB-320.onnx` with SHA-256 `
 
 The checked-in [evidence summaries](evidence/) contain aggregate synthetic results only. Raw screenshots, runtime logs, browser profiles, API keys, model caches, and generated packages stay ignored by Git.
 
+The integration and release controls are also checked in: [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md),
+[THREAT_MODEL.md](THREAT_MODEL.md), [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md), and the
+[synthetic SIH evidence package](evidence/sih-demo-package.json). Run
+`python scripts/verify-governance.py` to check protocol/policy synchronization,
+then `python scripts/release-gate.py` to run the aggregate gate and write
+`evidence/latest-release.json`. Run `powershell -ExecutionPolicy Bypass -File
+scripts/demo-preflight.ps1` immediately before a demo; it checks loopback health,
+the configured model, both package builds, and resets the synthetic portal.
+
 ## Run the prototype
 
 ### Requirements

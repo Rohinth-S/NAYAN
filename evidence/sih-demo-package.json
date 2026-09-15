@@ -1,0 +1,31 @@
+{
+  "evidenceVersion": "1.0",
+  "scope": "synthetic-only-SIH26171-demo",
+  "protocolVersion": "1.0",
+  "policyVersion": "1.0",
+  "approvedTask": "Check the confirmation checkbox, then submit the enrollment.",
+  "gradeMatrix": {
+    "1": {"visible": ["names", "ordinary contact context", "public structure"], "redacted": ["credentials", "government IDs", "payment data", "faces", "unknown media"]},
+    "2": {"visible": ["names", "public structure"], "redacted": ["grade 1 classes", "email", "phone", "address", "date of birth", "network identifiers", "account IDs"]},
+    "3": {"visible": ["public labels", "roles", "bounds", "checkbox state", "submit control"], "redacted": ["all grade 1 and 2 classes", "names", "usernames", "employee IDs", "ambiguous populated fields"]}
+  },
+  "demonstrations": [
+    {"name": "local-preview", "networkRequests": 0, "source": "artifacts/sanitized-preview-semantic.png"},
+    {"name": "deterministic-enrollment", "submitted": true, "source": "evidence/extension-e2e-summary.json"},
+    {"name": "live-local-Ollama-enrollment", "submitted": true, "source": "evidence/live-ollama-summary.json"},
+    {"name": "detector-failure", "expectedRequests": 0, "verification": "extension/server failure-mode tests"},
+    {"name": "stale-action", "expectedExecution": 0, "verification": "extension/server stale-context tests"}
+  ],
+  "aggregateMetrics": {
+    "extensionTests": 76,
+    "serverTests": 126,
+    "evaluationTests": 28,
+    "deterministicRequests": 3,
+    "deterministicRedactionsPerStep": 9,
+    "deterministicElapsedMs": 3406,
+    "liveLastReasoningLatencyMs": 12107
+  },
+  "browserMatrix": {"chromePackage": "built", "firefoxPackage": "built", "liveFirefoxRun": "operator-recorded-before-submission"},
+  "dataHandling": {"realPersonalData": false, "rawScreenshotsCheckedIn": false, "apiKeysCheckedIn": false, "requestBodiesCheckedIn": false},
+  "limitations": ["Metrics are synthetic and machine-specific.", "Independent security review and a live Firefox run are required before real-data deployment."]
+}

@@ -12,13 +12,21 @@ function visit(directory) {
   for (const name of readdirSync(directory)) {
     const path = join(directory, name);
     if (statSync(path).isDirectory()) visit(path);
-    else if (/\.(zip|xpi|crx|json)$/u.test(name)) {
+    else if (name !== 'RELEASE_METADATA.json') {
       const sha256 = createHash('sha256').update(readFileSync(path)).digest('hex');
       files.push({ path: relative(root, path).replaceAll('\\', '/'), sha256 });
     }
   }
 }
 visit(dist);
-const output = { generatedAt: new Date().toISOString(), node: process.version, artifacts: files.sort((a, b) => a.path.localeCompare(b.path)) };
+const packageDirectory = join(root, 'artifacts');
+if (!existsSync(packageDirectory)) throw new Error('Run npm run package before generating release metadata');
+visit(packageDirectory);
+for (const browser of ['chrome', 'firefox']) {
+  if (!files.some((file) => file.path === `artifacts/sih-private-agent-${browser}-0.1.0.zip`)) {
+    throw new Error(`Missing ${browser} release archive`);
+  }
+}
+const output = { metadataVersion: '1.0', node: process.version, signingStatus: 'unsigned', artifacts: files.sort((a, b) => a.path.localeCompare(b.path)) };
 writeFileSync(join(dist, 'RELEASE_METADATA.json'), `${JSON.stringify(output, null, 2)}\n`);
 console.log(`Recorded ${files.length} artifact checksums in dist/RELEASE_METADATA.json`);

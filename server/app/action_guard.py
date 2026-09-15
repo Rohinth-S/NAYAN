@@ -195,9 +195,16 @@ def guard_reasoned_action(
             and target.state.checked
             and not target.state.disabled
             and (target.state.required or _contains_term(target.label, _PREREQUISITE_TERMS))
-            and len(submit_like) == 1
+            and not _is_fill_task(observation.task)
         ):
-            return response.model_copy(update={"action": _click(submit_like[0].id)})
+            if len(submit_like) == 1:
+                return response.model_copy(update={"action": _click(submit_like[0].id)})
+            if not submit_like and not disabled_terminal and _is_strong_terminal_task(observation.task):
+                # A viewport-only observation may end at the consent row.
+                # Reveal the controls below it instead of toggling consent off.
+                return response.model_copy(
+                    update={"action": BrowserAction(type="scroll", direction="down", amount=450)}
+                )
 
         # Once a task explicitly requests a terminal form action, a unique
         # submit-like control is a safe recovery target for an unrelated model

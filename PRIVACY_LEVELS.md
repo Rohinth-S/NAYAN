@@ -1,5 +1,8 @@
 # Privacy grades and classification policy
 
+Policy version: **1.0**. The reviewed registry and migration record are in
+`governance/protocol-manifest.json` and `governance/PROTOCOL_MIGRATIONS.md`.
+
 This document defines the client-side privacy policy used by the SIH26171 prototype. The grades are cumulative: a higher grade includes every protection in the lower grades. **Grade 3 is the default.** Selecting a lower grade is an explicit choice to give the reasoning model more context.
 
 The local detector assigns a category; a deterministic policy then decides whether that category must be redacted at the selected grade. A model or website can propose a category, but it cannot lower the category or override an always-protected decision. Conflicting detections use the most protective result.
@@ -80,4 +83,3 @@ The request contains the numeric `privacy.grade` so the server can enforce the s
 The current release directly recognizes email, Indian phone numbers, Aadhaar, PAN, card-like numbers, IPv4, prefixed dates of birth, prefixed passport numbers, labeled names and addresses, sensitive field metadata, exact custom private values and faces. It masks visual regions that it cannot inspect safely.
 
 General multilingual NER, OCR inside images/canvas/video, QR-code decoding, signatures, minors, vehicle identifiers, IPv6/MAC/IMEI, and broad health, genetic, religious, sexual or political classification are not claimed in v1. These categories belong in the policy now so a future local OCR/NER model can add detections without changing what the grades mean.
-

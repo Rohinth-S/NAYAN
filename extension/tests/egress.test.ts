@@ -94,6 +94,51 @@ describe('single outbound gateway', () => {
     }
   });
 
+  it('reports when an asynchronous reasoning request has been accepted', async () => {
+    const progress: string[] = [];
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(pendingJob(), 202))
+      .mockResolvedValueOnce(jsonResponse(completedAction()));
+    vi.stubGlobal('fetch', fetchMock);
+    const resultPromise = sendSanitizedObservation(
+      'https://agent.example/v1/reason', '', cleanObservation, [], {
+        onProgress: (stage) => progress.push(stage),
+      },
+    );
+    await flushPromises();
+    for (let index = 0; index < 4; index += 1) await Promise.resolve();
+    expect(progress).toEqual(['sending', 'accepted']);
+    await vi.advanceTimersByTimeAsync(REASONING_POLL_MS);
+    await expect(resultPromise).resolves.toEqual(completedAction());
+  });
+
+  it('cancels an outstanding reasoning request on caller abort', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = sendSanitizedObservation(
+      'https://agent.example/v1/reason', '', cleanObservation, [], { signal: controller.signal },
+    );
+    await flushPromises();
+    controller.abort();
+    await expect(pending).rejects.toThrow('Reasoning request cancelled');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('does not emit a request when the caller is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(sendSanitizedObservation(
+      'https://agent.example/v1/reason', '', cleanObservation, [], { signal: controller.signal },
+    )).rejects.toThrow('Reasoning request cancelled');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('blocks a leak before any request is emitted', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

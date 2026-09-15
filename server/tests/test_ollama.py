@@ -40,7 +40,7 @@ async def test_ollama_receives_sanitized_image_and_structured_contract_only() ->
     assert captured["stream"] is False
     assert captured["think"] is False
     assert captured["keep_alive"] == "10m"
-    assert captured["options"] == {"temperature": 0, "num_ctx": 4096}
+    assert captured["options"] == {"temperature": 0, "num_ctx": 4096, "num_predict": 384}
     messages = captured["messages"]
     assert isinstance(messages, list)
     assert messages[1]["images"] == [observation.image.dataBase64]

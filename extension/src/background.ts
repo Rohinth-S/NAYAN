@@ -1,6 +1,6 @@
 import { CaptureRateGate } from './capture-rate-gate';
 import { sameTabContext, type TabContext } from './context-guard';
-import { sendSanitizedObservation } from './egress';
+import { sendSanitizedObservation, type ReasoningRequestOptions } from './egress';
 import { localSanitizer } from '#local-sanitizer';
 import { isOffscreenMessage } from './offscreen-protocol';
 import { pseudonymizeOrigin, sanitizeText } from './privacy';
@@ -13,6 +13,7 @@ const originAliasKey = crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256'
 const captureRateGate = new CaptureRateGate();
 let stopRequested = false;
 let activeRun = 0;
+let activeReasoningController: AbortController | null = null;
 const tabUpdateGeneration = new Map<number, number>();
 const windowActivationGeneration = new Map<number, number>();
 let status: AgentStatus = {
@@ -242,6 +243,8 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
   if (status.running) throw new Error('Agent is already running');
   validateSettings(settings);
   const runId = ++activeRun;
+  const reasoningController = new AbortController();
+  activeReasoningController = reasoningController;
   stopRequested = false;
   update({ running: true, phase: 'capturing', step: 0, message: 'Starting locally…', previewDataUrl: null });
   try {
@@ -256,11 +259,44 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       }
       update({ step });
       const context = await captureAndSanitize(settings, pinnedTab);
+      if (stopRequested || runId !== activeRun) return;
       update({ phase: 'reasoning', message: 'Sending sanitized observation…' });
       const started = performance.now();
-      const response = await keepServiceWorkerAlive(
-        sendSanitizedObservation(settings.endpoint, settings.apiKey, context.observation, settings.canaries),
-      );
+      let accepted = false;
+      let progressTimer: ReturnType<typeof setInterval> | undefined;
+      const progressOptions: ReasoningRequestOptions = {
+        signal: reasoningController.signal,
+        onProgress: (stage) => {
+          if (runId !== activeRun || stopRequested) return;
+          if (stage === 'accepted') accepted = true;
+          const elapsed = Math.max(0, Math.round((performance.now() - started) / 1_000));
+          update({
+            phase: 'reasoning',
+            message: stage === 'accepted'
+              ? `Request accepted · model deciding (${elapsed}s). First model load may take longer.`
+              : `Sending sanitized observation (${elapsed}s)…`,
+          });
+        },
+      };
+      progressTimer = setInterval(() => {
+        if (runId !== activeRun || stopRequested) return;
+        const elapsed = Math.max(0, Math.round((performance.now() - started) / 1_000));
+        update({
+          phase: 'reasoning',
+          message: accepted
+            ? `Waiting for reasoning decision (${elapsed}s)…`
+            : `Sending sanitized observation (${elapsed}s)…`,
+        });
+      }, 1_000);
+      let response;
+      try {
+        response = await keepServiceWorkerAlive(
+          sendSanitizedObservation(settings.endpoint, settings.apiKey, context.observation, settings.canaries, progressOptions),
+        );
+      } finally {
+        if (progressTimer) clearInterval(progressTimer);
+      }
+      if (runId !== activeRun || stopRequested) return;
       update({ lastLatencyMs: Math.round(performance.now() - started) });
       if (stopRequested || runId !== activeRun) {
         update({ running: false, phase: 'idle', message: 'Stopped by user' });
@@ -277,8 +313,11 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     }
     update({ running: false, phase: 'blocked', message: 'Maximum step count reached' });
   } catch (error) {
+    if (runId !== activeRun || stopRequested || reasoningController.signal.aborted) return;
     reportBlockedOperation('agent run', error);
     update({ running: false, phase: 'blocked', message: safeMessage(error) });
+  } finally {
+    if (activeReasoningController === reasoningController) activeReasoningController = null;
   }
 }
 
@@ -289,6 +328,8 @@ async function handlePopup(message: unknown): Promise<AgentStatus> {
   if (command.type === 'STOP') {
     stopRequested = true;
     activeRun += 1;
+    activeReasoningController?.abort();
+    activeReasoningController = null;
     update({ running: false, phase: 'idle', message: 'Stopped by user' });
     return status;
   }

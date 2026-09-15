@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "policyVersion": "1.0",
+  "protocolDocument": "PROTOCOL.md",
+  "privacyDocument": "PRIVACY_LEVELS.md",
+  "edgeCaseDocument": "EDGE_CASE_MATRIX.md",
+  "singleEgressFile": "extension/src/egress.ts",
+  "allowedActions": ["click", "input", "scroll", "wait", "done"],
+  "privacyGrades": [1, 2, 3],
+  "invariantCategories": [
+    "credentials",
+    "government-identifiers",
+    "financial-secrets",
+    "faces-biometrics",
+    "special-category-records",
+    "known-private-values",
+    "uninspectable-content"
+  ],
+  "defaultDetectorFailure": "full-mask-or-no-request",
+  "requestBodyPolicy": "sanitized-observation-only",
+  "migrationPolicy": "document-before-code"
+}
