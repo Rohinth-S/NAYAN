@@ -20,8 +20,8 @@ Latest local validation baseline:
 
 | Area | Result |
 | --- | ---: |
-| Extension tests | 73 passed |
-| Server tests | 126 passed |
+| Extension tests | 77 passed |
+| Server tests | 132 passed |
 | Evaluation tests | 28 passed |
 | Chrome package | Builds successfully |
 | Firefox package | Builds successfully |
@@ -201,6 +201,205 @@ Add JSON/PNG/DOM/model-output fuzzing, malicious-page tests, compromised-model t
 Add structured logs and metrics containing only status, bounded timings, queue depth, error class, model version, and aggregate counters. Exclude raw content, URLs, labels, screenshots, request bodies, job IDs, and sensitive values. Add alerts for queue saturation, model failures, rejected payloads, and repeated auth failures. Document retention, deletion, backup, rollback, and incident response.
 
 **Done when:** an operator can diagnose availability and latency without receiving the data the boundary is designed to protect.
+
+### Prajjwal delivery status in the current release
+
+The integrated release now closes the development-profile portions of P1, P3,
+P4, P5, and P6: the server has strict authentication/origin and size controls,
+bounded model calls and output validation, grade-aware defense-in-depth checks,
+aggregate metrics at `/health/metrics`, a per-client sliding-window limiter,
+tracked-file secret scanning, and a generated CycloneDX SBOM. A metadata-only
+SQLite ledger is available through `PRIVACY_AGENT_JOB_LEDGER_PATH`; it persists
+validated job status/action outcomes and marks in-flight jobs as
+`server_restarted` rather than silently losing or replaying them. The default
+in-memory store remains explicit for local development. External Redis/Postgres,
+TLS termination, hosted secret management, and a live multi-instance failover
+test remain deployment-profile work and are assigned below.
+
+The reproducible commands are:
+
+```powershell
+python scripts/security-scan.py
+python scripts/generate-sbom.py
+python scripts/release-gate.py
+```
+
+The commands export aggregate counts only. They do not write observations,
+screenshots, request bodies, labels, keys, or browser profiles.
+
+## Prajjwal — next difficult production assignments
+
+These assignments extend the current work instead of adding shallow demo
+features. Each one requires a design note, implementation, threat review,
+positive/negative/malformed/stale tests, load or fault evidence, and a rollback
+plan. No item is marked done from a unit test alone.
+
+### P7. Durable encrypted job service and multi-instance failover — P0/P1
+
+Replace the metadata-only SQLite option with a production job service backed by
+Redis Streams or PostgreSQL. Store only the minimum sanitized contract needed by
+the configured retention policy, encrypt sensitive-at-rest fields with a
+rotatable KMS key, and make the default deployment refuse to start when the
+durable backend is unavailable.
+
+Implementation steps:
+
+1. Define a storage interface with `submit`, `lease`, `heartbeat`, `complete`,
+   `fail`, `cancel`, `expire`, and idempotency operations; keep the in-memory
+   implementation only behind an explicit development profile.
+2. Bind every job to a random UUIDv4, snapshot ID, authenticated client, policy
+   version, and creation deadline. Hash idempotency keys; never log or persist
+   raw request headers or browser content.
+3. Add worker leases with a monotonic expiry, bounded retries, dead-letter
+   handling, cancellation, and exactly-once action delivery semantics at the
+   receiver boundary.
+4. On restart, recover only unexpired leased jobs, fail expired jobs with a
+   stable code, and prove that a duplicate poll cannot return two different
+   actions for one snapshot.
+5. Run two server instances against the same backend under queue saturation,
+   worker death, network partition, clock skew, and schema upgrade. Record only
+   aggregate completion/duplicate/loss counters.
+
+Done when a restart and a second instance preserve job identity, cannot replay a
+completed action, and cannot expose a stored observation to another client.
+
+### P8. Policy compiler and client/server parity enforcement — P0
+
+Turn `governance/protocol-manifest.json` into a generated policy registry used
+by TypeScript and Python. Prevent a client/server category mismatch from being
+deployed.
+
+Implementation steps:
+
+1. Define a JSON Schema for categories, minimum grades, invariant classes,
+   detector versions, and migration numbers; reject duplicate or non-monotonic
+   thresholds.
+2. Generate typed TypeScript and Python modules during CI, including a digest
+   of the registry and the protocol version in evidence.
+3. Add the registry digest to the sanitized observation and require an exact
+   match at the server; legacy observations must fail safe to Grade 3 or be
+   rejected according to the migration table.
+4. Generate tests for every category at all grades, including unknown-category,
+   malformed-registry, downgrade, and policy-version mismatch cases.
+5. Add a compatibility matrix for rolling upgrades and a command that proves
+   the checked-in generated files are reproducible.
+
+Done when changing one threshold fails parity CI until the migration, generated
+artifacts, receiver checks, and evidence are updated together.
+
+### P9. Adversarial protocol, model, and media fuzzing — P0
+
+Build a continuous fuzz harness for JSON observations, PNG chunks, model output,
+long-poll tickets, DOM labels, and prompt-injection text.
+
+Implementation steps:
+
+1. Use property-based generators for bounds, Unicode normalization, duplicate
+   IDs, huge arrays, invalid PNG metadata, compressed bombs, NaN/Infinity,
+   malformed UUIDs, and every action field combination.
+2. Add a corpus of malicious page instructions and compromised-model responses;
+   assert that no generated case executes arbitrary script, targets an unknown
+   element, or returns a private value.
+3. Add differential tests between the Python receiver verifier and the
+   TypeScript observation validator; any disagreement blocks the build.
+4. Run timeouts and memory limits around every fuzz case and retain only the
+   minimized synthetic seed and failure class.
+5. Schedule nightly fuzzing and promote new minimized seeds into deterministic
+   regression tests.
+
+Done when a fixed fuzz budget has zero boundary escapes, reproducible seeds are
+   archived without payload data, and CI fails on a newly discovered violation.
+
+### P10. Pluggable model gateway with circuit breakers — P1
+
+Create a common adapter for Ollama, a packaged offline model, and a future
+hosted provider without changing the privacy protocol.
+
+Implementation steps:
+
+1. Define an adapter manifest containing immutable model digest, prompt version,
+   supported image limits, output schema, and offline/remote capability.
+2. Add a circuit breaker with warm-up, timeout, concurrency, retry budget,
+   exponential backoff, and half-open recovery; never retry a request with a
+   different privacy grade or unsanitized payload.
+3. Pin model digests and reject mutable tags in production. Record only model
+   ID, digest, latency, and error class in evidence.
+4. Add provider contract tests for malformed JSON, refusal, context overflow,
+   image rejection, slow response, and prompt injection.
+5. Add a deterministic local planner fallback that can perform only explicitly
+   safe structural actions when the VLM is unavailable; it must never infer or
+   fill private values.
+
+Done when provider failure is bounded and user-visible, failover preserves the
+same action schema and snapshot binding, and the selected model is reproducible.
+
+### P11. Quota, abuse prevention, and privacy-safe observability — P1
+
+Extend the current limiter into authenticated per-user quotas and operational
+telemetry suitable for an exposed service.
+
+Implementation steps:
+
+1. Replace process-local limits with a shared Redis/Postgres counter using a
+   monotonic window, bounded cardinality, and atomic increments.
+2. Separate request, pixel, model-token, and wall-clock budgets; reject work
+   before body parsing or model invocation when a budget is exhausted.
+3. Add aggregate counters for queue depth, p50/p95 latency, failure classes,
+   detector/backend dimensions, and rejection reasons; prohibit URLs, labels,
+   IDs, bodies, and job identifiers in logs and traces.
+4. Add alerts for auth bursts, queue saturation, model failure rate, and
+   repeated policy mismatches, with redacted incident examples.
+5. Load-test the limits and prove that one client cannot starve another or
+   amplify model retries.
+
+Done when quotas remain correct across two instances and an operator can
+diagnose availability without accessing protected content.
+
+### P12. Deployment, disaster recovery, and supply-chain assurance — P0/P1
+
+Produce a deployable hardened profile rather than a development server with
+production wording.
+
+Implementation steps:
+
+1. Add a container/compose profile with non-root execution, read-only root
+   filesystem, dropped Linux capabilities, health probes, resource limits,
+   private model networking, and explicit TLS proxy configuration.
+2. Integrate a secret manager, key rotation, certificate rotation, backup
+   encryption, retention/deletion jobs, and a tested restore procedure.
+3. Pin Python/npm dependencies, verify lockfiles, generate an SBOM, scan for
+   vulnerabilities and leaked secrets, and produce signed provenance for each
+   package/model digest.
+4. Run chaos tests for database loss, model loss, certificate expiry, disk full,
+   clock skew, process kill, and partial network failure; verify fail-closed
+   behavior and rollback to the previous protocol/model.
+5. Publish an operator runbook covering deployment, migration, rollback,
+   incident response, deletion requests, and evidence retention.
+
+Done when a clean host can deploy, recover, roll back, and delete retained
+metadata using documented commands without exposing protected content.
+
+### P13. Formal action-policy verification and browser capability expansion — P1/P2
+
+Make the server action guard auditable as a state machine before adding richer
+browser capabilities.
+
+Implementation steps:
+
+1. Model page revision, element state, consent state, navigation origin, and
+   irreversible-operation confirmation as explicit states and transitions.
+2. Prove invariants for click/input/scroll/wait/done and any future navigation,
+   download, upload, keyboard, or tab actions; reject actions without a proof
+   obligation or explicit user confirmation.
+3. Add model-based tests that generate action sequences, replay them after page
+   drift, and assert no duplicate or cross-origin side effect occurs.
+4. Add a capability negotiation field so older clients reject newer actions
+   safely rather than guessing.
+5. Publish a browser matrix covering Chrome/Firefox versions, WebGPU/WASM,
+   high-DPI, zoom, accessibility trees, long pages, and service-worker restart.
+
+Done when every enabled action has a documented safety invariant, generated
+state-machine tests, and reproducible Chrome/Firefox evidence.
 
 ## Rohinth — integration, governance, demo, and release
 

@@ -58,6 +58,8 @@ def main() -> int:
     checks["evaluation"] = run("evaluation", [executable, "-m", "pytest", "-p", "no:cacheprovider", "evaluation/tests", "-q", f"--junitxml={OUTPUT / 'evaluation.xml'}"], env=eval_env)
     checks["packages"] = run("packages", [npm, "run", "package"], ROOT / "extension")
     checks["metadata"] = run("metadata", [npm, "run", "release-metadata"], ROOT / "extension") if checks["packages"] else False
+    checks["security"] = run("security", [executable, "scripts/security-scan.py"])
+    checks["sbom"] = run("sbom", [executable, "scripts/generate-sbom.py"])
     suites = {}
     for name in ("extension", "server", "evaluation"):
         path = OUTPUT / f"{name}.xml"

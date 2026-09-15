@@ -7,6 +7,12 @@ Ollama model, validates the returned action against the current snapshot, and re
 The service never needs browser cookies, raw HTML, raw form values, a secret map, CDP access, or an original
 screenshot. Unknown request fields are rejected. Request and response content is not logged.
 
+The boundary applies a per-client sliding-window limit (`PRIVACY_AGENT_RATE_LIMIT_REQUESTS`, default 120 per
+minute) before parsing a reasoning body. `GET /health/metrics` exposes aggregate counters only; it never includes
+snapshots, labels, URLs, request bodies, or job IDs. The in-memory job store is the development profile. A
+production deployment must use an external durable job/metrics backend and HTTPS termination, as described in
+`RELEASE_CHECKLIST.md` and `TEAM_WORK_SPLIT.md`.
+
 ## Local setup
 
 The project-wide Ollama helper keeps a portable model directory under the ignored

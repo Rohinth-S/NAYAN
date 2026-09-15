@@ -71,6 +71,21 @@ MODEL_IMAGE_MAX_EDGE = 960
 MODEL_IMAGE_MAX_PIXELS = 460_800
 
 
+def _needs_visual_prompt(observation: SanitizedObservation) -> bool:
+    """Use pixels when DOM structure cannot fully describe the page.
+
+    Forms and ordinary application pages expose enough sanitized structure for
+    the VLM to ground an action. Avoiding a second multimodal image encoder on
+    those pages cuts tens of seconds on laptop GPUs. Canvas/video pages and
+    pages with no actionable structure still send the resized sanitized image.
+    Small fixtures retain images as well, preserving the multimodal contract.
+    """
+    if max(observation.image.width, observation.image.height) <= MODEL_IMAGE_MAX_EDGE:
+        return True
+    actionable = {"button", "link", "textbox", "checkbox", "radio", "combobox", "option", "scroll-region"}
+    return not any(element.role in actionable for element in observation.elements)
+
+
 def _model_image(observation: SanitizedObservation) -> tuple[str, int, int]:
     source = observation.image
     scale = min(
@@ -144,6 +159,13 @@ def _model_context(observation: SanitizedObservation, width: int, height: int) -
 def build_ollama_request(observation: SanitizedObservation, model: str) -> dict[str, Any]:
     image, width, height = _model_image(observation)
     context = _model_context(observation, width, height)
+    message: dict[str, Any] = {
+        "role": "user",
+        "content": "Select the next safe action for this JSON observation:\n"
+        + json.dumps(context, ensure_ascii=True, separators=(",", ":")),
+    }
+    if _needs_visual_prompt(observation):
+        message["images"] = [image]
     return {
         "model": model,
         "stream": False,
@@ -156,12 +178,7 @@ def build_ollama_request(observation: SanitizedObservation, model: str) -> dict[
         "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 384},
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": "Select the next safe action for this JSON observation:\n"
-                + json.dumps(context, ensure_ascii=True, separators=(",", ":")),
-                "images": [image],
-            },
+            message,
         ],
     }
 

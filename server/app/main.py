@@ -13,12 +13,14 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from app.action_guard import guard_reasoned_action
 from app.boundary import ReasoningBoundaryMiddleware, SafeAccessLogMiddleware, SecurityHeadersMiddleware
+from app.job_ledger import SQLiteJobLedger
 from app.jobs import (
     ReasoningJobError,
     ReasoningJobNotFound,
     ReasoningJobStore,
     ReasoningQueueFull,
 )
+from app.observability import PrivacyMetrics
 from app.ollama import (
     OllamaReasoner,
     Reasoner,
@@ -67,10 +69,13 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
         timeout_seconds=settings.ollama_timeout_seconds,
     )
     store = VerificationStore()
+    metrics = PrivacyMetrics()
+    ledger = SQLiteJobLedger(settings.job_ledger_path) if settings.job_ledger_path else None
     jobs = ReasoningJobStore(
         max_jobs=settings.max_reasoning_jobs,
         ttl_seconds=settings.reasoning_job_ttl_seconds,
         max_concurrent=settings.max_concurrent_reasoning_jobs,
+        ledger=ledger,
     )
     # Async jobs are bounded by ReasoningJobStore, but the legacy synchronous
     # endpoint must share the same concurrency budget so callers cannot bypass
@@ -85,6 +90,8 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
             yield
         finally:
             await jobs.close()
+            if ledger is not None:
+                ledger.close()
             if owned_reasoner:
                 await reasoner.close()
 
@@ -100,6 +107,7 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
     app.state.reasoner = reasoner
     app.state.verification_store = store
     app.state.reasoning_jobs = jobs
+    app.state.metrics = metrics
 
     app.add_middleware(ReasoningBoundaryMiddleware, settings=settings)
     app.add_middleware(SecurityHeadersMiddleware)
@@ -135,6 +143,14 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
     async def health_live() -> LiveHealth:
         return LiveHealth(service=settings.service_name)
 
+    @app.get("/health/metrics", include_in_schema=False)
+    async def health_metrics() -> dict[str, object]:
+        return {
+            "schemaVersion": "1.0",
+            "service": settings.service_name,
+            "counters": await metrics.snapshot(),
+        }
+
     @app.get("/health/ready", response_model=ReadyHealth)
     async def health_ready() -> ReadyHealth | JSONResponse:
         ready = await reasoner.ready()
@@ -144,6 +160,7 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
         return payload
 
     async def process_reasoning(observation: SanitizedObservation) -> ReasoningResponse:
+        await metrics.increment("reasoning.received")
         try:
             await asyncio.wait_for(
                 reasoning_gate.acquire(),
@@ -153,6 +170,7 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
             raise ReasoningJobError(503, "reasoning_capacity_timeout") from None
         try:
             if not await reasoner.ready():
+                await metrics.increment("reasoning.backend_unavailable")
                 raise ReasoningJobError(503, "reasoning_backend_unavailable")
             try:
                 response = await reasoner.reason(observation)
@@ -165,6 +183,7 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
             except (ReasonerInvalidResponse, ObservationRejected):
                 raise ReasoningJobError(502, "invalid_reasoning_response") from None
             await store.record_reason(observation, response.action.type)
+            await metrics.increment("reasoning.succeeded")
             return response
         finally:
             reasoning_gate.release()

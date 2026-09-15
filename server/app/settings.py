@@ -42,6 +42,11 @@ class Settings(BaseModel):
     max_concurrent_reasoning_jobs: int = Field(default=2, ge=1, le=8)
     reasoning_admission_timeout_seconds: float = Field(default=5.0, ge=0.1, le=60.0)
     reasoning_job_ttl_seconds: float = Field(default=300.0, ge=30.0, le=1_800.0)
+    rate_limit_requests: int = Field(default=120, ge=1, le=100_000)
+    rate_limit_window_seconds: float = Field(default=60.0, ge=1.0, le=3_600.0)
+    metrics_enabled: bool = True
+    deployment_profile: Literal["development", "production"] = "development"
+    job_ledger_path: str = ""
     log_level: LogLevel = "INFO"
 
     @field_validator("api_key")
@@ -133,6 +138,14 @@ class Settings(BaseModel):
             reasoning_job_ttl_seconds=float(
                 os.getenv("PRIVACY_AGENT_REASONING_JOB_TTL_SECONDS", "300")
             ),
+            rate_limit_requests=int(os.getenv("PRIVACY_AGENT_RATE_LIMIT_REQUESTS", "120")),
+            rate_limit_window_seconds=float(os.getenv("PRIVACY_AGENT_RATE_LIMIT_WINDOW_SECONDS", "60")),
+            metrics_enabled=_env_bool("PRIVACY_AGENT_METRICS_ENABLED", True),
+            deployment_profile=cast(
+                Literal["development", "production"],
+                os.getenv("PRIVACY_AGENT_DEPLOYMENT_PROFILE", "development"),
+            ),
+            job_ledger_path=os.getenv("PRIVACY_AGENT_JOB_LEDGER_PATH", ""),
             log_level=cast(LogLevel, os.getenv("PRIVACY_AGENT_LOG_LEVEL", "INFO").upper()),
         )
         settings.assert_runtime_safe()

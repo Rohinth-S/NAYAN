@@ -7,7 +7,7 @@ import httpx
 import pytest
 from conftest import SNAPSHOT_ID, SUBMIT_ID, observation_payload
 
-from app.ollama import OllamaReasoner, ReasonerInvalidResponse
+from app.ollama import OllamaReasoner, ReasonerInvalidResponse, build_ollama_request
 from app.schemas import SanitizedObservation
 
 
@@ -87,3 +87,14 @@ async def test_readiness_requires_exact_configured_model() -> None:
         assert await reasoner.ready() is False
     finally:
         await reasoner.close()
+
+
+def test_large_structured_capture_uses_dom_prompt_without_large_image() -> None:
+    payload = observation_payload()
+    payload["image"] = {**payload["image"], "width": 1920, "height": 1080}
+    observation = SanitizedObservation.model_validate(payload)
+    request = build_ollama_request(observation, "qwen3-vl:2b-instruct")
+    message = request["messages"][1]
+    assert "images" not in message
+    context = json.loads(message["content"].split("\n", 1)[1])
+    assert context["image"]["width"] <= 960

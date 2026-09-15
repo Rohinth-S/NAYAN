@@ -382,6 +382,8 @@ then `python scripts/release-gate.py` to run the aggregate gate and write
 `evidence/latest-release.json`. Run `powershell -ExecutionPolicy Bypass -File
 scripts/demo-preflight.ps1` immediately before a demo; it checks loopback health,
 the configured model, both package builds, and resets the synthetic portal.
+The release gate also runs the tracked-file secret scan and creates an ignored
+CycloneDX SBOM at `artifacts/sbom.json`.
 
 ## Run the prototype
 

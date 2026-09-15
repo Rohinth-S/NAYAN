@@ -50,3 +50,11 @@ jobs:
         run: python -m ruff check .
       - name: Run evaluation tests
         run: PYTHONPATH=evaluation python -m pytest evaluation/tests -q
+      - name: Run repository security scan
+        run: python scripts/security-scan.py
+      - name: Generate aggregate SBOM
+        run: python scripts/generate-sbom.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sih-privacy-agent-sbom
+          path: artifacts/sbom.json

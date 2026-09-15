@@ -1,8 +1,8 @@
 {
   "reportVersion": "1.0",
-  "recordedAtUtc": "2026-09-15T23:06:53.308918+00:00",
-  "sourceCommit": "7c535770bfa93c67b70359ce91824a158f8c231a",
-  "workingTreeHasChanges": false,
+  "recordedAtUtc": "2026-09-15T23:35:04.988249+00:00",
+  "sourceCommit": "56192af59edf41fd2e5bd688b1d07ae7482008fd",
+  "workingTreeHasChanges": true,
   "protocolVersion": "1.0",
   "policyVersion": "1.0",
   "scope": "automated-contract-and-package-checks",
@@ -15,22 +15,24 @@
     "lint": true,
     "evaluation": true,
     "packages": true,
-    "metadata": true
+    "metadata": true,
+    "security": true,
+    "sbom": true
   },
   "testSuites": {
     "extension": {
-      "total": 76,
+      "total": 77,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "passed": 76
+      "passed": 77
     },
     "server": {
-      "total": 126,
+      "total": 132,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "passed": 126
+      "passed": 132
     },
     "evaluation": {
       "total": 28,

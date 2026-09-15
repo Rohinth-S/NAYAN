@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.job_ledger import SQLiteJobLedger
 from app.schemas import ReasoningResponse
 
 LOGGER = logging.getLogger("privacy_server")
@@ -57,13 +58,21 @@ class _ReasoningJob:
 class ReasoningJobStore:
     """Bounded in-memory jobs containing sanitized observations only through runner closures."""
 
-    def __init__(self, *, max_jobs: int, ttl_seconds: float, max_concurrent: int) -> None:
+    def __init__(
+        self,
+        *,
+        max_jobs: int,
+        ttl_seconds: float,
+        max_concurrent: int,
+        ledger: SQLiteJobLedger | None = None,
+    ) -> None:
         self._max_jobs = max_jobs
         self._ttl_seconds = ttl_seconds
         self._jobs: dict[str, _ReasoningJob] = {}
         self._lock = asyncio.Lock()
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._closed = False
+        self._ledger = ledger
 
     def _expire_locked(self, now: float) -> None:
         expired = [
@@ -106,6 +115,8 @@ class ReasoningJobStore:
                 updated_at=now,
             )
             self._jobs[job_id] = job
+            if self._ledger is not None:
+                self._ledger.pending(job_id, snapshot_id)
             job.task = asyncio.create_task(self._execute(job_id, runner), name="sanitized-reasoning-job")
             return self._view(job)
 
@@ -133,6 +144,8 @@ class ReasoningJobStore:
             job.updated_at = time.monotonic()
             job.task = None
             job.changed.set()
+            if self._ledger is not None:
+                self._ledger.success(job_id, response)
 
     async def _finish_failure(self, job_id: str, status_code: int, code: str) -> None:
         async with self._lock:
@@ -145,6 +158,8 @@ class ReasoningJobStore:
             job.updated_at = time.monotonic()
             job.task = None
             job.changed.set()
+            if self._ledger is not None:
+                self._ledger.failure(job_id, status_code, code)
 
     async def get(self, job_id: str, *, wait_seconds: float = 0) -> ReasoningJobView:
         try:
@@ -157,7 +172,13 @@ class ReasoningJobStore:
             self._expire_locked(time.monotonic())
             job = self._jobs.get(job_id)
             if job is None:
-                raise ReasoningJobNotFound
+                if self._ledger is None:
+                    raise ReasoningJobNotFound
+                durable = self._ledger.get(job_id)
+                if durable is None:
+                    raise ReasoningJobNotFound
+                snapshot_id, state, response, failure_status, failure_code = durable
+                return ReasoningJobView(job_id, snapshot_id, state, response, failure_status, failure_code)
             if job.state != "pending" or wait_seconds <= 0:
                 return self._view(job)
             changed = job.changed

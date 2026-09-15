@@ -7,6 +7,7 @@ import time
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.rate_limit import SlidingWindowRateLimiter
 from app.settings import Settings
 
 LOGGER = logging.getLogger("privacy_server.access")
@@ -14,6 +15,7 @@ KNOWN_PATHS = {
     "/v1/reason",
     "/health/live",
     "/health/ready",
+    "/health/metrics",
     "/demo",
     "/demo/",
     "/demo/api/reset",
@@ -36,6 +38,9 @@ class ReasoningBoundaryMiddleware:
     def __init__(self, app: ASGIApp, settings: Settings) -> None:
         self.app = app
         self.settings = settings
+        self._limiter = SlidingWindowRateLimiter(
+            settings.rate_limit_requests, settings.rate_limit_window_seconds
+        )
 
     async def _respond(self, send: Send, status: int, code: str) -> None:
         body = json.dumps({"detail": code}, separators=(",", ":")).encode()
@@ -87,6 +92,12 @@ class ReasoningBoundaryMiddleware:
 
         if path != "/v1/reason":
             await self.app(scope, receive, send)
+            return
+
+        client = scope.get("client") or ("unknown", 0)
+        allowed, _ = await self._limiter.allow(str(client[0]))
+        if not allowed:
+            await self._respond(send, 429, "rate_limit_exceeded")
             return
 
         content_type = headers.get(b"content-type", b"").decode("ascii", errors="ignore")
