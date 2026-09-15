@@ -27,6 +27,9 @@ let lastExecutedActionKey = '';
 new MutationObserver(() => {
   documentRevision += 1;
 }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+window.addEventListener('scroll', () => { documentRevision += 1; }, { capture: true, passive: true });
+window.addEventListener('resize', () => { documentRevision += 1; }, { passive: true });
+window.addEventListener('orientationchange', () => { documentRevision += 1; }, { passive: true });
 
 function opaqueElementId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));

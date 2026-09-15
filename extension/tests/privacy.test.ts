@@ -58,6 +58,14 @@ describe('local text privacy filter', () => {
     expect(sanitizeText('Name: +91 98765 43210', [], 300, 2)).not.toContain('98765 43210');
   });
 
+  it('covers additional Indian and device identifiers conservatively', () => {
+    const raw = 'GSTIN 27ABCDE1234F1Z5 IMEI 490154203237518 MAC  AA:BB:CC:DD:EE:FF vehicle MH12AB1234';
+    const sanitized = sanitizeText(raw, [], 500, 1);
+    expect(sanitized).not.toContain('27ABCDE1234F1Z5');
+    expect(sanitized).not.toContain('490154203237518');
+    expect(sanitized).not.toContain('MH12AB1234');
+  });
+
   it('classifies structured sensitive fields', () => {
     expect(isSensitiveField({ type: 'password' })).toBe('password');
     expect(isSensitiveField({ autocomplete: 'cc-number' })).toBe('sensitive-field');
