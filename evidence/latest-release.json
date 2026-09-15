@@ -1,8 +1,8 @@
 {
   "reportVersion": "1.0",
-  "recordedAtUtc": "2026-09-15T23:06:05.679395+00:00",
-  "sourceCommit": "0063592ed1924960512e67cfc10cc25999bde728",
-  "workingTreeHasChanges": true,
+  "recordedAtUtc": "2026-09-15T23:06:53.308918+00:00",
+  "sourceCommit": "7c535770bfa93c67b70359ce91824a158f8c231a",
+  "workingTreeHasChanges": false,
   "protocolVersion": "1.0",
   "policyVersion": "1.0",
   "scope": "automated-contract-and-package-checks",
