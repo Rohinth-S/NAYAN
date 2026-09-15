@@ -34,6 +34,12 @@ describe('local text privacy filter', () => {
     expect(sanitizeText('Welcome, Meera Rao', ['meera rao'])).toBe('Welcome, [REDACTED:KNOWN]');
   });
 
+  it('detects sensitive values before clipping the sanitized text', () => {
+    const sanitized = sanitizeText('Prefix alice@example.com', [], 12, 2);
+    expect(sanitized).not.toContain('alice');
+    expect(sanitized).not.toContain('@example.com');
+  });
+
   it('detects labeled name, address, date-of-birth, and passport lines', () => {
     const raw = [
       'Full Name: Meera Rao',

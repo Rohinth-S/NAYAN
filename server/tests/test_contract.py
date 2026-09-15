@@ -146,6 +146,11 @@ def test_contract_enums_and_limits_are_strict() -> None:
     with pytest.raises(ValueError):
         BrowserAction(type="wait", milliseconds=5_001)
 
+
+def test_production_profile_requires_api_key() -> None:
+    with pytest.raises(ValueError, match="API_KEY is required"):
+        Settings(require_api_key=True).assert_runtime_safe()
+
     zero_area = observation_payload()
     zero_area["redactions"][0]["bounds"]["width"] = 0
     with pytest.raises(ValueError):

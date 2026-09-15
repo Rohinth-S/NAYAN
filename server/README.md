@@ -30,6 +30,7 @@ Configure a shared demo key and exact browser origins in the process environment
 
 ```powershell
 $env:PRIVACY_AGENT_API_KEY = "replace-with-at-least-16-random-characters"
+$env:PRIVACY_AGENT_REQUIRE_API_KEY = "true"
 $env:PRIVACY_AGENT_CORS_ORIGINS = "http://localhost,http://127.0.0.1"
 $env:PRIVACY_AGENT_OLLAMA_MODEL = "qwen3-vl:2b-instruct"
 .\.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8765 --no-access-log --no-proxy-headers
@@ -173,6 +174,9 @@ docker build -t sih-privacy-server server
 docker run --rm -p 8765:8765 --env-file server/.env sih-privacy-server
 ```
 
+The container enables `PRIVACY_AGENT_REQUIRE_API_KEY=true` by default and fails closed if no strong key is supplied.
 When Ollama runs on the Windows host, set `PRIVACY_AGENT_OLLAMA_BASE_URL=http://host.docker.internal:11434` and
 `PRIVACY_AGENT_ALLOW_REMOTE_OLLAMA=true` inside the container. Bind Ollama only to a trusted interface; the
-reasoning server's API key does not authenticate the Ollama API itself.
+reasoning server's API key does not authenticate the Ollama API itself. The synchronous compatibility endpoint
+shares the same bounded model-admission gate as asynchronous jobs and returns a controlled capacity error when the
+gate remains full beyond `PRIVACY_AGENT_REASONING_ADMISSION_TIMEOUT_SECONDS`.

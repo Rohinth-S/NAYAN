@@ -98,17 +98,21 @@ export function sanitizeText(
   maxLength = 300,
   privacyGrade: PrivacyGrade = 3,
 ): string {
-  const clipped = text.replace(/\s+/gu, ' ').trim().slice(0, maxLength);
-  const findings = findingsForGrade(clipped, knownValues, privacyGrade);
-  if (findings.length === 0) return clipped;
+  // Detect on the complete normalized value before applying the wire-length
+  // limit.  Clipping first can leave the prefix of a sensitive token at the
+  // boundary (for example, `alice@example.com` becoming `alice`) and send
+  // source content that the detector would otherwise have replaced.
+  const normalized = text.replace(/\s+/gu, ' ').trim();
+  const findings = findingsForGrade(normalized, knownValues, privacyGrade);
+  if (findings.length === 0) return normalized.slice(0, maxLength);
   let result = '';
   let cursor = 0;
   for (const finding of findings) {
-    result += clipped.slice(cursor, finding.start);
+    result += normalized.slice(cursor, finding.start);
     result += `[REDACTED:${finding.kind}]`;
     cursor = finding.end;
   }
-  return result + clipped.slice(cursor);
+  return (result + normalized.slice(cursor)).slice(0, maxLength);
 }
 
 export type FieldPrivacyInput = Readonly<{

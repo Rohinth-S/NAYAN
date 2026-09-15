@@ -32,7 +32,7 @@ Imagine a user asking:
 
 The page contains a name, email address, phone number, Aadhaar-like value, password field, a face image, a consent checkbox, and a submit button.
 
-At Grade 3, the extension keeps the public labels, roles, bounds, checkbox state, and submit control available to the model. It replaces personal values and the face with neutral cards such as `[REDACTED:PII]`, `[REDACTED:PASSWORD]`, and `[REDACTED:FACE]`. The server can therefore identify the consent checkbox and submit control without receiving the enrollment data. It returns an action such as `{"action":"click","element_id":"opaque-id"}`. The extension resolves that opaque ID locally, verifies the page has not changed, clicks the checkbox, captures a new observation, and continues to the submit step.
+At Grade 3, the extension keeps the public labels, roles, bounds, checkbox state, and submit control available to the model. It replaces personal values and the face with neutral cards such as `[REDACTED:PII]`, `[REDACTED:PASSWORD]`, and `[REDACTED:FACE]`. The server can therefore identify the consent checkbox and submit control without receiving the enrollment data. It returns an action such as `{"schemaVersion":"1.0","snapshotId":"…","action":{"type":"click","elementId":"opaque-id"}}`. The extension resolves that opaque ID locally, verifies the page has not changed, clicks the checkbox, captures a new observation, and continues to the submit step.
 
 The synthetic demo at `http://127.0.0.1:8765/demo` exercises this flow with Indian PII, sensitive field attributes, a face image, a required consent checkbox, asynchronous reasoning, and a final successful submission.
 
@@ -41,19 +41,19 @@ The synthetic demo at `http://127.0.0.1:8765/demo` exercises this flow with Indi
 ```mermaid
 flowchart LR
     U[User gesture] --> T[Visible browser tab]
-    T --> D[Content script\nDOM and safe structure]
-    T --> S[Background\nvisible screenshot]
+    T --> D[Content script<br/>DOM and safe structure]
+    T --> S[Background<br/>visible screenshot]
     D --> C[Local text and field classifiers]
-    S --> F[UltraFace ONNX\nWebGPU then WASM]
+    S --> F[UltraFace ONNX<br/>WebGPU then WASM]
     C --> G[Grade 1 / 2 / 3 policy]
     F --> G
-    G --> R[Fresh semantic redaction\nor opaque full mask]
-    R --> V[Serialized request\nleak and schema checks]
+    G --> R[Fresh semantic redaction<br/>or opaque full mask]
+    R --> V[Serialized request<br/>leak and schema checks]
     D --> V
     V -->|one sanitized POST| B[FastAPI privacy boundary]
-    B --> O[Local Ollama\nQwen3-VL]
+    B --> O[Local Ollama<br/>Qwen3-VL]
     O --> A[Strict action JSON]
-    A --> X[Snapshot, origin, revision\nand target checks]
+    A --> X[Snapshot, origin, revision<br/>and target checks]
     X --> T
 ```
 
@@ -64,7 +64,7 @@ The extension is the trusted privacy boundary in this prototype.
 - `extension/src/content.ts` collects visible actionable structure, safe labels, local bounds, field sensitivity signals, text findings, frame and media coverage, and document generations. Raw values are used transiently for classification and are not placed in the element list.
 - `extension/src/privacy.ts` applies deterministic DOM, field, regex, and known-private-value detection.
 - `extension/src/privacy-policy.ts` maps detector categories to the selected cumulative grade. A detector or model cannot downgrade an always-protected category.
-- `extension/src/face-detector.ts` runs the bundled UltraFace ONNX model locally, preferring WebGPU and falling back to single-threaded WASM.
+- `extension/src/face-detector.ts` runs the bundled UltraFace ONNX model locally, preferring WebGPU and falling back to single-threaded WASM when WebGPU initialization is unavailable. An inference failure fails closed (or requires the explicit full-mask fallback).
 - `extension/src/image-redactor.ts` maps DOM and face boxes into screenshot pixels, merges overlaps, and draws neutral category cards onto a new canvas. The original screenshot is never the outbound image.
 - `extension/src/sanitizer-offscreen.ts` moves decoding, inference, composition, and PNG encoding off the service worker in Chrome. Firefox uses the compatible local runtime path.
 - `extension/src/egress.ts` is the only reasoning endpoint caller. It validates the final serialized bytes, sends one sanitized request, and polls using only an opaque UUID job ticket.
@@ -74,12 +74,13 @@ The extension is the trusted privacy boundary in this prototype.
 
 The server is an untrusted recipient of the sanitized protocol object and provides reasoning orchestration.
 
-- `server/app/boundary.py` enforces request-size, content-type, authentication, origin, HTTPS/loopback, and safe access-log controls.
+- `server/app/boundary.py` enforces request-size, content-type, authentication, origin, and safe access-log controls. The extension's endpoint validator enforces HTTPS outside loopback; the server's default launcher binds the API to loopback.
 - `server/app/schemas.py` rejects unknown fields and invalid protocol values.
 - `server/app/validation.py` checks base64 and PNG structure, dimensions, metadata, animation, declared placeholder regions, opaque fallback pixels, bounds, canaries, and grade-aware text rules.
 - `server/app/ollama.py` sends only validated sanitized context to the local model and parses strict structured output.
 - `server/app/action_guard.py` uses sanitized task, role, label, state, and bounds metadata to guard high-confidence consent and submit prerequisites without seeing raw values.
-- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue with expiry, concurrency limits, and cancellation during shutdown. The current store is in memory and single process; replicated production deployment needs a protected shared store or sticky routing.
+- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue with expiry, concurrency limits, and cancellation during shutdown. Synchronous compatibility requests share the same model-admission gate and time out with a controlled capacity error. The current store is in memory and single process; replicated production deployment needs a protected shared store or sticky routing.
+- The container profile requires `PRIVACY_AGENT_API_KEY` at startup; local development can use the loopback launcher, which generates a session key automatically.
 
 ### Threat model and scope
 
@@ -114,7 +115,7 @@ Grades are cumulative and selected locally. Grade 3 is the default and the fail-
 | --- | --- | --- | --- |
 | **1 — Essential** | Personalised tasks that need ordinary identity context | Credentials, government IDs, payment data, faces, user-declared values, and uninspectable content | Names, usernames, ordinary email/phone/location context, professional context, and safe non-sensitive fields |
 | **2 — Balanced** | Useful assistance with direct contact details hidden | Grade 1 plus email, phone, address, precise location, date of birth, device identifiers, and non-financial account identifiers | Names, public handles, professional context, and safe controls |
-| **3 — Maximum** | Minimum personal context; default mode | Grades 1 and 2 plus names, usernames, employee/student IDs, demographic associations, and ambiguous populated fields | Public labels, roles, bounds, state, and task-relevant structure |
+| **3 — Maximum** | Minimum personal context; default mode | Grades 1 and 2 plus detected names, usernames, employee/student IDs, and ambiguous populated fields | Public labels, roles, bounds, state, and task-relevant structure |
 
 Every grade protects passwords and secrets, government and financial identifiers, faces, user-declared private values, and regions the client cannot inspect reliably. The full category matrix, detector signals, and current gaps are in [PRIVACY_LEVELS.md](PRIVACY_LEVELS.md).
 
@@ -176,8 +177,8 @@ Normal website traffic remains the website's own responsibility. The guarantee c
 
 The checked-in [VALIDATION_REPORT.md](VALIDATION_REPORT.md) records the evidence snapshot. The current source suites report:
 
-- **63 extension tests passed**;
-- **118 server tests passed**;
+- **73 extension tests passed**;
+- **126 server tests passed**;
 - **28 evaluation tests passed**;
 - Ruff clean;
 - Chrome and Firefox packages built;
@@ -211,7 +212,7 @@ ollama pull qwen3-vl:2b-instruct
 .\Test-Prototype.ps1
 ```
 
-The setup script creates local environments and downloads development helpers into ignored directories. The test script checks the extension, server, evaluation harness, model checksum, and source-level egress invariant.
+The setup script creates local environments and installs dependencies into ignored directories. The test script checks the extension, server, evaluation harness, model checksum, and source-level egress invariant.
 
 ### Start the local service
 
@@ -219,7 +220,7 @@ The setup script creates local environments and downloads development helpers in
 .\Start-Prototype.ps1
 ```
 
-The launcher keeps Ollama and the API on loopback, verifies the selected model, creates a random session API key, and writes it to `.runtime\api-key.txt`. The first multimodal request may take longer while Ollama loads the model; later requests use the resident model.
+The launcher keeps Ollama and the API on loopback, verifies the selected model, and reuses or creates a random session API key in `.runtime\api-key.txt`. The first multimodal request may take longer while Ollama loads the model; later requests use the resident model.
 
 ### Load the extension
 
@@ -241,7 +242,7 @@ For Firefox:
 2. Enter `Check the confirmation checkbox, then submit the enrollment.`
 3. Open `.runtime\api-key.txt`, copy its contents, and paste that value into **Optional API key**. Paste the key value, not the file path.
 4. Optionally add the fictional demo values under **Known private values** to exercise canary checks.
-5. Select **Privacy preview** and inspect the locally generated image. No reasoning request is made by this step.
+5. Select **Privacy preview** and inspect the locally generated image. Enter a task as usual; preview still makes no reasoning request.
 6. Select Grade 1, Grade 2, or Grade 3 and review its disclosure description.
 7. Select **Start agent** and approve the local endpoint if the browser asks.
 8. Confirm the page reaches `Enrollment submitted successfully.`

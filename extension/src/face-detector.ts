@@ -15,6 +15,7 @@ export class LocalFaceDetector {
   private session: ort.InferenceSession | null = null;
   private backend: 'webgpu' | 'wasm' | 'missing' | 'error' = __FACE_MODEL_INCLUDED__ ? 'error' : 'missing';
   private initialization: Promise<void> | null = null;
+  private wasmFallback: Promise<boolean> | null = null;
   private failure = __FACE_MODEL_INCLUDED__ ? 'not initialized' : 'model missing';
 
   get state(): SanitizedObservation['privacy']['detectorBackend'] {
@@ -29,21 +30,53 @@ export class LocalFaceDetector {
     await this.initialize();
     if (!this.session || !['webgpu', 'wasm'].includes(this.backend)) return { backend: this.backend, boxes: [] };
 
+    // Keep preprocessing outside the inference recovery path. If the browser
+    // cannot provide a canvas/ImageBitmap, retrying a different execution
+    // provider cannot fix that local capability failure.
     const input = preprocess(bitmap);
+    const backendAtStart = this.backend;
+    const sessionAtStart = this.session;
     try {
-      const outputs = await this.session.run({ [this.session.inputNames[0]!]: input });
-      const tensors = Object.values(outputs);
-      const boxes = tensors.find((tensor) => tensor.dims.length === 3 && tensor.dims.at(-1) === 4);
-      const scores = tensors.find((tensor) => tensor.dims.length === 3 && tensor.dims.at(-1) === 2);
-      if (!boxes || !scores) throw new Error('Unexpected UltraFace output tensors');
-      return { backend: this.backend, boxes: decodeUltraFace(boxes, scores, bitmap.width, bitmap.height) };
+      return await this.runInference(input, bitmap);
     } catch (error) {
       reportDetectorFailure('inference', error);
-      this.failure = detectorFailureDetail(error);
+
+      // A WebGPU session can initialize successfully and still fail on the
+      // first graph execution (driver/model operator support varies widely).
+      // Retry the same frame through the deterministic WASM backend before
+      // failing closed. This keeps WebGPU as the fast path without making it
+      // a single point of failure on laptops and managed browsers.
+      if (backendAtStart === 'webgpu') {
+        const webGpuFailure = detectorFailureDetail(error);
+        await this.releaseSession(sessionAtStart);
+        if (await this.initializeWasm(webGpuFailure)) {
+          try {
+            return await this.runInference(preprocess(bitmap), bitmap);
+          } catch (wasmError) {
+            reportDetectorFailure('WASM inference', wasmError);
+            this.failure = `WebGPU inference: ${webGpuFailure}; WASM inference: ${detectorFailureDetail(wasmError)}`.slice(0, 480);
+          }
+        }
+      } else {
+        this.failure = detectorFailureDetail(error);
+      }
       this.backend = 'error';
       this.session = null;
       return { backend: 'error', boxes: [] };
     }
+  }
+
+  private async runInference(input: ort.Tensor, bitmap: ImageBitmap): Promise<FaceDetectionResult> {
+    const session = this.session;
+    if (!session || !['webgpu', 'wasm'].includes(this.backend)) {
+      return { backend: this.backend, boxes: [] };
+    }
+    const outputs = await session.run({ [session.inputNames[0]!]: input });
+    const tensors = Object.values(outputs);
+    const boxes = tensors.find((tensor) => tensor.dims.length === 3 && tensor.dims.at(-1) === 4);
+    const scores = tensors.find((tensor) => tensor.dims.length === 3 && tensor.dims.at(-1) === 2);
+    if (!boxes || !scores) throw new Error('Unexpected UltraFace output tensors');
+    return { backend: this.backend, boxes: decodeUltraFace(boxes, scores, bitmap.width, bitmap.height) };
   }
 
   private async initialize(): Promise<void> {
@@ -84,6 +117,7 @@ export class LocalFaceDetector {
       }
     }
 
+    let webGpuFailure = '';
     if (hasWebGpuAdapter) {
       try {
         this.session = await ort.InferenceSession.create(model, {
@@ -94,22 +128,55 @@ export class LocalFaceDetector {
         return;
       } catch (error) {
         reportDetectorFailure('WebGPU initialization', error);
-        this.failure = detectorFailureDetail(error);
+        webGpuFailure = detectorFailureDetail(error);
+        this.failure = webGpuFailure;
         this.session = null;
       }
     }
+    await this.initializeWasm(webGpuFailure);
+  }
+
+  private async initializeWasm(previousFailure = ''): Promise<boolean> {
+    if (this.session && this.backend === 'wasm') return true;
+    if (this.wasmFallback) return this.wasmFallback;
+    const creating = (async () => {
+      try {
+        const model = runtimeUrl('models/version-RFB-320.onnx');
+        this.session = await ort.InferenceSession.create(model, {
+          executionProviders: ['wasm'],
+          graphOptimizationLevel: 'all',
+        });
+        this.backend = 'wasm';
+        this.failure = '';
+        return true;
+      } catch (error) {
+        reportDetectorFailure('WASM initialization', error);
+        const wasmFailure = detectorFailureDetail(error);
+        this.failure = previousFailure
+          ? `WebGPU initialization: ${previousFailure}; WASM initialization: ${wasmFailure}`.slice(0, 480)
+          : wasmFailure;
+        this.session = null;
+        this.backend = 'error';
+        return false;
+      }
+    })();
+    this.wasmFallback = creating;
     try {
-      this.session = await ort.InferenceSession.create(model, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all',
-      });
-      this.backend = 'wasm';
-      this.failure = '';
+      return await creating;
+    } finally {
+      if (this.wasmFallback === creating) this.wasmFallback = null;
+    }
+  }
+
+  private async releaseSession(expected: ort.InferenceSession | null): Promise<void> {
+    // Another concurrent capture may already have replaced the failed GPU
+    // session with WASM. Never release that newer session accidentally.
+    if (!expected || this.session !== expected) return;
+    this.session = null;
+    try {
+      await expected.release();
     } catch (error) {
-      reportDetectorFailure('WASM initialization', error);
-      this.failure = detectorFailureDetail(error);
-      this.session = null;
-      this.backend = 'error';
+      reportDetectorFailure('WebGPU release', error);
     }
   }
 }

@@ -8,13 +8,13 @@ The current raster policy is semantic redaction: locally detected sensitive regi
 
 | Area | Observed result | Evidence and interpretation |
 | --- | --- | --- |
-| Extension source and package checks | **63 tests passed** | `extension/npm run check` covers the cumulative policy, Grade 1/2/3 behavior, custom-value protection, semantic placeholder composition, PNG composition, ONNX post-processing, pinned-tab freshness, asynchronous job tickets, bodyless polling, total timeout, and the single egress boundary. Chrome and Firefox packages were rebuilt. |
-| Server contract and boundary checks | **118 tests passed; Ruff clean** | Covers strict grade parsing/defaulting, grade-aware defense-in-depth checks, authentication, limits, keyed aliases, PNG metadata/animation rejection, semantic placeholder backgrounds, opaque fallback masks, bounded jobs/long polls, Ollama output handling, prompt-injection containment, stale actions, safe logs, and receiver-body validation. |
+| Extension source and package checks | **73 tests passed** | `extension/npm run check` covers the cumulative policy, Grade 1/2/3 behavior, custom-value protection, semantic placeholder composition, PNG composition, ONNX post-processing and WebGPU-to-WASM recovery, pinned-tab freshness, asynchronous job tickets, bodyless polling, total timeout, duplicate-action protection, clipping-boundary detection, detector fallback handling, and the single egress boundary. Chrome and Firefox packages were rebuilt. |
+| Server contract and boundary checks | **126 tests passed; Ruff clean** | Covers strict grade parsing/defaulting, grade-aware defense-in-depth checks (including SSN and IFSC), authentication, limits, keyed aliases, PNG metadata/animation rejection, semantic placeholder backgrounds, opaque fallback masks, bounded jobs/long polls, shared sync/async model admission with timeout, Ollama output handling, prompt-injection containment, stale actions, safe logs, and receiver-body validation. |
 | Evaluation harness | **28 tests passed** | The scorer and receiver verifier now understand `minimumPrivacyGrade`, fail-safe legacy Grade 3, semantic pixels, opaque fallback pixels, grade-aware canaries, and privacy-grade reporting. |
 | Grade policy behavior | **Passed** | Grade 1 intentionally permits names/contact context; Grade 2 rejects contact/location identifiers; Grade 3 rejects labeled names/usernames/employee identifiers and unknown populated fields; every grade rejects credentials, government/financial identifiers, faces, custom values and uninspectable content. |
 | Semantic local preview | Passed | A locally generated semantic preview (`artifacts/sanitized-preview-semantic.png`) shows category-only placeholders, preserved public labels and checkbox state, WASM local inference, and no reasoning request. The screenshot is intentionally excluded from Git history because it is machine-specific; reproduce it locally with the documented preview command. |
-| Core deterministic Chrome baseline | Passed | [Synthetic E2E summary](evidence/extension-e2e-summary.json) records three sanitized requests, WASM inference, nine redactions per request, no serialized canaries, accepted payloads, and `Enrollment submitted successfully.` in 3,406 ms. This is retained as the core boundary baseline; grade-specific behavior is covered by the current 63/118/28 test suites. |
-| Live Ollama HTTP smoke | Passed | A fresh authenticated request to the running local `qwen3-vl:2b-instruct` service returned HTTP 200 with a valid structured action in 8,046 ms after the local model was warm. |
+| Core deterministic Chrome baseline | Passed | [Synthetic E2E summary](evidence/extension-e2e-summary.json) records three sanitized requests, WASM inference, nine redactions per request, no serialized canaries, accepted payloads, and `Enrollment submitted successfully.` in 3,406 ms. This is retained as the core boundary baseline; grade-specific behavior is covered by the current 73/126/28 test suites. |
+| Live Ollama HTTP smoke | Passed | Fresh authenticated requests to the running local `qwen3-vl:2b-instruct` service returned HTTP 200 with valid structured actions in 19,115 ms while warm; earlier runs ranged from 8,046 ms warm to 78,261 ms after a model unload. Keep the model resident for the demo and report this hardware variance against the latency rubric. |
 | Previously recorded full live browser task | Passed | [Recorded live summary](evidence/live-ollama-summary.json) contains three authenticated sanitized POSTs, bodyless polls, WASM local detection, no serialized canaries, and successful synthetic enrollment. It is retained as core live evidence; the current privacy-grade selector is validated separately by the focused suites. |
 
 The reviewed UltraFace asset is pinned by SHA-256:
@@ -25,8 +25,8 @@ The final package hashes are recorded after the last `npm run check`:
 
 | Package | SHA-256 |
 | --- | --- |
-| `sih-private-agent-chrome-0.1.0.zip` | `CF9876651714F8B0D5EB566538A263D759CC052885C9A05F3BC797140B0C5676` (6,624,270 bytes) |
-| `sih-private-agent-firefox-0.1.0.zip` | `906692BBAD2DFB52CFA1DF4302C352E261DEC1CD0EEDD98E76F8093F0EC26B7D` (6,621,198 bytes) |
+| `sih-private-agent-chrome-0.1.0.zip` | `812F6BA0C62047EE36375738716BA416F94C3B2F6B66B4D1B115EF293A5DB774` (6,624,946 bytes) |
+| `sih-private-agent-firefox-0.1.0.zip` | `E1E228119D56320B1BD7C44A1801406311FF6F655E64B81F9F911C93837F3495` (6,621,673 bytes) |
 
 The deterministic browser runs observed the WASM fallback. Chrome uses an offscreen document for local ONNX inference; Firefox uses the direct local runtime. A WebGPU-capable run should be recorded separately rather than inferred from the WASM result.
 
@@ -64,7 +64,7 @@ $env:PYTHONPATH = (Resolve-Path .\evaluation).Path
 & .\server\.venv\Scripts\python.exe -m pytest .\evaluation\tests -q
 ```
 
-The aggregate script also checks the UltraFace checksum and the source-level single-egress invariant. The launcher stores the API key in `.runtime\api-key.txt`, keeps Ollama on loopback, verifies the selected model, and never prints the key or page data. The first multimodal request may include local model-load latency; later requests use the resident model.
+The aggregate script also checks the UltraFace checksum and the source-level single-egress invariant. The launcher stores the API key in `.runtime\api-key.txt`, keeps Ollama on loopback, verifies the selected model, and never prints the key or page data. The container profile requires a configured API key before startup. The first multimodal request may include local model-load latency; later requests use the resident model.
 
 ## Demo gate
 

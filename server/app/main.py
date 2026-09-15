@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -65,6 +66,10 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
         ttl_seconds=settings.reasoning_job_ttl_seconds,
         max_concurrent=settings.max_concurrent_reasoning_jobs,
     )
+    # Async jobs are bounded by ReasoningJobStore, but the legacy synchronous
+    # endpoint must share the same concurrency budget so callers cannot bypass
+    # the model resource limit by omitting Prefer: respond-async.
+    reasoning_gate = asyncio.Semaphore(settings.max_concurrent_reasoning_jobs)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -133,18 +138,28 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
         return payload
 
     async def process_reasoning(observation: SanitizedObservation) -> ReasoningResponse:
-        if not await reasoner.ready():
-            raise ReasoningJobError(503, "reasoning_backend_unavailable")
         try:
-            response = await reasoner.reason(observation)
-            response = guard_reasoned_action(observation, response)
-            validate_action_for_observation(response.snapshotId, response.action, observation)
-        except ReasonerUnavailable:
-            raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
-        except (ReasonerInvalidResponse, ObservationRejected):
-            raise ReasoningJobError(502, "invalid_reasoning_response") from None
-        await store.record_reason(observation, response.action.type)
-        return response
+            await asyncio.wait_for(
+                reasoning_gate.acquire(),
+                timeout=settings.reasoning_admission_timeout_seconds,
+            )
+        except TimeoutError:
+            raise ReasoningJobError(503, "reasoning_capacity_timeout") from None
+        try:
+            if not await reasoner.ready():
+                raise ReasoningJobError(503, "reasoning_backend_unavailable")
+            try:
+                response = await reasoner.reason(observation)
+                response = guard_reasoned_action(observation, response)
+                validate_action_for_observation(response.snapshotId, response.action, observation)
+            except ReasonerUnavailable:
+                raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
+            except (ReasonerInvalidResponse, ObservationRejected):
+                raise ReasoningJobError(502, "invalid_reasoning_response") from None
+            await store.record_reason(observation, response.action.type)
+            return response
+        finally:
+            reasoning_gate.release()
 
     @app.post(
         "/v1/reason",

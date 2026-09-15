@@ -47,6 +47,11 @@ ALWAYS_PROTECTED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "bank_account",
         re.compile(r"\b(?:bank\s+)?account(?:\s+(?:number|no\.?))?\s*[:=\-]\s*\d{9,18}\b", re.IGNORECASE),
     ),
+    # Keep the receiver's defense-in-depth floor aligned with the client
+    # detector. These identifiers are always protected locally, so a client
+    # regression must still be rejected before model invocation.
+    ("ssn", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")),
+    ("ifsc", re.compile(r"(?<![A-Z0-9])[A-Z]{4}0[A-Z0-9]{6}(?![A-Z0-9])", re.IGNORECASE)),
 )
 
 GRADE_2_PROTECTED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (

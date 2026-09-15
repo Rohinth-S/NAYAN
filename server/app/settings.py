@@ -28,6 +28,7 @@ class Settings(BaseModel):
     ollama_timeout_seconds: float = Field(default=90.0, ge=2.0, le=300.0)
     allow_remote_ollama: bool = False
     api_key: SecretStr | None = None
+    require_api_key: bool = False
     cors_origins: tuple[str, ...] = (
         "http://localhost",
         "http://127.0.0.1",
@@ -39,6 +40,7 @@ class Settings(BaseModel):
     max_redactions: int = Field(default=1_000, ge=1, le=1_000)
     max_reasoning_jobs: int = Field(default=16, ge=1, le=128)
     max_concurrent_reasoning_jobs: int = Field(default=2, ge=1, le=8)
+    reasoning_admission_timeout_seconds: float = Field(default=5.0, ge=0.1, le=60.0)
     reasoning_job_ttl_seconds: float = Field(default=300.0, ge=30.0, le=1_800.0)
     log_level: LogLevel = "INFO"
 
@@ -75,6 +77,8 @@ class Settings(BaseModel):
         return value.rstrip("/")
 
     def assert_runtime_safe(self) -> None:
+        if self.require_api_key and self.api_key is None:
+            raise ValueError("PRIVACY_AGENT_API_KEY is required for this deployment profile")
         parts = urlsplit(self.ollama_base_url)
         host = parts.hostname or ""
         is_local = host == "localhost"
@@ -112,6 +116,7 @@ class Settings(BaseModel):
             ollama_timeout_seconds=float(os.getenv("PRIVACY_AGENT_OLLAMA_TIMEOUT_SECONDS", "90")),
             allow_remote_ollama=_env_bool("PRIVACY_AGENT_ALLOW_REMOTE_OLLAMA"),
             api_key=SecretStr(key) if key else None,
+            require_api_key=_env_bool("PRIVACY_AGENT_REQUIRE_API_KEY"),
             cors_origins=origins,
             max_request_bytes=int(os.getenv("PRIVACY_AGENT_MAX_REQUEST_BYTES", "8000000")),
             max_image_bytes=int(os.getenv("PRIVACY_AGENT_MAX_IMAGE_BYTES", "5000000")),
@@ -121,6 +126,9 @@ class Settings(BaseModel):
             max_reasoning_jobs=int(os.getenv("PRIVACY_AGENT_MAX_REASONING_JOBS", "16")),
             max_concurrent_reasoning_jobs=int(
                 os.getenv("PRIVACY_AGENT_MAX_CONCURRENT_REASONING_JOBS", "2")
+            ),
+            reasoning_admission_timeout_seconds=float(
+                os.getenv("PRIVACY_AGENT_REASONING_ADMISSION_TIMEOUT_SECONDS", "5")
             ),
             reasoning_job_ttl_seconds=float(
                 os.getenv("PRIVACY_AGENT_REASONING_JOB_TTL_SECONDS", "300")

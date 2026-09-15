@@ -12,6 +12,12 @@ This document assigns the remaining work for the three-person team. It is a task
 
 No task may weaken the invariant protection floor. A change that adds a detector, action, endpoint, serialized field, permission, or policy category must update its tests and the relevant protocol, privacy, or edge-case document.
 
+## Integration status — 16 September 2026
+
+The latest `main` includes the teammate branches and the integration fixes completed in this pass. The merged client work now covers grade-aware overlap priority, clipping-boundary detection, stale-tab/revision checks, editable-target enforcement, cross-origin click blocking, concurrent duplicate-action protection, detector fallback handling, and Chrome/Firefox package gates. The merged server work now covers SSN/IFSC defense-in-depth parity, one admission budget for synchronous and asynchronous model calls, bounded admission timeout errors, strict schemas and PNG checks, authenticated origin-bound requests, and container startup failure when a production API key is missing. Documentation and validation counts have been refreshed to 71 extension, 125 server, and 28 evaluation tests.
+
+The repository is a production-oriented, reviewable prototype. A real production deployment still requires the explicitly tracked follow-up work below: a durable shared job store for multi-instance operation, independently evaluated multilingual OCR/NER and media detectors, TLS termination and secret rotation at the deployment boundary, signed release artifacts, a larger labeled corpus with measured precision/recall, and an independent extension/security review. These are deployment and assurance gates rather than hidden implementation assumptions.
+
 ## Shared rules for every branch
 
 - Never add real personal data, credentials, API keys, cookies, screenshots, or browser profiles to GitHub.

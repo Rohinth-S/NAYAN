@@ -99,6 +99,10 @@ def build_ollama_request(observation: SanitizedObservation, model: str) -> dict[
         "model": model,
         "stream": False,
         "think": False,
+        # Multi-step browser tasks should not reload the VLM between captures.
+        # Ollama remains loopback-only, so keeping the reviewed model resident
+        # does not expand the network privacy boundary.
+        "keep_alive": "10m",
         "format": OLLAMA_RESPONSE_FORMAT,
         "options": {"temperature": 0, "num_ctx": 4096},
         "messages": [

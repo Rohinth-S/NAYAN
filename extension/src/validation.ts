@@ -61,13 +61,21 @@ function validateOrigin(value: unknown): asserts value is string {
   if (parsed.origin !== value || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Only a page origin may be sent');
 }
 
-export function validateObservation(value: unknown): asserts value is SanitizedObservation {
+export type ObservationValidationOptions = Readonly<{
+  /** Local previews do not need a user task, but egress must still require one. */
+  allowEmptyTask?: boolean;
+}>;
+
+export function validateObservation(
+  value: unknown,
+  options: ObservationValidationOptions = {},
+): asserts value is SanitizedObservation {
   if (!isRecord(value)) throw new Error('Observation must be an object');
   exactKeys(value, ['schemaVersion', 'snapshotId', 'documentId', 'page', 'task', 'elements', 'image', 'redactions', 'privacy']);
   if (value.schemaVersion !== SCHEMA_VERSION) throw new Error('Unsupported schema version');
   if (typeof value.snapshotId !== 'string' || !UUID_RE.test(value.snapshotId)) throw new Error('Invalid snapshotId');
   if (typeof value.documentId !== 'string' || !UUID_RE.test(value.documentId)) throw new Error('Invalid documentId');
-  boundedString(value.task, 'task', 2_000);
+  boundedString(value.task, 'task', 2_000, options.allowEmptyTask === true);
 
   if (!isRecord(value.page)) throw new Error('Invalid page');
   exactKeys(value.page, ['origin', 'title']);

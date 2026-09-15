@@ -77,7 +77,7 @@ The loop is deliberately step based: capture → local detection → grade polic
 - `server/app/validation.py` checks IDs, bounds, limits, PNG structure, metadata, semantic placeholder pixels, opaque fallback pixels, canary-sensitive text, and the selected grade.
 - `server/app/ollama.py` sends only validated sanitized context to the configured local model and parses strict structured output.
 - `server/app/action_guard.py` applies a narrow structural guard for high-confidence consent/submit prerequisites without seeing raw values.
-- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue. The default is 16 retained jobs and two concurrent model calls; a replicated deployment needs a shared protected job store or sticky routing.
+- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue. The default is 16 retained jobs and two concurrent model calls; synchronous compatibility requests share the same bounded admission gate. A replicated deployment needs a shared protected job store or sticky routing.
 
 ## 3. Privacy grade contract
 
@@ -108,7 +108,7 @@ Current detectors are intentionally narrower than the policy: high-confidence re
 
 ### Evidence already recorded
 
-The latest local validation snapshot is in `VALIDATION_REPORT.md`. The source suites currently report 63 extension tests, 118 server tests, and 28 evaluation tests, with Ruff clean. Recorded synthetic browser evidence uses the WASM fallback and shows three sanitized reasoning requests, absent canaries, nine redactions per request, and successful enrollment. A fresh authenticated local-Ollama HTTP smoke test has also returned a valid structured action.
+The latest local validation snapshot is in `VALIDATION_REPORT.md`. The source suites currently report 73 extension tests, 126 server tests, and 28 evaluation tests, with Ruff clean. Recorded synthetic browser evidence uses the WASM fallback and shows three sanitized reasoning requests, absent canaries, nine redactions per request, and successful enrollment. A fresh authenticated local-Ollama HTTP smoke test has also returned a valid structured action.
 
 Generated evidence is intentionally kept out of Git history because it is machine-specific and can contain local paths or runtime metadata. Re-run the commands in `VALIDATION_REPORT.md` after cloning and attach a new run record to a release or SIH submission when hardware/model details are fixed.
 

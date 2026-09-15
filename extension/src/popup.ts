@@ -1,6 +1,7 @@
 import type { AgentStatus, ExtensionSettings, PopupCommand } from './types';
 import { normalizePrivacyGrade, type PrivacyGrade } from './privacy-policy';
 import { PERSISTED_SETTING_KEYS, serializePersistedSettings } from './settings';
+import { taskPreset, TASK_PRESETS } from './task-presets';
 import { ext } from './webext';
 
 const byId = <T extends HTMLElement>(id: string): T => {
@@ -28,6 +29,50 @@ const redactions = byId<HTMLElement>('redactions');
 const latency = byId<HTMLElement>('latency');
 const previewPane = byId<HTMLElement>('previewPane');
 const previewImage = byId<HTMLImageElement>('previewImage');
+
+// Starter tasks make the first run discoverable without sending anything to
+// the server. The selected text remains editable and is persisted only when
+// the user starts a run, just like manually entered task text.
+function installTaskPresets(): void {
+  const field = task.closest('label');
+  const panel = field?.parentElement;
+  if (!field || !panel || document.getElementById('taskPreset')) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'task-presets';
+  const label = document.createElement('label');
+  label.htmlFor = 'taskPreset';
+  label.textContent = 'Quick start';
+  const select = document.createElement('select');
+  select.id = 'taskPreset';
+  select.setAttribute('aria-label', 'Choose a starter task');
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Choose a starter task…';
+  placeholder.selected = true;
+  select.append(placeholder);
+  for (const preset of TASK_PRESETS) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.label;
+    select.append(option);
+  }
+  select.addEventListener('change', () => {
+    const preset = taskPreset(select.value);
+    if (!preset) return;
+    task.value = preset.task;
+    task.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  label.append(select);
+  wrapper.append(label);
+  panel.insertBefore(wrapper, field);
+}
+
+installTaskPresets();
+
+// Keep form-validation feedback visible while the background status poll runs.
+// Without this, the 500 ms GET_STATUS poll immediately replaced local errors
+// such as "Enter a task first" with the background's stale "Ready" message.
+let popupError: string | null = null;
 
 function settings(): ExtensionSettings {
   return {
@@ -71,9 +116,10 @@ async function send(command: PopupCommand): Promise<AgentStatus> {
 
 function render(current: AgentStatus): void {
   state.textContent = current.phase;
-  message.textContent = current.message;
+  message.textContent = popupError ?? current.message;
   step.textContent = String(current.step);
-  detector.textContent = current.detectorBackend;
+  const hasRun = current.phase !== 'idle' || current.step > 0 || current.redactionCount > 0 || current.previewDataUrl !== null;
+  detector.textContent = hasRun ? current.detectorBackend : 'not run';
   redactions.textContent = String(current.redactionCount);
   latency.textContent = current.lastLatencyMs === null ? '—' : `${current.lastLatencyMs} ms`;
   start.disabled = current.running;
@@ -86,14 +132,16 @@ function render(current: AgentStatus): void {
 }
 
 async function run(type: 'START' | 'PREVIEW'): Promise<void> {
+  popupError = null;
   try {
     const value = settings();
-    if (!value.task) throw new Error('Enter a task first');
+    if (type === 'START' && !value.task) throw new Error('Enter a task first');
     if (type === 'START') await ensureEndpointPermission(value.endpoint);
     await ext.storage.local.set(serializePersistedSettings(value));
     render(await send({ type, settings: value }));
   } catch (error) {
-    message.textContent = error instanceof Error ? error.message : 'Could not start';
+    popupError = error instanceof Error ? error.message : 'Could not start';
+    message.textContent = popupError;
   }
 }
 
@@ -101,10 +149,17 @@ start.addEventListener('click', () => void run('START'));
 preview.addEventListener('click', () => void run('PREVIEW'));
 stop.addEventListener('click', () => void send({ type: 'STOP' }).then(render));
 privacyGrade.addEventListener('change', () => {
+  popupError = null;
   const grade = normalizePrivacyGrade(Number(privacyGrade.value));
   renderPrivacyGrade(grade);
   void ext.storage.local.set({ privacyGrade: grade });
 });
+
+for (const field of [task, endpoint, maxSteps, apiKey, canaries, fallback]) {
+  field.addEventListener('input', () => {
+    popupError = null;
+  });
+}
 
 renderPrivacyGrade(3);
 void ext.storage.local.get([...PERSISTED_SETTING_KEYS]).then((saved) => {
@@ -118,7 +173,7 @@ const poll = async (): Promise<void> => {
   try {
     render(await send({ type: 'GET_STATUS' }));
   } catch {
-    message.textContent = 'Background agent is unavailable';
+    if (!popupError) message.textContent = 'Background agent is unavailable';
   }
 };
 void poll();

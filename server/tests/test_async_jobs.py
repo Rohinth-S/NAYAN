@@ -174,6 +174,35 @@ async def test_async_queue_is_bounded(settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
+async def test_sync_reasoning_shares_model_gate_and_times_out(settings: Settings) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingReasoner(FakeReasoner):
+        async def reason(self, observation: SanitizedObservation) -> ReasoningResponse:
+            started.set()
+            await release.wait()
+            return await super().reason(observation)
+
+    bounded = settings.model_copy(
+        update={
+            "max_concurrent_reasoning_jobs": 1,
+            "reasoning_admission_timeout_seconds": 0.1,
+        }
+    )
+    app = create_app(bounded, BlockingReasoner())
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        first = asyncio.create_task(client.post("/v1/reason", json=observation_payload()))
+        await started.wait()
+        second = await client.post("/v1/reason", json=observation_payload())
+        assert second.status_code == 503
+        assert second.json() == {"detail": "reasoning_capacity_timeout"}
+        release.set()
+        assert (await first).status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_job_poll_requires_same_auth_and_origin_boundary(settings: Settings) -> None:
     key = "0123456789abcdef"
     extension_origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"

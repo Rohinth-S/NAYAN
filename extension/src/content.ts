@@ -281,57 +281,65 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
   const action: AgentAction = command.action;
   const actionKey = `${command.snapshotId}:${JSON.stringify(action)}`;
   if (actionKey === lastExecutedActionKey) throw new Error('Duplicate action rejected');
+  // Reserve the key while the asynchronous action is in flight so concurrent
+  // duplicate messages cannot both mutate the page. A failed action releases
+  // the reservation, allowing a safe retry when no mutation was committed.
   lastExecutedActionKey = actionKey;
-  if (action.type === 'done') return action.message ?? 'Task complete';
-  if (action.type === 'wait') {
-    await new Promise((resolve) => setTimeout(resolve, action.milliseconds));
-    return 'Waited';
-  }
-  if (action.type === 'scroll') {
-    const amount = action.amount;
-    if (amount === undefined) throw new Error('Scroll amount is missing');
-    const top = action.direction === 'up' ? -amount : amount;
-    const target = action.elementId ? currentElements.get(action.elementId) : undefined;
-    if (action.elementId) {
-      if (!(target instanceof HTMLElement) || !target.isConnected || !visible(target) || roleOf(target) !== 'scroll-region') {
-        throw new Error('Scroll target is unavailable or not a scroll region');
+  try {
+    if (action.type === 'done') return action.message ?? 'Task complete';
+    if (action.type === 'wait') {
+      await new Promise((resolve) => setTimeout(resolve, action.milliseconds));
+      return 'Waited';
+    }
+    if (action.type === 'scroll') {
+      const amount = action.amount;
+      if (amount === undefined) throw new Error('Scroll amount is missing');
+      const top = action.direction === 'up' ? -amount : amount;
+      const target = action.elementId ? currentElements.get(action.elementId) : undefined;
+      if (action.elementId) {
+        if (!(target instanceof HTMLElement) || !target.isConnected || !visible(target) || roleOf(target) !== 'scroll-region') {
+          throw new Error('Scroll target is unavailable or not a scroll region');
+        }
+        target.scrollBy({ top, behavior: 'smooth' });
+      } else window.scrollBy({ top, behavior: 'smooth' });
+      return `Scrolled ${action.direction}`;
+    }
+    if (!action.elementId) throw new Error('Action target is missing');
+    const target = currentElements.get(action.elementId);
+    if (!(target instanceof HTMLElement) || !target.isConnected || !visible(target)) throw new Error('Action target is unavailable');
+    if (action.type === 'click') {
+      const control = target as HTMLButtonElement | HTMLInputElement | HTMLSelectElement;
+      if ('disabled' in control && Boolean(control.disabled) || target.getAttribute('aria-disabled') === 'true') throw new Error('Action target is disabled');
+      if (target instanceof HTMLAnchorElement && !target.href.startsWith(`${location.origin}/`) && target.origin !== location.origin) {
+        throw new Error('Cross-origin navigation is blocked');
       }
-      target.scrollBy({ top, behavior: 'smooth' });
-    } else window.scrollBy({ top, behavior: 'smooth' });
-    return `Scrolled ${action.direction}`;
-  }
-  if (!action.elementId) throw new Error('Action target is missing');
-  const target = currentElements.get(action.elementId);
-  if (!(target instanceof HTMLElement) || !target.isConnected || !visible(target)) throw new Error('Action target is unavailable');
-  if (action.type === 'click') {
-    const control = target as HTMLButtonElement | HTMLInputElement | HTMLSelectElement;
-    if ('disabled' in control && Boolean(control.disabled) || target.getAttribute('aria-disabled') === 'true') throw new Error('Action target is disabled');
-    if (target instanceof HTMLAnchorElement && !target.href.startsWith(`${location.origin}/`) && target.origin !== location.origin) {
-      throw new Error('Cross-origin navigation is blocked');
+      target.focus();
+      target.click();
+      return 'Clicked element';
     }
-    target.focus();
-    target.click();
-    return 'Clicked element';
-  }
-  if (action.type === 'input') {
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      if (target.disabled || target.readOnly) throw new Error('Action target is not editable');
-      setNativeValue(target, action.text ?? '');
+    if (action.type === 'input') {
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        if (target.disabled || target.readOnly) throw new Error('Action target is not editable');
+        setNativeValue(target, action.text ?? '');
+      }
+      else if (target.isContentEditable) {
+        if ((target as HTMLElement).getAttribute('aria-readonly') === 'true') throw new Error('Action target is not editable');
+        target.textContent = action.text ?? '';
+        target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: action.text ?? '' }));
+      } else if (target instanceof HTMLSelectElement) {
+        if (target.disabled) throw new Error('Action target is not editable');
+        const option = Array.from(target.options).find((candidate) => candidate.value === action.text || candidate.text === action.text);
+        if (!option) throw new Error('Requested option is unavailable');
+        target.value = option.value;
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+      } else throw new Error('Action target is not editable');
+      return 'Entered text';
     }
-    else if (target.isContentEditable) {
-      if ((target as HTMLElement).getAttribute('aria-readonly') === 'true') throw new Error('Action target is not editable');
-      target.textContent = action.text ?? '';
-      target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: action.text ?? '' }));
-    } else if (target instanceof HTMLSelectElement) {
-      if (target.disabled) throw new Error('Action target is not editable');
-      const option = Array.from(target.options).find((candidate) => candidate.value === action.text || candidate.text === action.text);
-      if (!option) throw new Error('Requested option is unavailable');
-      target.value = option.value;
-      target.dispatchEvent(new Event('change', { bubbles: true }));
-    } else throw new Error('Action target is not editable');
-    return 'Entered text';
+    throw new Error('Unsupported action');
+  } catch (error) {
+    if (lastExecutedActionKey === actionKey) lastExecutedActionKey = '';
+    throw error;
   }
-  throw new Error('Unsupported action');
 }
 
 async function handleMessage(message: unknown): Promise<ContentResponse> {

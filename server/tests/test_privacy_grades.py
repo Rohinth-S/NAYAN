@@ -70,6 +70,8 @@ async def test_grade_one_may_intentionally_share_contact_and_name_context(
         "Authorization: Bearer abcdefghijklmnop",
         "api_key=sk-1234567890abcdefghijklmnop",
         "Bank account number: 123456789012",
+        "SSN: 123-45-6789",
+        "IFSC: SBIN0001234",
     ],
 )
 @pytest.mark.parametrize("grade", [1, 2, 3])

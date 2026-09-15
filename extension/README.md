@@ -40,8 +40,9 @@ unpacked**, and select `extension/dist/chrome`.
 For Firefox, open `about:debugging#/runtime/this-firefox`, choose **Load
 Temporary Add-on**, and select `extension/dist/firefox/manifest.json`.
 
-Open an HTTP(S) test page, click the extension icon, enter a task, and choose
-**Privacy preview** first. The preview never calls the reasoning server. Check
+Open an HTTP(S) test page, click the extension icon, and choose **Privacy
+preview** first. A task is optional for this local preview; enter one when you
+are ready to run the agent. The preview never calls the reasoning server. Check
 the detector state and masked image, then choose **Start agent**. The browser
 will ask for access to the configured reasoning-server origin. Endpoint access
 is optional and granted per origin; page access uses `activeTab` after the user
@@ -53,6 +54,18 @@ background/popup memory and are not saved to extension storage. The endpoint,
 step count, full-mask preference, and selected privacy grade are saved locally.
 The default is Grade 3 (strict). See [`../PRIVACY_LEVELS.md`](../PRIVACY_LEVELS.md)
 for the complete category matrix and detector limits.
+
+### Troubleshoot a blocked local preview
+
+`Local offscreen sanitization failed; transmission blocked` is a fail-closed
+local error. It means no reasoning request was sent; an API key or Ollama
+response cannot cause that message. After rebuilding, click **Reload** for the
+extension on `chrome://extensions`, reload the HTTP(S) page, and run **Privacy
+preview**. The detector should become `wasm` or `webgpu` and the mask count
+should be greater than zero. The extension's **Errors** panel contains a
+bounded local category if the offscreen document, ONNX runtime, or image
+decoder still fails. The optional full-mask fallback can keep a task moving,
+but it deliberately sends an opaque image and is intended for diagnostics.
 
 ## Privacy boundary
 
@@ -133,7 +146,8 @@ The extension applies the selected cumulative grade before encoding a new PNG:
   field values and raster, so lowering the grade never bypasses the invariant
   protection floor;
 - UltraFace face bounding boxes are detected using WebGPU, with single-threaded
-  WASM fallback, and are marked `[REDACTED:FACE]` at every grade;
+  WASM fallback on setup or first-inference failure, and are marked
+  `[REDACTED:FACE]` at every grade;
 - every visible iframe and embedded/media-rendered region (`img`, `picture`,
   `canvas`, `video`, `svg`, `object`, `embed`, and CSS background images) is
   covered at every grade because the current prototype cannot inspect its

@@ -20,6 +20,10 @@ describe('offscreen local message boundary', () => {
     const background = `chrome-extension://${id}/background.js`;
     expect(isTrustedBackgroundSender({ id }, id, background)).toBe(true);
     expect(isTrustedBackgroundSender({ id, url: background }, id, background)).toBe(true);
+    expect(isTrustedBackgroundSender({ id, url: `chrome-extension://${id}/` }, id, background)).toBe(true);
+    expect(isTrustedBackgroundSender({ id, url: `chrome-extension://${id}` }, id, background)).toBe(true);
+    expect(isTrustedBackgroundSender({ id, url: `${background}?worker=1` }, id, background)).toBe(true);
+    expect(isTrustedBackgroundSender({ id, tab: null as unknown as chrome.tabs.Tab }, id, background)).toBe(true);
     expect(isTrustedBackgroundSender({ id: 'other-extension' }, id, background)).toBe(false);
     expect(isTrustedBackgroundSender({ id, url: `chrome-extension://${id}/popup.html` }, id, background)).toBe(false);
     expect(isTrustedBackgroundSender({ id, url: 'https://private.invalid', tab: { id: 1 } as chrome.tabs.Tab }, id, background)).toBe(false);
@@ -96,6 +100,25 @@ describe('Chrome offscreen sanitizer routing', () => {
       await expect(sanitizer.sanitize(png, dom, false, [], 3)).rejects.toThrow('transmission blocked');
       expect(sanitizer.state).toBe('error');
     }
+  });
+
+  it('surfaces a bounded local failure from the offscreen document', async () => {
+    sendMessage.mockResolvedValue({
+      target: OFFSCREEN_TARGET,
+      requestId: request.requestId,
+      ok: false,
+      error: 'Local sanitization failed: Local face detector unavailable (WASM initialization: Error: test); transmission blocked',
+    });
+    const sanitizer = new OffscreenSanitizer(api);
+    await expect(sanitizer.sanitize(png, dom, false, [], 3)).rejects.toThrow('Local face detector unavailable');
+    expect(sanitizer.state).toBe('error');
+  });
+
+  it('turns a lost offscreen document into a local fail-closed error', async () => {
+    sendMessage.mockRejectedValue(new Error('Could not establish connection. Receiving end does not exist.'));
+    const sanitizer = new OffscreenSanitizer(api);
+    await expect(sanitizer.sanitize(png, dom, false, [], 3)).rejects.toThrow('offscreen document unavailable');
+    expect(sanitizer.state).toBe('error');
   });
 
   it('sends nothing when local document creation fails, and permits a later retry', async () => {

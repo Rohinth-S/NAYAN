@@ -8,84 +8,110 @@
   </head>
   <body>
     <main>
-      <header>
-        <div>
-          <h1>Private Browser Agent</h1>
-          <p>SIH26171 local privacy boundary</p>
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">✦</div>
+          <div>
+            <p class="eyebrow">SIH26171 · LOCAL FIRST</p>
+            <h1>Private Browser Agent</h1>
+            <p class="subtitle">A privacy boundary for browser automation</p>
+          </div>
         </div>
         <span id="state" class="badge">idle</span>
       </header>
 
-      <label>
-        Task
-        <textarea id="task" rows="3" maxlength="2000" placeholder="Example: submit this form after checking the details"></textarea>
-      </label>
-
-      <label>
-        Privacy grade
-        <select id="privacyGrade">
-          <option value="1">Grade 1 — Essential</option>
-          <option value="2">Grade 2 — Balanced</option>
-          <option value="3" selected>Grade 3 — Strict</option>
-        </select>
-      </label>
-      <p id="gradeSummary" class="grade-summary"></p>
-
-      <div class="row">
-        <label class="grow">
-          Reasoning endpoint
-          <input id="endpoint" type="url" value="http://127.0.0.1:8765/v1/reason" spellcheck="false" />
+      <section class="panel task-panel">
+        <div class="section-heading">
+          <span class="section-index">01</span>
+          <div>
+            <h2>Set an objective</h2>
+            <p>Tell the agent what to do on the current tab.</p>
+          </div>
+        </div>
+        <label for="task">Task
+          <textarea id="task" rows="3" maxlength="2000" placeholder="Example: submit this form after checking the details"></textarea>
         </label>
-        <label class="steps">
-          Steps
-          <input id="maxSteps" type="number" min="1" max="30" value="10" />
+        <p class="field-hint"><span class="hint-dot"></span>Optional for a local privacy preview · required to start the agent</p>
+      </section>
+
+      <section class="panel privacy-panel">
+        <div class="section-heading">
+          <span class="section-index">02</span>
+          <div>
+            <h2>Choose your privacy boundary</h2>
+            <p>All filtering happens on this device before any request.</p>
+          </div>
+        </div>
+        <label for="privacyGrade">Privacy grade
+          <select id="privacyGrade">
+            <option value="1">Grade 1 — Essential</option>
+            <option value="2">Grade 2 — Balanced</option>
+            <option value="3" selected>Grade 3 — Strict</option>
+          </select>
         </label>
-      </div>
+        <p id="gradeSummary" class="grade-summary"></p>
+      </section>
 
-      <label>
-        Optional API key (memory only)
-        <input id="apiKey" type="password" autocomplete="off" maxlength="1000" />
-      </label>
+      <section class="panel connection-panel">
+        <div class="section-heading compact-heading">
+          <span class="section-index">03</span>
+          <div>
+            <h2>Agent connection</h2>
+            <p>Local reasoning endpoint and run budget.</p>
+          </div>
+        </div>
+        <div class="row">
+          <label class="grow" for="endpoint">Reasoning endpoint
+            <input id="endpoint" type="url" value="http://127.0.0.1:8765/v1/reason" spellcheck="false" />
+          </label>
+          <label class="steps" for="maxSteps">Steps
+            <input id="maxSteps" type="number" min="1" max="30" value="10" />
+          </label>
+        </div>
+        <label for="apiKey">Optional API key <span class="label-note">memory only</span>
+          <input id="apiKey" type="password" autocomplete="off" maxlength="1000" placeholder="Stored only while this popup is open" />
+        </label>
+      </section>
 
-      <details>
-        <summary>Privacy controls</summary>
+      <details class="advanced panel">
+        <summary><span class="summary-icon">⚙</span><span>Advanced privacy controls</span><span class="summary-chevron">⌄</span></summary>
         <div class="grade-guide">
           <p><strong>Grade 1</strong> hides credentials, secrets, official and financial identifiers, faces, custom private values, and uninspectable content.</p>
           <p><strong>Grade 2</strong> also hides contact details, address, date of birth, IP address, and customer/account identifiers.</p>
           <p><strong>Grade 3</strong> also hides names, usernames, employee identifiers, and unknown populated fields.</p>
         </div>
-        <label>
-          Known private values, one per line (memory only)
+        <label for="canaries">Known private values <span class="label-note">one per line · memory only</span>
           <textarea id="canaries" rows="3" maxlength="10000" placeholder="Values are detected locally and must not appear in the request"></textarea>
         </label>
-        <label class="check">
+        <label class="check" for="fallback">
           <input id="fallback" type="checkbox" />
-          If face detection is unavailable, send a fully black image and DOM structure
+          <span>If face detection is unavailable, use a fully black image and retain only DOM structure.</span>
         </label>
       </details>
 
       <div class="actions">
-        <button id="preview" type="button" class="secondary">Privacy preview</button>
-        <button id="start" type="button">Start agent</button>
-        <button id="stop" type="button" class="danger" disabled>Stop</button>
+        <button id="preview" type="button" class="secondary"><span aria-hidden="true">◉</span> Privacy preview</button>
+        <button id="start" type="button"><span aria-hidden="true">▶</span> Start agent</button>
+        <button id="stop" type="button" class="danger" disabled><span aria-hidden="true">■</span> Stop</button>
       </div>
 
       <section class="status" aria-live="polite">
+        <div class="status-header"><span class="status-label">RUN STATUS</span><span class="local-pill"><span></span> local filter active</span></div>
         <p id="message">Ready</p>
         <dl>
           <div><dt>Step</dt><dd id="step">0</dd></div>
-          <div><dt>Detector</dt><dd id="detector">missing</dd></div>
+          <div><dt>Detector</dt><dd id="detector">not run</dd></div>
           <div><dt>Masks</dt><dd id="redactions">0</dd></div>
           <div><dt>Server</dt><dd id="latency">—</dd></div>
         </dl>
       </section>
 
       <figure id="previewPane" hidden>
-        <figcaption>Sanitized pixels eligible for transmission</figcaption>
-        <img id="previewImage" alt="Sanitized page preview" />
+        <figcaption><span>Sanitized preview</span><span class="preview-note">eligible for transmission</span></figcaption>
+        <div class="preview-frame"><img id="previewImage" alt="Sanitized page preview" /></div>
       </figure>
 
-      <p class="footnote">The preview is produced locally. Website traffic remains controlled by the website.</p>
+      <p class="footnote"><span aria-hidden="true">⌁</span> Preview is generated locally. Website traffic remains controlled by the website.</p>
     </main>
     <script src="popup.js"></script>
   </body>

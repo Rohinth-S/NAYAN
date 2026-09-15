@@ -49,11 +49,20 @@ export class OffscreenSanitizer {
     };
     // runtime.sendMessage is extension-local IPC, not a server request. This
     // module has no network client; raw captures never enter egress.ts.
-    const response = await this.api.runtime.sendMessage(request) as OffscreenResponse | undefined;
+    let response: OffscreenResponse | undefined;
+    try {
+      response = await this.api.runtime.sendMessage(request) as OffscreenResponse | undefined;
+    } catch {
+      this.backend = 'error';
+      throw new Error('Local offscreen document unavailable; transmission blocked');
+    }
     if (!response || response.target !== OFFSCREEN_TARGET || response.requestId !== request.requestId ||
       !response.ok || response.type !== 'SANITIZE_RESULT' || !response.raster) {
       this.backend = 'error';
-      throw new Error('Local offscreen sanitization failed; transmission blocked');
+      const detail = response && !response.ok && typeof response.error === 'string'
+        ? response.error.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, 300)
+        : '';
+      throw new Error(detail || 'Local offscreen sanitization failed; transmission blocked');
     }
     this.backend = response.raster.detectorBackend;
     return response.raster;

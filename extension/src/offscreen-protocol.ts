@@ -26,9 +26,21 @@ export function isOffscreenMessage(message: unknown): boolean {
 }
 
 export function isTrustedBackgroundSender(sender: chrome.runtime.MessageSender, extensionId: string, backgroundUrl: string): boolean {
-  // Content scripts carry sender.tab; extension pages have a specific URL.
-  // Chrome can omit the URL for the extension service worker.
-  return sender.id === extensionId && sender.tab === undefined && (sender.url === undefined || sender.url === backgroundUrl);
+  // Content scripts carry sender.tab. Chrome can omit the URL for the
+  // extension service worker, while some Chrome versions report the worker's
+  // extension origin (`chrome-extension://<id>/`) instead of the script URL.
+  // Keep the check origin-bound and allow only that root or the known
+  // background script; popup/options pages must remain excluded.
+  if (sender.id !== extensionId || sender.tab != null) return false;
+  if (sender.url === undefined || sender.url === backgroundUrl) return true;
+  try {
+    const actual = new URL(sender.url);
+    const expected = new URL(backgroundUrl);
+    if (actual.origin !== expected.origin || actual.hash) return false;
+    return actual.pathname === '' || actual.pathname === '/' || actual.pathname === expected.pathname;
+  } catch {
+    return false;
+  }
 }
 
 function validRequestId(value: unknown): value is string {

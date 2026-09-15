@@ -6,7 +6,7 @@ import { isOffscreenMessage } from './offscreen-protocol';
 import { pseudonymizeOrigin, sanitizeText } from './privacy';
 import { isPrivacyGrade } from './privacy-policy';
 import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedObservation } from './types';
-import { validateObservation } from './validation';
+import { validateObservation, type ObservationValidationOptions } from './validation';
 import { ext } from './webext';
 
 const originAliasKey = crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -70,8 +70,8 @@ async function keepServiceWorkerAlive<T>(operation: Promise<T>): Promise<T> {
   }
 }
 
-function validateSettings(settings: ExtensionSettings): void {
-  if (!settings.task.trim() || settings.task.length > 2_000) throw new Error('Task is invalid');
+function validateSettings(settings: ExtensionSettings, requireTask = true): void {
+  if ((requireTask && !settings.task.trim()) || settings.task.length > 2_000) throw new Error('Task is invalid');
   if (!Number.isInteger(settings.maxSteps) || settings.maxSteps < 1 || settings.maxSteps > 30) throw new Error('Step count is invalid');
   if (settings.apiKey.length > 1_000) throw new Error('API key is invalid');
   if (!isPrivacyGrade(settings.privacyGrade)) throw new Error('Privacy grade is invalid');
@@ -111,7 +111,11 @@ async function captureVisible(windowId: number): Promise<string> {
   return dataUrl;
 }
 
-async function captureAndSanitize(settings: ExtensionSettings, pinnedTab?: TabContext): Promise<CapturedContext> {
+async function captureAndSanitize(
+  settings: ExtensionSettings,
+  pinnedTab?: TabContext,
+  validationOptions: ObservationValidationOptions = {},
+): Promise<CapturedContext> {
   const visibleTab = await activeTab();
   const tab = pinnedTab ?? visibleTab;
   if (pinnedTab && !sameTabContext(pinnedTab, visibleTab)) {
@@ -180,7 +184,7 @@ async function captureAndSanitize(settings: ExtensionSettings, pinnedTab?: TabCo
   ) {
     throw new Error('Document changed during capture or local sanitization');
   }
-  validateObservation(observation);
+  validateObservation(observation, validationOptions);
   update({
     detectorBackend: raster.detectorBackend,
     redactionCount: raster.redactions.length,
@@ -221,10 +225,12 @@ async function execute(context: CapturedContext, action: AgentAction): Promise<s
 
 async function preview(settings: ExtensionSettings): Promise<void> {
   if (status.running) throw new Error('Agent is already running');
-  validateSettings(settings);
+  // A preview is a local privacy inspection and does not need a user goal.
+  // Agent execution still validates a non-empty task before any capture.
+  validateSettings(settings, false);
   update({ running: true, phase: 'capturing', step: 0, message: 'Preparing privacy preview…', previewDataUrl: null });
   try {
-    await captureAndSanitize(settings);
+    await captureAndSanitize(settings, undefined, { allowEmptyTask: true });
     update({ running: false, phase: 'idle', message: 'Preview ready. No data was sent.' });
   } catch (error) {
     reportBlockedOperation('preview', error);

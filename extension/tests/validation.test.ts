@@ -34,6 +34,12 @@ describe('v1 protocol validation', () => {
     expect(() => validateObservation(observation())).not.toThrow();
   });
 
+  it('allows an empty task only for a local preview validation', () => {
+    const preview = { ...observation(), task: '' };
+    expect(() => validateObservation(preview)).toThrow('Invalid task');
+    expect(() => validateObservation(preview, { allowEmptyTask: true })).not.toThrow();
+  });
+
   it('rejects extra fields and raw retention', () => {
     expect(() => validateObservation({ ...observation(), rawDom: '<html>' })).toThrow('Unexpected field');
     expect(() => validateObservation({ ...observation(), privacy: { ...observation().privacy, rawImageRetained: true } })).toThrow('retention');
