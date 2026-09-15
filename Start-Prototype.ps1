@@ -50,13 +50,12 @@ if (-not $SkipOllama) {
         $warmup = @{
             model = $Model
             stream = $false
-            think = $false
             keep_alive = '10m'
             options = @{ temperature = 0; num_predict = 1; num_ctx = 512 }
-            messages = @(@{ role = 'user'; content = 'Reply with the single word READY.' })
+            prompt = 'Reply with the single word READY.'
         } | ConvertTo-Json -Depth 10 -Compress
         try {
-            Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:11434/api/chat' `
+            Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:11434/api/generate' `
                 -ContentType 'application/json' -Body $warmup -TimeoutSec 180 | Out-Null
         } catch {
             throw "Ollama model '$Model' could not be warmed. Check the local Ollama logs."
