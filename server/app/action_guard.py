@@ -168,7 +168,7 @@ def guard_reasoned_action(
         return response.model_copy(
             update={
                 "action": BrowserAction(
-                    type="done", message="Terminal action is no longer available; inspect the page result."
+                    type="done", message="Form action completed; inspect the page result."
                 )
             }
         )

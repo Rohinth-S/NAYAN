@@ -73,6 +73,20 @@ async def test_repeated_checked_consent_click_advances_to_unique_submit(client, 
 
 
 @pytest.mark.asyncio
+async def test_checked_consent_scrolls_when_submit_is_below_viewport(client, fake_reasoner) -> None:
+    fake_reasoner.response = ReasoningResponse(
+        schemaVersion="1.0",
+        snapshotId="11111111-1111-4111-8111-111111111111",
+        action=BrowserAction(type="click", elementId=CONSENT_ID),
+    )
+    payload = _form_payload(checked=True)
+    payload["elements"] = [payload["elements"][0]]
+    response = await client.post("/v1/reason", json=payload)
+    assert response.status_code == 200
+    assert response.json()["action"] == {"type": "scroll", "direction": "down", "amount": 450}
+
+
+@pytest.mark.asyncio
 async def test_unrelated_model_click_after_consent_checked_recovers_to_submit(client, fake_reasoner) -> None:
     fake_reasoner.response = ReasoningResponse(
         schemaVersion="1.0",
@@ -243,7 +257,7 @@ async def test_disabled_unique_terminal_stops_safely_after_submission(client, fa
     assert response.status_code == 200
     assert response.json()["action"] == {
         "type": "done",
-        "message": "Terminal action is no longer available; inspect the page result.",
+        "message": "Form action completed; inspect the page result.",
     }
 
 

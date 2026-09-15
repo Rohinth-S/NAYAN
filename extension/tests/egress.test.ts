@@ -128,6 +128,21 @@ describe('single outbound gateway', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it('cancels while waiting for an accepted job without polling again', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(pendingJob(), 202));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = sendSanitizedObservation(
+      'https://agent.example/v1/reason', '', cleanObservation, [], { signal: controller.signal },
+    );
+    await flushPromises();
+    for (let index = 0; index < 4; index += 1) await Promise.resolve();
+    controller.abort();
+    await expect(pending).rejects.toThrow('Reasoning request cancelled');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('does not emit a request when the caller is already aborted', async () => {
     const controller = new AbortController();
     controller.abort();
