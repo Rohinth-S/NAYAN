@@ -67,6 +67,23 @@ Mithul owns the trusted client boundary and therefore has the largest workstream
 6. If the model is unavailable, corrupt, low-confidence, or returns invalid boxes, block egress or use the explicit full opaque mask. Never silently send unclassified pixels.
 7. Keep category names and invariant thresholds in a versioned registry consumed by both client tests and server validation.
 
+**Mithul's required gap checklist:**
+
+- Detect an unlabelled personal name that does not contain a `Name:`-style prefix; use local NER and the selected grade to decide whether it is protected.
+- Add multilingual name and address recognition, beginning with Hindi and the languages represented in the evaluation corpus.
+- OCR sensitive text rendered inside images, canvas, SVG, video frames, PDF previews, QR codes, and barcodes.
+- Handle unusual spacing, punctuation, character substitutions, stylized fonts, and other common obfuscation patterns.
+- Treat an `aria-label`, title, placeholder, button label, or accessible name containing a person’s name as text requiring the same local policy decision as visible text.
+- Keep OCR and NER entirely on-device; their raw outputs may be used transiently for classification but must never be included in the outbound observation, logs, prompts, or evidence.
+
+**Two-channel privacy tests required for this task:** for every new detector and each grade, assert independently that:
+
+1. No raw value appears in the serialized DOM structure or safe element labels.
+2. No raw value appears in the freshly encoded sanitized image.
+3. No raw value appears in task text, page title, labels, logs, prompts, or model actions.
+4. Detector failure produces zero egress or a verified full-image opaque mask.
+5. The server-side verifier rejects an intentionally malformed or leaked fixture before model invocation.
+
 **Tests and evidence:** OCR/NER unit tests, malformed model-output tests, multilingual fixtures, adversarial formatting, and body-level leak checks. Publish precision, recall, F1, confidence intervals, and inference time by category and grade.
 
 **Done when:** a held-out corpus demonstrates measured coverage; inference remains local; detector failure produces zero requests or a verified full mask; and the registry version is included in evidence.
