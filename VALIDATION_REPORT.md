@@ -25,8 +25,8 @@ The final package hashes are recorded after the last `npm run check`:
 
 | Package | SHA-256 |
 | --- | --- |
-| `sih-private-agent-chrome-0.1.0.zip` | `812F6BA0C62047EE36375738716BA416F94C3B2F6B66B4D1B115EF293A5DB774` (6,624,946 bytes) |
-| `sih-private-agent-firefox-0.1.0.zip` | `E1E228119D56320B1BD7C44A1801406311FF6F655E64B81F9F911C93837F3495` (6,621,673 bytes) |
+| `sih-private-agent-chrome-0.1.0.zip` | `2455A3C5DF09EA91E1DEEC4C4038072C66A75AD4AC512D8ABE847CBC600CA529` (6,629,065 bytes) |
+| `sih-private-agent-firefox-0.1.0.zip` | `BDDA60F55BB55F542A0AFF712BADD7DB1C3A9F94CFAB2D1DEB6BFC8124608357` (6,625,547 bytes) |
 
 The deterministic browser runs observed the WASM fallback. Chrome uses an offscreen document for local ONNX inference; Firefox uses the direct local runtime. A WebGPU-capable run should be recorded separately rather than inferred from the WASM result.
 
