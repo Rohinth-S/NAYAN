@@ -64,7 +64,7 @@ $env:PYTHONPATH = (Resolve-Path .\evaluation).Path
 & .\server\.venv\Scripts\python.exe -m pytest .\evaluation\tests -q
 ```
 
-The aggregate script also checks the UltraFace checksum and the source-level single-egress invariant. The launcher stores the API key in `.runtime\api-key.txt`, keeps Ollama on loopback, verifies the selected model, warms it with a fixed local-only prompt when necessary, and never prints the key or page data.
+The aggregate script also checks the UltraFace checksum and the source-level single-egress invariant. The launcher stores the API key in `.runtime\api-key.txt`, keeps Ollama on loopback, verifies the selected model, and never prints the key or page data. The first multimodal request may include local model-load latency; later requests use the resident model.
 
 ## Demo gate
 

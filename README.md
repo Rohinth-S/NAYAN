@@ -58,10 +58,11 @@ Set-Location 'path\to\privacy-focused-browser-agent'
 ```
 
 `Start-Prototype.ps1` starts Ollama on loopback when needed, checks that the
-selected model is installed, warms it with a fixed local-only prompt when it is
-not resident, launches the API on `127.0.0.1:8765`, generates a random session
-API key, and stores that key in `.runtime\api-key.txt`. It does not print the
-key or page data into service logs.
+selected model is installed, launches the API on `127.0.0.1:8765`, generates a
+random session API key, and stores that key in `.runtime\api-key.txt`. It does
+not print the key or page data into service logs. The first multimodal request
+can be slower while Ollama loads the vision model; subsequent requests use the
+resident model.
 
 Build and validate both extension packages:
 

@@ -33,34 +33,6 @@ if (-not $SkipOllama) {
     if (-not $modelAvailable) {
         throw "Ollama model '$Model' is not installed locally. Pull it before starting the prototype."
     }
-
-    # Loading a multimodal model can take tens of seconds on a laptop. Warm it
-    # with a fixed, non-sensitive prompt so the first user task does not spend
-    # the extension's entire request budget loading weights. Skip the request
-    # when Ollama already reports the selected model as resident.
-    $loaded = $false
-    try {
-        $processes = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/ps' -TimeoutSec 5
-        $loaded = @($processes.models | Where-Object {
-            $_.name -eq $Model -or $_.model -eq $Model
-        }).Count -gt 0
-    } catch {}
-    if (-not $loaded) {
-        Write-Host "Warming local Ollama model '$Model' (fixed local prompt; no page data)…"
-        $warmup = @{
-            model = $Model
-            stream = $false
-            keep_alive = '10m'
-            options = @{ temperature = 0; num_predict = 1; num_ctx = 512 }
-            prompt = 'Reply with the single word READY.'
-        } | ConvertTo-Json -Depth 10 -Compress
-        try {
-            Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:11434/api/generate' `
-                -ContentType 'application/json' -Body $warmup -TimeoutSec 180 | Out-Null
-        } catch {
-            throw "Ollama model '$Model' could not be warmed. Check the local Ollama logs."
-        }
-    }
 }
 
 if ([string]::IsNullOrWhiteSpace($ApiKey)) {
