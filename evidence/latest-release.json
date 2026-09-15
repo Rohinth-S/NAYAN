@@ -1,7 +1,7 @@
 {
   "reportVersion": "1.0",
-  "recordedAtUtc": "2026-09-15T23:03:09.375287+00:00",
-  "sourceCommit": "86f348c1c360c9461bd67c76c0f5072d7a64f8d8",
+  "recordedAtUtc": "2026-09-15T23:06:05.679395+00:00",
+  "sourceCommit": "0063592ed1924960512e67cfc10cc25999bde728",
   "workingTreeHasChanges": true,
   "protocolVersion": "1.0",
   "policyVersion": "1.0",
@@ -43,11 +43,11 @@
   "packages": [
     {
       "path": "artifacts/sih-private-agent-chrome-0.1.0.zip",
-      "sha256": "b88b1f8c8c90f24ad94afc7f815a8964026d670bd930e701d94f23f60aebaeb7"
+      "sha256": "587e2653c658ab2cc09417568746dcbbbfca60685b841df221750d17423fe339"
     },
     {
       "path": "artifacts/sih-private-agent-firefox-0.1.0.zip",
-      "sha256": "95caab2c88a718f430597173918bd89007b22a361982c110c32ff2477e8ef0ec"
+      "sha256": "0f74afb0d60ebe9a022425daa3ea8fbd74a76490c680f2cde689d575c229c417"
     }
   ],
   "signingStatus": "unsigned",
