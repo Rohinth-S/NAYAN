@@ -57,6 +57,117 @@ flowchart LR
     X --> T
 ```
 
+### Detailed trust-boundary architecture
+
+The privacy decision happens inside the browser before the request is serialized. The page and the reasoning service are both treated as untrusted; only the extension's local policy, compositor, and action guard are trusted for this prototype.
+
+```mermaid
+flowchart LR
+  subgraph B[User device: browser extension boundary]
+    direction TB
+    P[Untrusted webpage<br/>DOM, canvas, images, frames, media]
+    UI[Popup and privacy controls<br/>Grade 1 / 2 / 3, preview, task]
+    CS[Content script<br/>safe roles, labels, bounds, state]
+    BG[Background controller<br/>tab, origin, revision, deadlines]
+    DET[Local detectors<br/>DOM heuristics, regex, known values, UltraFace]
+    POL[Versioned privacy policy<br/>grade filter + invariant floor]
+    COMP[Fresh local compositor<br/>semantic cards or opaque full mask]
+    VAL[Outbound validator<br/>schema, PNG, bounds, canary, byte checks]
+    EG[Single egress owner<br/>one sanitized POST + opaque polling]
+    ACT[Action guard<br/>snapshot, origin, target, editability, idempotency]
+    P --> CS
+    P --> BG
+    UI --> BG
+    CS --> DET
+    BG --> DET
+    DET --> POL
+    UI --> POL
+    POL --> COMP
+    CS --> COMP
+    BG --> COMP
+    COMP --> VAL --> EG
+    EG --> ACT --> BG
+    BG --> P
+  end
+
+  subgraph S[Reasoning service: untrusted recipient]
+    direction TB
+    RB[API boundary<br/>origin, key, HTTPS, size, timeout]
+    SV[Strict protocol validator<br/>JSON, PNG, redaction invariants]
+    Q[Bounded job admission<br/>sync + async concurrency]
+    M[Ollama / offline model adapter<br/>sanitized context only]
+    OG[Strict action response<br/>click, input, scroll, wait, done]
+    RB --> SV --> Q --> M --> OG
+  end
+
+  EG -->|sanitized PNG + safe metadata only| RB
+  OG -->|schema-validated action| ACT
+  RAW[Original pixels, raw DOM values,<br/>cookies, selectors, real URL] -. never crosses boundary .-> RB
+```
+
+The dashed path is intentionally absent: original pixels and raw page values are not protocol fields. The server can reason about controls because it receives roles, safe labels, bounds, state, and opaque element IDs; it does not need the DOM mapping or the source values.
+
+### Capture, sanitize, reason, and act
+
+Each request is a short, auditable transaction rather than a continuous screen stream.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  participant Popup as Extension popup
+  participant BG as Background controller
+  participant DOM as Content script
+  participant Local as Local detector/compositor
+  participant Check as Byte and revision checks
+  participant API as FastAPI boundary
+  participant Model as Local Ollama model
+  participant Page as Live page
+
+  User->>Popup: Choose task and privacy grade
+  Popup->>BG: Start or preview request
+  BG->>DOM: Capture safe structure + document generation
+  BG->>Local: Capture screenshot and inspect local regions
+  Local->>Local: Detect fields, text patterns, faces, media, frames
+  Local->>Local: Apply grade and invariant protection floor
+  Local->>Local: Draw fresh sanitized PNG
+  Local->>Check: Return sanitized image + safe metadata
+  Check->>Check: Validate schema, PNG, bounds, canaries, origin, revision
+  alt Preview mode
+    Check-->>Popup: Display exact sanitized representation
+  else Agent mode
+    Check->>API: One sanitized POST
+    API->>API: Authenticate, validate, and admit bounded job
+    API->>Model: Send sanitized observation only
+    Model-->>API: Strict JSON action
+    API-->>BG: Opaque ticket then validated action
+    BG->>Page: Re-check snapshot, target, origin, editability
+    Page-->>BG: Execute one allowlisted action
+    BG-->>Popup: Show result and next-step state
+  end
+```
+
+### What is local and what can leave the device
+
+```mermaid
+flowchart TD
+  A[Page observation] --> B{Can the extension inspect it?}
+  B -- No --> C[Cover region as uninspectable]
+  B -- Yes --> D[Run local field/text/face detectors]
+  C --> E{Detector/compositor healthy?}
+  D --> E
+  E -- No + fallback disabled --> F[Fail closed: zero requests]
+  E -- No + fallback enabled --> G[Fresh opaque full-image mask]
+  E -- Yes --> H[Apply selected Grade 1/2/3 policy]
+  H --> I[Semantic category-only redaction]
+  G --> J[Validate exact serialized bytes]
+  I --> J
+  J -- Any check fails --> F
+  J -- All checks pass --> K[Send sanitized PNG and safe structure]
+```
+
+The current prototype uses deterministic DOM/field/regex detection and a bundled UltraFace model for local face detection. It does not claim that a small face detector is a general-purpose visual-language model. OCR, NER, and broader media recognition are explicit production roadmap items; until they are evaluated, unknown media is conservatively masked.
+
 ### Client side
 
 The extension is the trusted privacy boundary in this prototype.
@@ -85,6 +196,77 @@ The server is an untrusted recipient of the sanitized protocol object and provid
 ### Threat model and scope
 
 For this prototype, the extension runtime and local canvas compositor are trusted to enforce the boundary. Page content is untrusted input, and the reasoning server, model output, and model provider are treated as untrusted recipients. The operating system, browser implementation, extension signing pipeline, and third-party dependencies are outside this prototype's trust claim and require separate supply-chain review. The guarantee covers the configured reasoning endpoint only; it does not intercept ordinary website requests, other extensions, other applications, external screen sharing, or products such as Copilot Vision.
+
+## Why this is different from existing browser agents
+
+Most browser agents optimize for task completion first and send a screenshot, DOM snapshot, accessibility tree, or extracted text to a remote model. Browser automation frameworks such as Browser Use and agentic-browser projects are useful foundations for planning and interaction, but privacy filtering is usually an optional integration concern rather than a mandatory, testable protocol boundary. A browser's built-in AI feature may also be tied to one browser vendor, one model, or one account policy.
+
+This project makes disclosure control a prerequisite for reasoning:
+
+| Capability | Conventional browser agent | This project |
+| --- | --- | --- |
+| Screenshot handling | Original screenshot commonly reaches the model service | A fresh sanitized PNG is composed locally; the original is never an outbound field |
+| DOM handling | Raw HTML, selectors, text, or accessibility data may be uploaded | Only safe roles, bounds, state, sanitized labels, and opaque IDs are sent |
+| PII policy | Provider-specific or post-upload filtering | Versioned Grade 1/2/3 policy is applied before serialization |
+| Model trust | Model output often directly drives automation | Strict action schema plus local snapshot/origin/target guard |
+| Detector failure | Often a best-effort continuation | Zero egress or an explicit verified opaque full-mask fallback |
+| Privacy proof | A product promise or configuration setting | Byte-level request checks, canaries, server validation, and synthetic metrics |
+| Browser support | Frequently tied to one runtime | One TypeScript codebase packages Chrome MV3 and Firefox |
+| Deployment model | Cloud model is usually assumed | Local Ollama is the demo path; the sanitized protocol supports offline or hosted adapters |
+
+The novelty is the composition of these controls into one agent loop: local visual perception, user-selected disclosure grades, fresh image redaction, sanitized structured context, one audited egress path, and revision-bound action execution. Removing any one of those controls weakens the claim; together they make privacy a property of the workflow rather than a hope that the model provider will delete data later.
+
+## Why privacy is necessary for browser agents
+
+Browser agents see unusually rich information: identity forms, private messages, health portals, banking screens, work dashboards, password fields, account numbers, faces, cookies, and one-time codes. A screenshot can reveal information that a DOM-only filter misses, while a DOM snapshot can reveal values that are invisible in a cropped image. The risk is also active: a compromised page can place secret text in a label, canvas, hidden frame, or prompt-injection instruction, and a compromised model can request an unsafe action.
+
+The privacy boundary addresses the most important failure timing: it decides what is sensitive before the first network request. It also limits what the model can do after receiving the observation. A redaction placeholder communicates that a region exists without giving the model permission to reconstruct it; an opaque element ID lets the model select a control without learning the selector or the user's values; a revision check prevents an action planned for an old page from being applied to a new one.
+
+The guarantee has a precise scope. It protects the configured reasoning channel and the extension's own serialization path. It does not control ordinary requests made by the website, other extensions, the operating system, screen-sharing software, or a browser implementation that has been compromised. This scope is explicit so judges and users can distinguish a verifiable engineering boundary from a claim of universal anonymization.
+
+## Core implementation, mapped to the repository
+
+The end-to-end implementation is intentionally split into small reviewable modules:
+
+| Stage | Implementation | Security purpose |
+| --- | --- | --- |
+| Capture | `extension/src/content.ts`, `background.ts` | Collect visible structure and screenshot identity while keeping raw values transient |
+| Local classification | `privacy.ts`, `privacy-policy.ts`, `face-detector.ts` | Detect sensitive fields, patterns, known values, faces, and uninspectable regions locally |
+| Raster protection | `image-redactor.ts`, `sanitizer-offscreen.ts` | Create a new PNG with category-only cards or a full opaque mask |
+| Request boundary | `validation.ts`, `egress.ts` | Validate the exact serialized body and enforce one reasoning egress |
+| Server receiver | `server/app/boundary.py`, `schemas.py`, `validation.py` | Authenticate, bound, and independently validate sanitized observations |
+| Reasoning | `server/app/ollama.py`, `jobs.py` | Send sanitized context to Ollama and bound model concurrency/latency |
+| Action safety | `action_guard.py`, `background.ts`, `content.ts` | Validate snapshot, origin, element state, and allowlisted action fields |
+| Evidence | `evaluation/`, `VALIDATION_REPORT.md`, `evidence/` | Measure leaks, redaction pixels, precision/recall, latency, and resource use |
+
+### Protocol shape
+
+The server receives a versioned observation resembling the following. The values shown are placeholders; real private values are removed locally before this object exists.
+
+```json
+{
+  "schemaVersion": "1.0",
+  "snapshotId": "opaque-uuid",
+  "documentId": "opaque-document-id",
+  "page": {"origin": "site-opaque-alias", "title": "Enrollment form"},
+  "task": "Check the confirmation checkbox, then submit the enrollment.",
+  "elements": [
+    {"elementId": "opaque-7", "role": "checkbox", "label": "I agree", "state": {"checked": false, "required": true}},
+    {"elementId": "opaque-12", "role": "button", "label": "Submit", "state": {"disabled": false}}
+  ],
+  "image": {"mime": "image/png", "width": 1280, "height": 720, "dataBase64": "<sanitized PNG>"},
+  "redactions": [{"kind": "face", "source": "onnx", "bounds": {"x": 80, "y": 120, "width": 96, "height": 96}}],
+  "privacy": {"grade": 3, "redactionMode": "semantic", "visualFallback": "none"}
+}
+```
+
+The model returns a small action such as:
+
+```json
+{"schemaVersion":"1.0","snapshotId":"opaque-uuid","action":{"type":"click","elementId":"opaque-12"}}
+```
+
+The local extension resolves `opaque-12` to the live DOM node. That mapping never leaves the browser.
 
 ### One reasoning step
 
