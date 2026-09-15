@@ -239,7 +239,7 @@ For Firefox:
 ### Run the synthetic task
 
 1. Open `http://127.0.0.1:8765/demo`.
-2. Enter `Check the confirmation checkbox, then submit the enrollment.`
+2. Use the popup's **Quick start** menu to choose **Review and submit a form**, or enter `Check the confirmation checkbox, then submit the enrollment.` yourself. The generated task remains editable and is filled locally.
 3. Open `.runtime\api-key.txt`, copy its contents, and paste that value into **Optional API key**. Paste the key value, not the file path.
 4. Optionally add the fictional demo values under **Known private values** to exercise canary checks.
 5. Select **Privacy preview** and inspect the locally generated image. Enter a task as usual; preview still makes no reasoning request.
