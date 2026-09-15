@@ -23,6 +23,7 @@ This document is the shared starting point for the team. It records what is impl
 | `IMPLEMENTATION_PLAN.md` | Original SIH scope and acceptance criteria. |
 | `README.md` | Quick start and demo instructions. |
 | `CONTRIBUTING.md` | Team setup, change discipline, test commands, and review checklist. |
+| `TEAM_WORK_SPLIT.md` | Named ownership for Rohinth, Mithul, and Prajjwal with detailed task packages and acceptance criteria. |
 
 The local `browser-use/` checkout is an experimental comparison baseline and `BrowserOS-reference/` is an upstream design reference. They are intentionally excluded from this repository because they contain nested Git history and large development environments; the primary implementation above is self-contained. If needed, clone [browser-use](https://github.com/browser-use/browser-use) and [BrowserOS](https://github.com/browseros-ai/BrowserOS) separately and preserve their original licenses.
 
@@ -178,6 +179,8 @@ Every capture source and action type must have positive, malformed, stale-page, 
 - reproducible signed builds, dependency review, rollback procedure, incident response, and an updated threat model.
 
 ## 8. Suggested team split
+
+The named assignment, implementation instructions, branch names, dependencies, and acceptance criteria are maintained in [TEAM_WORK_SPLIT.md](TEAM_WORK_SPLIT.md). Use that document as the active task board; this section remains the architectural summary.
 
 | Workstream | First owner responsibilities |
 | --- | --- |

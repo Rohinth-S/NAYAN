@@ -239,12 +239,24 @@ For Firefox:
 
 1. Open `http://127.0.0.1:8765/demo`.
 2. Enter `Check the confirmation checkbox, then submit the enrollment.`
-3. Paste `.runtime\api-key.txt` into **Optional API key**.
+3. Open `.runtime\api-key.txt`, copy its contents, and paste that value into **Optional API key**. Paste the key value, not the file path.
 4. Optionally add the fictional demo values under **Known private values** to exercise canary checks.
 5. Select **Privacy preview** and inspect the locally generated image. No reasoning request is made by this step.
 6. Select Grade 1, Grade 2, or Grade 3 and review its disclosure description.
 7. Select **Start agent** and approve the local endpoint if the browser asks.
 8. Confirm the page reaches `Enrollment submitted successfully.`
+
+If the popup reports `Local offscreen sanitization failed; transmission
+blocked`, the request was stopped before the reasoning server and the API key
+is not the cause. Rebuild the extension, open `chrome://extensions`, click
+**Reload** for **SIH Private Browser Agent**, then reload the demo page and
+run **Privacy preview** again. A healthy local run reports `wasm` or `webgpu`
+under **Detector** and a positive mask count. If it still blocks, open the
+extension's **Errors** panel; the popup now distinguishes an unavailable face
+detector, a lost offscreen document, and an image-sanitization failure. The
+full-mask fallback in **Privacy controls** is useful as a diagnostic, but it
+turns the entire screenshot opaque and should not be used for the normal
+accuracy demo.
 
 Stop the API with:
 
@@ -266,6 +278,7 @@ Stop the API with:
 | `EDGE_CASE_MATRIX.md` | Required behavior for capture, detector, browser, network, and action failures. |
 | `IMPLEMENTATION_PLAN.md` | SIH scope, phases, components, and acceptance criteria. |
 | `TEAM_HANDOFF.md` | Current state, work split, production roadmap, reliability gates, and demo definition. |
+| `TEAM_WORK_SPLIT.md` | Named ownership for Rohinth, Mithul, and Prajjwal with implementation tasks and acceptance criteria. |
 | `CONTRIBUTING.md` | Setup, privacy rules, testing, and pull-request checklist. |
 | `SECURITY.md` | Vulnerability reporting and the exact scope of the privacy claim. |
 | `evidence/` | Safe aggregate synthetic validation summaries. |
