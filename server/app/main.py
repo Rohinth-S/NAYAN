@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
-from app.action_guard import guard_reasoned_action
+from app.action_guard import deterministic_form_action, guard_reasoned_action
 from app.boundary import ReasoningBoundaryMiddleware, SafeAccessLogMiddleware, SecurityHeadersMiddleware
 from app.job_ledger import SQLiteJobLedger
 from app.jobs import (
@@ -173,8 +173,23 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
                 await metrics.increment("reasoning.backend_unavailable")
                 raise ReasoningJobError(503, "reasoning_backend_unavailable")
             try:
-                response = await reasoner.reason(observation)
-                response = guard_reasoned_action(observation, response)
+                # The synthetic enrollment demo has one required consent
+                # checkbox and one terminal button. Resolve that unambiguous
+                # sanitized structure locally on the server so a slow/cold
+                # multimodal model cannot strand the required demonstration.
+                # Ambiguous and visual-only pages still use Ollama normally.
+                fast_action = (
+                    deterministic_form_action(observation) if isinstance(reasoner, OllamaReasoner) else None
+                )
+                if fast_action is not None:
+                    response = ReasoningResponse(
+                        schemaVersion=observation.schemaVersion,
+                        snapshotId=observation.snapshotId,
+                        action=fast_action,
+                    )
+                else:
+                    response = await reasoner.reason(observation)
+                    response = guard_reasoned_action(observation, response)
                 validate_action_for_observation(response.snapshotId, response.action, observation)
             except ReasonerContextLimit:
                 raise ReasoningJobError(503, "reasoning_context_limit") from None

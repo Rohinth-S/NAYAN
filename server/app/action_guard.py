@@ -124,6 +124,41 @@ def _click(element_id: str) -> BrowserAction:
     return BrowserAction(type="click", elementId=element_id)
 
 
+def deterministic_form_action(observation: SanitizedObservation) -> BrowserAction | None:
+    """Return a safe action for an unambiguous submit workflow.
+
+    This is deliberately limited to a task that asks for a terminal form
+    action and a single submit-like control. It uses only sanitized roles,
+    labels, bounds, and checkbox state; values and pixels never enter the
+    decision. Ambiguous pages continue to the VLM reasoner.
+    """
+    if not _is_commit_task(observation.task) or _is_fill_task(observation.task):
+        return None
+    elements = tuple(observation.elements)
+    submit_like = [element for element in elements if _is_submit_like(element)]
+    disabled_terminal = [
+        element for element in elements if _is_terminal_label(element) and element.state.disabled
+    ]
+    pending = [element for element in elements if _is_pending_prerequisite(element)]
+    if pending:
+        return _click(pending[0].id)
+    if len(submit_like) == 1:
+        target = submit_like[0]
+        pending_before = _preceding_pending_prerequisites(elements, elements.index(target), target)
+        if pending_before:
+            return _click(pending_before[0].id)
+        return _click(target.id)
+    # A checked prerequisite with no visible terminal means the terminal is
+    # below the viewport. Scroll instead of toggling consent off.
+    if not submit_like and not disabled_terminal and not pending and any(
+        element.role == "checkbox" and element.state.checked for element in elements
+    ):
+        return BrowserAction(type="scroll", direction="down", amount=450)
+    if not submit_like and not pending and len(disabled_terminal) == 1:
+        return BrowserAction(type="done", message="Form action completed; inspect the page result.")
+    return None
+
+
 def guard_reasoned_action(
     observation: SanitizedObservation, response: ReasoningResponse
 ) -> ReasoningResponse:
