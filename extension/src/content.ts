@@ -22,6 +22,7 @@ const documentId = crypto.randomUUID();
 let documentRevision = 0;
 let currentSnapshotId = '';
 let currentElements = new Map<string, Element>();
+let lastExecutedActionKey = '';
 
 new MutationObserver(() => {
   documentRevision += 1;
@@ -229,6 +230,7 @@ function collectMediaRedactions(): LocalRedaction[] {
 
 function captureDom(snapshotId: string, knownValues: readonly string[], privacyGrade: PrivacyGrade): RawDomSnapshot {
   currentSnapshotId = snapshotId;
+  lastExecutedActionKey = '';
   currentElements = new Map();
   const elements: RawElement[] = [];
   for (const element of interactiveElements()) {
@@ -274,6 +276,9 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
   if (command.snapshotId !== currentSnapshotId) throw new Error('Snapshot is stale');
   if (command.documentId !== documentId || command.documentRevision !== documentRevision) throw new Error('Document changed after capture');
   const action: AgentAction = command.action;
+  const actionKey = `${command.snapshotId}:${JSON.stringify(action)}`;
+  if (actionKey === lastExecutedActionKey) throw new Error('Duplicate action rejected');
+  lastExecutedActionKey = actionKey;
   if (action.type === 'done') return action.message ?? 'Task complete';
   if (action.type === 'wait') {
     await new Promise((resolve) => setTimeout(resolve, action.milliseconds));
@@ -296,17 +301,26 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
   const target = currentElements.get(action.elementId);
   if (!(target instanceof HTMLElement) || !target.isConnected || !visible(target)) throw new Error('Action target is unavailable');
   if (action.type === 'click') {
-    if ((target as HTMLButtonElement).disabled || target.getAttribute('aria-disabled') === 'true') throw new Error('Action target is disabled');
+    const control = target as HTMLButtonElement | HTMLInputElement | HTMLSelectElement;
+    if ('disabled' in control && Boolean(control.disabled) || target.getAttribute('aria-disabled') === 'true') throw new Error('Action target is disabled');
+    if (target instanceof HTMLAnchorElement && !target.href.startsWith(`${location.origin}/`) && target.origin !== location.origin) {
+      throw new Error('Cross-origin navigation is blocked');
+    }
     target.focus();
     target.click();
     return 'Clicked element';
   }
   if (action.type === 'input') {
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) setNativeValue(target, action.text ?? '');
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      if (target.disabled || target.readOnly) throw new Error('Action target is not editable');
+      setNativeValue(target, action.text ?? '');
+    }
     else if (target.isContentEditable) {
+      if ((target as HTMLElement).getAttribute('aria-readonly') === 'true') throw new Error('Action target is not editable');
       target.textContent = action.text ?? '';
       target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: action.text ?? '' }));
     } else if (target instanceof HTMLSelectElement) {
+      if (target.disabled) throw new Error('Action target is not editable');
       const option = Array.from(target.options).find((candidate) => candidate.value === action.text || candidate.text === action.text);
       if (!option) throw new Error('Requested option is unavailable');
       target.value = option.value;
