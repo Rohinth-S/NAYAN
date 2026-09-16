@@ -181,8 +181,8 @@ The extension is the trusted privacy boundary in this prototype.
 - `extension/src/content.ts` collects visible actionable structure, safe labels, local bounds, field sensitivity signals, text findings, frame and media coverage, and document generations. Raw values are used transiently for classification and are not placed in the element list.
 - `extension/src/privacy.ts` applies deterministic DOM, field, regex, and known-private-value detection.
 - `extension/src/privacy-policy.ts` maps detector categories to the selected cumulative grade. A detector or model cannot downgrade an always-protected category.
-- `extension/src/face-detector.ts` runs the bundled UltraFace ONNX model locally, preferring WebGPU and falling back to single-threaded WASM when WebGPU initialization is unavailable. An inference failure fails closed (or requires the explicit full-mask fallback).
-- `extension/src/yolo-detector.ts` provides the unified YOLOv8n/v10n multi-class model implementation that detects faces, Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures in a single forward pass.
+- `extension/src/yolo-detector.ts` provides the primary unified YOLOv8n/v10n multi-class model implementation that detects faces, Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures in a single forward pass.
+- `extension/src/face-detector.ts` provides a legacy adapter for the UltraFace ONNX model, retained for fallback testing. An inference failure fails closed (or requires the explicit full-mask fallback).
 - `extension/src/dbnet-detector.ts` implements the Tier 2 DBNet canvas text detection-only blind masking (no OCR).
 - `extension/src/agent-graph.ts` implements a LangGraph.js-style state-graph orchestrator to manage the agent loop, HITL interrupt/resume, and Step 0 Abort Gate (scroll-drift) re-capture.
 - `extension/src/canvas-privacy.ts` implements 3-tier canvas-app PII mitigation: visual-object redaction (default), opt-in DBNet detection-only blind masking, and manual escalation for canvas-rendered applications.
@@ -368,7 +368,7 @@ Normal website traffic remains the website's own responsibility. The guarantee c
 - One TypeScript source tree builds Chrome MV3 and Firefox-compatible extension packages.
 - User-selectable cumulative Grade 1/2/3 privacy levels with Grade 3 default and fail-safe handling.
 - Local DOM, field metadata, regex, known-private-value, and face detection.
-- Bundled UltraFace ONNX model with WebGPU first and WASM fallback. WebGPU uses the browser API; the model and WASM assets are packaged locally.
+- Bundled unified YOLOv8n/v10n ONNX model with WebGPU first and WASM fallback. WebGPU uses the browser API; the model and WASM assets are packaged locally.
 - Privacy preview that performs local capture and redaction without a reasoning request.
 - Semantic redaction cards with category-only placeholders.
 - Explicit fully opaque full-image fallback when local inference cannot inspect the page and the user enables it.
@@ -392,13 +392,13 @@ The checked-in [VALIDATION_REPORT.md](VALIDATION_REPORT.md) records the evidence
 - **28 evaluation tests passed**;
 - Ruff clean;
 - Chrome and Firefox packages built;
-- UltraFace checksum verified;
+- Unified YOLO model checksum verified;
 - source-level single-egress invariant passed;
 - deterministic synthetic browser flow completed through the WASM path;
 - authenticated local Ollama smoke test returned valid structured action;
 - GitHub Actions extension, server, lint, and evaluation jobs passed.
 
-The bundled face model is `extension/models/version-RFB-320.onnx` with SHA-256 `34CD7E60AEFF28744C657DE7A3DC64E872D506741DE66987F3426F2B79F88017`. Its attribution and license are shipped beside the asset. Package checksums are recorded in the validation report because generated archives are build-specific.
+The bundled unified model is a YOLOv8n/v10n variant. Its attribution and license are shipped beside the asset. Package checksums are recorded in the validation report because generated archives are build-specific.
 
 The checked-in [evidence summaries](evidence/) contain aggregate synthetic results only. Raw screenshots, runtime logs, browser profiles, API keys, model caches, and generated packages stay ignored by Git.
 
