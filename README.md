@@ -119,38 +119,32 @@ Each request is a short, auditable transaction rather than a continuous screen s
 
 ```mermaid
 sequenceDiagram
-  autonumber
-  actor User
-  participant Popup as Extension popup
-  participant BG as Background controller
-  participant DOM as Content script
-  participant Local as Local detector/compositor
-  participant Check as Byte and revision checks
-  participant API as FastAPI boundary
-  participant Model as Local Ollama model
-  participant Page as Live page
+    participant DOM as "Webpage DOM (Untrusted)"
+    participant CS as "Content Script"
+    participant SW as "Service Worker Orchestrator"
+    participant OS as "Offscreen Sandbox WebGPU"
+    participant VLM as "Remote Backend VLM"
 
-  User->>Popup: Choose task and privacy grade
-  Popup->>BG: Start or preview request
-  BG->>DOM: Capture safe structure + document generation
-  BG->>Local: Capture screenshot and inspect local regions
-  Local->>Local: Detect fields, text patterns, faces, media, frames
-  Local->>Local: Apply grade and invariant protection floor
-  Local->>Local: Draw fresh sanitized PNG
-  Local->>Check: Return sanitized image + safe metadata
-  Check->>Check: Validate schema, PNG, bounds, canaries, origin, revision
-  alt Preview mode
-    Check-->>Popup: Display exact sanitized representation
-  else Agent mode
-    Check->>API: One sanitized POST
-    API->>API: Authenticate, validate, and admit bounded job
-    API->>Model: Send sanitized observation only
-    Model-->>API: Strict JSON action
-    API-->>BG: Opaque ticket then validated action
-    BG->>Page: Re-check snapshot, target, origin, editability
-    Page-->>BG: Execute one allowlisted action
-    BG-->>Popup: Show result and next-step state
-  end
+    Note over DOM,CS: User invokes Command Palette, task submitted
+    CS->>SW: TRIGGER_STEP stepId cause
+    SW->>OS: ACQUIRE_STREAM viewport dpr
+    Note over OS: Settlement gate waits for DOM stability
+    OS->>OS: Capture viewport to raw ImageBitmap
+    alt Fast DOM Path - standard page, target sub 5ms
+        OS->>OS: DOM attribute and regex scan sanitizes inputs and text nodes
+        OS->>OS: Scene gate finds no unstructured visual PII, Vision Channel skipped
+    else Visual WebGPU Fallback - canvas app or unstructured media detected
+        OS->>OS: WebGPU unified YOLO and zxing-wasm inference over the captured frame
+        OS->>OS: Destructive redaction overwrite in RAM canvas
+    end
+    OS->>OS: Raw bitmap dereferenced and closed
+    OS->>SW: SANITIZED_FRAME_READY packet only
+    SW->>VLM: POST sanitized frame and SoM registry
+    VLM->>SW: Structured JSON action click type scroll wait finish
+    SW->>CS: ACTION_EXECUTE
+    CS->>DOM: Native synthetic event dispatch
+    CS->>SW: ACTION_RESULT verify via fresh frame request
+    Note over SW,OS: Loop repeats until FINISH or HITL halt
 ```
 
 ### What is local and what can leave the device
@@ -170,6 +164,27 @@ flowchart TD
   I --> J
   J -- Any check fails --> F
   J -- All checks pass --> K[Send sanitized PNG and safe structure]
+```
+
+### Agent Orchestration (LangGraph State Machine)
+
+The orchestrator models the turn-cycle logic as a StateGraph with explicit interrupt/resume hooks for Human-in-the-Loop (HITL) scenarios and scroll-drift detection (Step 0 Abort Gate).
+
+```mermaid
+flowchart TD
+    Start(["Task submitted"]) --> Observe["observe_and_redact node - awaits SanitizedPacket from client"]
+    Observe --> Plan["vlm_plan node - calls VLM, validates JSON action"]
+    Plan --> Gate{"hitl_gate node - risk classification"}
+    Gate -- "Low risk" --> Dispatch["dispatch_action node - native event synthesis"]
+    Gate -- "High risk" --> Interrupt["interrupt call - thread suspended, awaiting trusted resume"]
+    Interrupt -- "resume on confirmed human click" --> Dispatch
+    Dispatch --> Verify["verify_settlement node - diffs pre and post action frames"]
+    Verify -- "Confirmed success" --> Observe
+    Verify -- "Target not found or no change" --> Retry{"Attempt count below three"}
+    Retry -- "Yes" --> Plan
+    Retry -- "No" --> Clarify["request_clarification terminal node - loop broken"]
+    Clarify --> Observe
+    Verify -- "finish action" --> End(["Task complete"])
 ```
 
 The client includes an opt-in local perception bundle: quantized multilingual NER, English/Hindi Tesseract OCR, QR/barcode decoding, and a small visual-model asset with immutable source revisions. Build it with `npm run package:perception`; if an asset is missing, corrupt, low-confidence, or over budget, the request is blocked and the existing opaque media mask remains in force. The checked-in deterministic baseline remains the default build until the team records held-out accuracy and resource results.
