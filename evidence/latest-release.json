@@ -1,7 +1,7 @@
 {
   "reportVersion": "1.0",
-  "recordedAtUtc": "2026-09-16T07:57:16.831621+00:00",
-  "sourceCommit": "4bd143e6604f60d086c6e3877b70041bbabbf218",
+  "recordedAtUtc": "2026-09-16T17:15:47.826332+00:00",
+  "sourceCommit": "d1d113c45e9a4145ff78c6e1e6d90e6cca4d8248",
   "workingTreeHasChanges": true,
   "protocolVersion": "1.0",
   "policyVersion": "1.0",
@@ -21,35 +21,35 @@
   },
   "testSuites": {
     "extension": {
-      "total": 84,
+      "total": 92,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "passed": 84
+      "passed": 92
     },
     "server": {
-      "total": 133,
+      "total": 157,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "passed": 133
+      "passed": 157
     },
     "evaluation": {
-      "total": 28,
+      "total": 32,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "passed": 28
+      "passed": 32
     }
   },
   "packages": [
     {
       "path": "artifacts/sih-private-agent-chrome-0.1.0.zip",
-      "sha256": "0b32328f11c69050203504056504079e8dfff528a60b525b417067319599ff8b"
+      "sha256": "5eb49178459dc8855deb21a29a4d4eee2b0a3a1e403c570ef4327ac1be8dd449"
     },
     {
       "path": "artifacts/sih-private-agent-firefox-0.1.0.zip",
-      "sha256": "395c22643998ca1c1c2f711a6294cea6296ede118d61df4049810ecd885d2909"
+      "sha256": "ae86dad4f02bbdf26abcd409aa43c3b0fedf0aea22870ad5711de8c21f57c5ba"
     }
   ],
   "signingStatus": "unsigned",

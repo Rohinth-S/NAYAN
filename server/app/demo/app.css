@@ -89,6 +89,17 @@ body::before {
 .privacy-note strong { color: #f0f0f2; }
 .privacy-note small { color: #85858a; }
 .note-icon { color: #fff; font-size: 1.1rem; }
+.privacy-spectrum { margin-top: 18px; padding: 13px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 12px; background: linear-gradient(145deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .02)); }
+.spectrum-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; color: #ececf0; font-size: .7rem; font-weight: 750; }
+.spectrum-heading small { color: #85858a; font-size: .6rem; font-weight: 500; text-align: right; }
+.spectrum-grid { display: grid; gap: 7px; }
+.spectrum-item { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border: 1px solid rgba(255, 255, 255, .09); border-radius: 9px; background: rgba(0, 0, 0, .2); }
+.spectrum-item strong { display: block; color: #e5e5e9; font-size: .66rem; }
+.spectrum-item small { display: block; margin-top: 2px; color: #85858a; font-size: .6rem; }
+.spectrum-level { display: grid; flex: 0 0 30px; width: 30px; height: 22px; place-items: center; border-radius: 6px; color: #050505; font-size: .6rem; font-weight: 900; }
+.level-one { background: #fff; }
+.level-two { color: #fff; background: #77777d; }
+.level-three { color: #fff; background: #3d3d42; }
 
 #enrollment { display: grid; gap: 10px; }
 .enrollment-card label { display: flex; justify-content: space-between; margin-top: 3px; color: #d3d3d7; font-size: .73rem; font-weight: 650; }
@@ -148,6 +159,8 @@ select.form-control { appearance: auto; }
   .card { padding: 21px; }
   .profile-grid { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
+  .spectrum-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .spectrum-heading small { text-align: left; }
   .footer { flex-wrap: wrap; }
   .footer-ref { width: 100%; }
   .progress-wrap { margin-right: 4px; margin-left: 4px; }
