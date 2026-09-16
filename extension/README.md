@@ -57,6 +57,12 @@ step count, full-mask preference, and selected privacy grade are saved locally.
 The default is Grade 3 (strict). See [`../PRIVACY_LEVELS.md`](../PRIVACY_LEVELS.md)
 for the complete category matrix and detector limits.
 
+The synthetic demo page includes a privacy-spectrum gallery and comparison
+fields for critical data (password, PAN, Aadhaar, and bank account), personal
+data (email, phone, address, date of birth, customer ID, and IP address), and
+identity data (name, username, and employee code). Run **Privacy preview** at
+each grade on a fresh page to show the redaction set expanding progressively.
+
 ### Troubleshoot a blocked local preview
 
 `Local offscreen sanitization failed; transmission blocked` is a fail-closed
