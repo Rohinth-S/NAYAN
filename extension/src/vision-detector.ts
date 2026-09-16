@@ -9,9 +9,10 @@
  * This reduces Layer-2 inference cost by ~50% compared to running
  * separate models for each detection class.
  *
- * Currently wraps the existing UltraFace detector as a compatibility
- * shim. When the unified YOLOv8n/v10n model is available, swap the
- * implementation without changing any caller code.
+ * The runtime selects the unified YOLO implementation when its model asset
+ * is packaged. UltraFace remains a deliberately supported compatibility
+ * fallback so a model-free development build can still fail closed or run
+ * face-only checks without changing callers.
  */
 
 import type { Bounds, SanitizedObservation, VisionDetectionClass } from './types';
@@ -54,13 +55,7 @@ export interface UnifiedVisionDetector {
 
 /**
  * Adapter that wraps the existing LocalFaceDetector as a UnifiedVisionDetector.
- * This preserves backward compatibility while the unified YOLOv8n/v10n model
- * is being trained and exported.
- *
- * When the unified model is ready:
- * 1. Create a new class implementing UnifiedVisionDetector
- * 2. Replace the import in sanitizer-offscreen.ts / sanitizer-direct.ts
- * 3. The rest of the pipeline (redaction, validation, egress) works unchanged
+ * It is selected only when the unified YOLO model asset is absent.
  */
 export class UltraFaceAdapter implements UnifiedVisionDetector {
   private faceDetector: {
@@ -103,16 +98,3 @@ export class UltraFaceAdapter implements UnifiedVisionDetector {
     };
   }
 }
-
-/**
- * Stub for the future unified YOLOv8n/v10n detector.
- * Drop a trained ONNX model at extension/models/yolo-privacy-v1.onnx
- * and implement this class to replace UltraFaceAdapter.
- */
-// export class UnifiedYoloDetector implements UnifiedVisionDetector {
-//   async detect(bitmap: ImageBitmap): Promise<VisionDetectionResult> {
-//     // Single forward pass: face + aadhaar_card + pan_card + voter_id
-//     //                      + driving_license + passport + signature
-//     throw new Error('Not yet implemented — awaiting trained model');
-//   }
-// }

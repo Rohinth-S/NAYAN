@@ -5,14 +5,12 @@ import { localSanitizer } from '#local-sanitizer';
 import { isOffscreenMessage } from './offscreen-protocol';
 import { pseudonymizeOrigin, sanitizeText } from './privacy';
 import { isPrivacyGrade, REGISTRY_DIGEST } from './privacy-policy';
-import { ScrollDriftGuard } from './scroll-drift-guard';
-import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedObservation } from './types';
+import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedObservation, type ScrollDriftState } from './types';
 import { validateObservation, type ObservationValidationOptions } from './validation';
 import { ext } from './webext';
 
 const originAliasKey = crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 const captureRateGate = new CaptureRateGate();
-const scrollDriftGuard = new ScrollDriftGuard();
 let stopRequested = false;
 let activeRun = 0;
 let activeReasoningController: AbortController | null = null;
@@ -173,6 +171,7 @@ async function captureAndSanitize(
       rawImageRetained: false,
       redactionMode: raster.redactionMode,
       registryDigest: REGISTRY_DIGEST,
+      ...(raster.detectorArch ? { detectorArch: raster.detectorArch } : {}),
     },
   };
   const revisionResponse = (await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' })) as ContentResponse;
@@ -206,6 +205,12 @@ async function captureAndSanitize(
     tabGeneration: initialTabGeneration,
     windowGeneration: initialWindowGeneration,
   };
+}
+
+async function setScrollGuard(tabId: number, active: boolean): Promise<ScrollDriftState> {
+  const response = await ext.tabs.sendMessage(tabId, { type: 'SET_SCROLL_GUARD', active }) as ContentResponse;
+  if (!response.ok || !response.scrollDrift) throw new Error('Scroll-drift guard is unavailable');
+  return response.scrollDrift;
 }
 
 async function execute(context: CapturedContext, action: AgentAction): Promise<string> {
@@ -266,10 +271,10 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       update({ step });
       const context = await captureAndSanitize(settings, pinnedTab);
       if (stopRequested || runId !== activeRun) return;
-      // Approach B: activate scroll-drift guard before VLM network call.
-      // If the viewport changes while reasoning, the action targets may be stale.
-      scrollDriftGuard.activate();
-      update({ phase: 'reasoning', message: 'Sending sanitized observation…', scrollDrift: scrollDriftGuard.state });
+      // Approach B: activate the guard inside the page content script before
+      // the VLM call. The service worker cannot observe webpage scroll events.
+      const guardState = await setScrollGuard(context.tab.id, true);
+      update({ phase: 'reasoning', message: 'Sending sanitized observation…', scrollDrift: guardState });
       const started = performance.now();
       let accepted = false;
       let progressTimer: ReturnType<typeof setInterval> | undefined;
@@ -298,25 +303,31 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         });
       }, 1_000);
       let response;
+      let driftState: ScrollDriftState = guardState;
       try {
         response = await keepServiceWorkerAlive(
           sendSanitizedObservation(settings.endpoint, settings.apiKey, context.observation, settings.canaries, progressOptions),
         );
       } finally {
         if (progressTimer) clearInterval(progressTimer);
+        driftState = await setScrollGuard(context.tab.id, false).catch(() => ({
+          drifted: true,
+          lastDriftTimestamp: Date.now(),
+          debounceMs: 350,
+        }));
       }
       if (runId !== activeRun || stopRequested) return;
-      // Approach B: deactivate scroll-drift guard and check for viewport drift.
-      scrollDriftGuard.deactivate();
-      if (scrollDriftGuard.hasDrifted) {
+      // Discard actions resolved against a viewport that moved during the
+      // network call. The content script owns this observation.
+      if (driftState.drifted) {
         // Viewport changed during reasoning — discard the stale action and re-capture.
         update({
           message: 'Viewport changed during reasoning — re-capturing…',
-          scrollDrift: scrollDriftGuard.state,
+          scrollDrift: driftState,
         });
         continue; // Re-enter the step loop with a fresh capture.
       }
-      update({ lastLatencyMs: Math.round(performance.now() - started), scrollDrift: scrollDriftGuard.state });
+      update({ lastLatencyMs: Math.round(performance.now() - started), scrollDrift: driftState });
       if (stopRequested || runId !== activeRun) {
         update({ running: false, phase: 'idle', message: 'Stopped by user' });
         return;
@@ -337,8 +348,6 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     update({ running: false, phase: 'blocked', message: safeMessage(error) });
   } finally {
     if (activeReasoningController === reasoningController) activeReasoningController = null;
-    // Approach B: always clean up scroll-drift guard when the run ends.
-    scrollDriftGuard.dispose();
   }
 }
 

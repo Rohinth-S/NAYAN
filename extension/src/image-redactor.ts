@@ -1,7 +1,7 @@
 import type { Bounds, RawDomSnapshot, Redaction, SanitizedElement, SanitizedObservation } from './types';
-import { LocalFaceDetector } from './face-detector';
 import { shouldRedactCategory, type PrivacyGrade } from './privacy-policy';
 import { perceive, type PerceptionRuntime, type PerceptionResult } from './perception';
+import type { UnifiedVisionDetector, VisionDetection } from './vision-detector';
 
 export type SanitizedRaster = Readonly<{
   dataBase64: string;
@@ -11,6 +11,7 @@ export type SanitizedRaster = Readonly<{
   elements: readonly SanitizedElement[];
   redactions: readonly Redaction[];
   detectorBackend: SanitizedObservation['privacy']['detectorBackend'];
+  detectorArch: SanitizedObservation['privacy']['detectorArch'];
   visualFallback: SanitizedObservation['privacy']['visualFallback'];
   redactionMode: 'semantic' | 'opaque';
   safeTask?: string;
@@ -46,7 +47,7 @@ function placeholderFor(kind: Redaction['kind']): string {
 export async function sanitizeRaster(
   screenshotDataUrl: string,
   dom: RawDomSnapshot,
-  detector: LocalFaceDetector,
+  detector: UnifiedVisionDetector,
   allowFullMaskFallback: boolean,
   privacyGrade: PrivacyGrade,
   sanitizeLabel: (value: string) => string,
@@ -69,7 +70,7 @@ export async function sanitizeRaster(
     const detection = await detector.detect(bitmap);
     const detectorReady = detection.backend === 'webgpu' || detection.backend === 'wasm';
     if (!detectorReady && !allowFullMaskFallback) {
-      throw new Error(`Local face detector unavailable (${detector.diagnostic}); transmission blocked`);
+      throw new Error(`Local visual detector unavailable (${detector.diagnostic}); transmission blocked`);
     }
 
     const privateCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -96,9 +97,14 @@ export async function sanitizeRaster(
       source: item.source,
       bounds: scaleBounds(item.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
     }));
-    const faceRedactions: Redaction[] = shouldRedactCategory('biometric', privacyGrade)
-      ? detection.boxes.map((bounds) => ({ kind: 'face', source: 'onnx', bounds: padded(bounds, bitmap.width, bitmap.height) }))
-      : [];
+    const visualRedactions: Redaction[] = detection.detections
+      .filter((item) => shouldRedactVisionClass(item, privacyGrade))
+      .map((item) => ({
+        kind: redactionKindForVisionClass(item.class),
+        source: detection.arch === 'ultraface' ? 'onnx' : 'unified-detector',
+        bounds: padded(item.bounds, bitmap.width, bitmap.height),
+        confidence: item.confidence,
+      }));
     const fallbackRedactions: Redaction[] = detectorReady
       ? []
       : [{ kind: 'visual-fallback', source: 'fallback', bounds: { x: 0, y: 0, width: bitmap.width, height: bitmap.height } }];
@@ -108,7 +114,7 @@ export async function sanitizeRaster(
     const localRedactions: Redaction[] = local?.findings.map(finding => ({
       kind: 'pii-text', source: 'fallback', bounds: padded(finding.bounds, bitmap.width, bitmap.height),
     })) ?? [];
-    const redactions = detectorReady ? [...domRedactions, ...faceRedactions, ...localRedactions] : fallbackRedactions;
+    const redactions = detectorReady ? [...domRedactions, ...visualRedactions, ...localRedactions] : fallbackRedactions;
 
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext('2d', { alpha: false });
@@ -185,6 +191,7 @@ export async function sanitizeRaster(
       elements,
       redactions,
       detectorBackend: detection.backend,
+      detectorArch: detection.arch,
       visualFallback: detectorReady ? 'none' : 'full-mask',
       redactionMode: detectorReady ? 'semantic' : 'opaque',
       categoryCounts,
@@ -193,6 +200,33 @@ export async function sanitizeRaster(
     };
   } finally {
     bitmap.close();
+  }
+}
+
+function shouldRedactVisionClass(item: VisionDetection, privacyGrade: PrivacyGrade): boolean {
+  switch (item.class) {
+    case 'face':
+      return shouldRedactCategory('biometric', privacyGrade);
+    case 'signature':
+      return shouldRedactCategory('custom', privacyGrade);
+    case 'aadhaar_card':
+    case 'pan_card':
+    case 'voter_id':
+    case 'driving_license':
+    case 'passport':
+      return shouldRedactCategory('government-id', privacyGrade);
+  }
+}
+
+function redactionKindForVisionClass(item: VisionDetection['class']): Redaction['kind'] {
+  switch (item) {
+    case 'face': return 'face';
+    case 'aadhaar_card': return 'aadhaar-card';
+    case 'pan_card': return 'pan-card';
+    case 'voter_id': return 'voter-id';
+    case 'driving_license': return 'driving-license';
+    case 'passport': return 'passport';
+    case 'signature': return 'signature';
   }
 }
 
@@ -313,5 +347,7 @@ export const imageRedactorInternals = {
   dataUrlToBlob,
   placeholderFor,
   uniformViewportScale,
+  shouldRedactVisionClass,
+  redactionKindForVisionClass,
 };
 

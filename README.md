@@ -2,7 +2,7 @@
 
 An SIH26171 prototype delivering **On-device Visual Perception for Light-weight Browser Agents** with a strict zero-trust network boundary.
 
-This project gives a browser agent enough context to understand and operate a web page while mathematically ensuring sensitive page data never leaves the user's machine. A Chrome or Firefox extension captures one task step, detects sensitive content locally (using a hybrid of YOLO vision, OCR, and NER), applies the user's selected privacy grade, creates a completely new sanitized image, and validates the exact serialized request. Only that sanitized observation can cross the network boundary to the reasoning service. The service returns one strict browser action, which is then formally verified against the live page before execution.
+This project gives a browser agent enough context to understand and operate a web page while ensuring sensitive page data is filtered before it reaches the reasoning service. A Chrome or Firefox extension captures one task step, applies the selected privacy grade, runs the packaged local detector path (unified YOLO when its model asset is present, otherwise the checked-in UltraFace fallback), creates a completely new sanitized image, and validates the exact serialized request. Only that sanitized observation can cross the network boundary to the reasoning service. The service returns one strict browser action, which is then verified against the live page before execution.
 
 The prototype uses a local Ollama server with `qwen3-vl:2b-instruct` for reasoning. The design can be adapted to a hosted or self-hosted open-weight model, but the privacy boundary remains on the client.
 
@@ -46,7 +46,7 @@ flowchart LR
     T --> D[Content script<br/>DOM and safe structure]
     T --> S[Background<br/>visible screenshot]
     D --> C[Local text and field classifiers]
-    S --> F[Unified vision detector<br/>YOLOv8n/v10n multi-class<br/>WebGPU then WASM]
+    S --> F[Local visual detector<br/>Unified YOLO when packaged<br/>UltraFace fallback]
     S --> CV[Canvas privacy<br/>3-tier mitigation]
     C --> G[Grade 1 / 2 / 3 policy]
     F --> G
@@ -134,7 +134,7 @@ sequenceDiagram
         OS->>OS: DOM attribute and regex scan sanitizes inputs and text nodes
         OS->>OS: Scene gate finds no unstructured visual PII, Vision Channel skipped
     else Visual WebGPU Fallback - canvas app or unstructured media detected
-        OS->>OS: WebGPU unified YOLO and zxing-wasm inference over the captured frame
+        OS->>OS: WebGPU/WASM local visual inference over the captured frame
         OS->>OS: Destructive redaction overwrite in RAM canvas
     end
     OS->>OS: Raw bitmap dereferenced and closed
@@ -196,10 +196,10 @@ The extension is the trusted privacy boundary in this prototype.
 - `extension/src/content.ts` collects visible actionable structure, safe labels, local bounds, field sensitivity signals, text findings, frame and media coverage, and document generations. Raw values are used transiently for classification and are not placed in the element list.
 - `extension/src/privacy.ts` applies deterministic DOM, field, regex, and known-private-value detection.
 - `extension/src/privacy-policy.ts` maps detector categories to the selected cumulative grade. A detector or model cannot downgrade an always-protected category.
-- `extension/src/yolo-detector.ts` provides the primary unified YOLOv8n/v10n multi-class model implementation that detects faces, Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures in a single forward pass.
-- `extension/src/face-detector.ts` provides a legacy adapter for the UltraFace ONNX model, retained for fallback testing. An inference failure fails closed (or requires the explicit full-mask fallback).
-- `extension/src/dbnet-detector.ts` implements the Tier 2 DBNet canvas text detection-only blind masking (no OCR).
-- `extension/src/agent-graph.ts` implements a LangGraph.js-style state-graph orchestrator to manage the agent loop, HITL interrupt/resume, and Step 0 Abort Gate (scroll-drift) re-capture.
+- `extension/src/yolo-detector.ts` provides the unified YOLOv8n/v10n multi-class implementation. It is selected automatically when `extension/models/yolo-privacy-v1.onnx` is present at build time.
+- `extension/src/face-detector.ts` and `extension/src/vision-detector.ts` provide the checked-in UltraFace compatibility path. When the YOLO asset is absent, the build uses this adapter and reports `detectorArch: "ultraface"`; it does not claim document-ID coverage.
+- `extension/src/dbnet-detector.ts` implements the optional Tier 2 DBNet canvas text detection-only blind masking (no OCR). It is capability-gated by `extension/models/dbnet-text-det.onnx`.
+- `extension/src/agent-graph.ts` documents the Approach B state topology and HITL transitions. The current live controller remains a bounded TypeScript loop; a LangGraph.js server migration is a future integration task, not a runtime claim.
 - `extension/src/canvas-privacy.ts` implements 3-tier canvas-app PII mitigation: visual-object redaction (default), opt-in DBNet detection-only blind masking, and manual escalation for canvas-rendered applications.
 - `extension/src/scroll-drift-guard.ts` implements the Approach B Step 0 Abort Gate: a passive debounced scroll listener that invalidates the SoM registry when the viewport changes during a VLM network call, preventing mid-flight race conditions.
 - `extension/src/image-redactor.ts` maps DOM and face boxes into screenshot pixels, merges overlaps, and draws neutral category cards onto a new canvas. The original screenshot is never the outbound image.
@@ -411,13 +411,13 @@ The checked-in [VALIDATION_REPORT.md](VALIDATION_REPORT.md) records the evidence
 - **28 evaluation tests passed**;
 - Ruff clean;
 - Chrome and Firefox packages built;
-- Unified YOLO model checksum verified;
+- Detector asset status recorded by the build; model checksums and held-out precision/recall must be supplied before claiming trained-model performance.
 - source-level single-egress invariant passed;
 - deterministic synthetic browser flow completed through the WASM path;
 - authenticated local Ollama smoke test returned valid structured action;
 - GitHub Actions extension, server, lint, and evaluation jobs passed.
 
-The bundled unified model is a YOLOv8n/v10n variant. Its attribution and license are shipped beside the asset. Package checksums are recorded in the validation report because generated archives are build-specific.
+When supplied, the unified model's attribution, license, checksum, and held-out evaluation must be shipped with the asset. The repository currently contains the UltraFace model only, so the default package uses the fallback path and does not claim YOLO performance.
 
 The checked-in [evidence summaries](evidence/) contain aggregate synthetic results only. Raw screenshots, runtime logs, browser profiles, API keys, model caches, and generated packages stay ignored by Git.
 
@@ -527,20 +527,20 @@ Stop the API with:
 
 ## Current Implementation Status
 
-**Our system is production-ready. The full P0-P2 roadmap has been successfully implemented end-to-end!**
+**Approach B is implemented as the active architecture, with model-asset gates and a bounded prototype runtime.** The repository is ready for controlled synthetic demonstrations; it is not yet a production certification of universal PII detection.
 
-- **Complete Local Perception:** Dual-channel Fast DOM path vs WebGPU Fallback with a 3-tier canvas privacy mitigation strategy. We successfully integrated a unified YOLOv8n/v10n multi-class vision detector, local `tesseract.js` OCR for unparseable canvases, and a quantized `@huggingface/transformers` NER model (`Xenova/bert-base-multilingual-cased-ner-hrl`) to catch unlabelled free-text PII locally.
+- **Local Perception:** Dual-channel DOM path plus local visual fallback, with the unified YOLO and DBNet implementations selected only when their ONNX assets are packaged. The checked-in baseline uses UltraFace for face detection; OCR/NER are optional perception bundles and remain separately gated.
 - **Privacy UX & Transparent Controls:** Implemented a dynamic split-pane preview UI showing exactly what data will leave the device. Features real-time Mask Area Percentage metrics, explicit category counts, and detailed tooltips to provide absolute user transparency into the local redaction process.
-- **Orchestration & State Management:** LangGraph.js StateMachine integration with explicit HITL (Human-in-the-Loop) interrupt hooks and a Step 0 Abort Gate to prevent scroll-drift races.
+- **Orchestration & State Management:** Bounded client agent loop with the Approach B state topology documented in `agent-graph.ts`; the Step 0 Abort Gate is live in the page content script and is enabled around each reasoning request.
 - **Formal Action Verification:** Deployed rigorous, heuristic-based action interception directly in the content scripts. Irreversible tasks (like submitting a payment, deleting data, or checking out) automatically freeze the agent and mandate a native `window.confirm()` before executing, strictly enforcing human-in-the-loop oversight over destructive mutations.
 - **Privacy Enforcement:** Grade 1/2/3 local filtering policy, semantic category redaction, Policy Compiler checksum verification, and a zero-leak single-egress validator.
 - **Deployment Safety & Supply Chain Resilience:** Orchestrated via a hardened, ultra-secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root file system via `tmpfs`, and proxies traffic through Nginx. Includes a durable `RedisJobLedger`, a Lua-backed atomic sliding window rate limiter, and an automated data-minimization `retention-cron.sh` script to continually purge expired jobs.
-- **Extensibility & Reliability:** Implemented a robust `CircuitBreaker` state machine with exponential backoff, moved the reasoning models into a pluggable `server/app/gateways/` architecture, and introduced a VLM-less `Structural Planner` for blazing-fast local form resolution during LLM downtime.
+- **Extensibility & Reliability:** Implemented the pluggable Ollama gateway, circuit breaker, bounded jobs, and structural planner in the existing FastAPI backend. The RFC's Node/LangGraph deployment is an explicit future adapter, not a claim about the current server.
 - **Security Assurance:** Added a comprehensive adversarial fuzzing suite (via `hypothesis`) that blasts the FastAPI boundary with malformed JSON and arbitrary PNG bytes to verify fail-closed behavior. Additionally, formal state-machine tests verify that `action_guard.py` mathematically prevents cross-origin side effects. Finally, release provenance scripts (`scripts/sign-release.ps1`) automatically emit SHA256 hashes and optional GPG signatures for supply-chain integrity.
 
 ## Roadmap to production
 
-The core engineering phases (P0, P1, and P2) are **complete**. The boundary is secure, the local perception is active, and the backend is fault-tolerant. 
+The privacy boundary and Approach B control flow are in place for the prototype. Production readiness still depends on supplying and evaluating the trained unified detector/DBNet assets, measuring grade-wise precision and recall on held-out data, and completing an independent extension and supply-chain review.
 
 ### Final Milestone — Independent Red-Teaming
 

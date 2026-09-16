@@ -211,6 +211,8 @@ export type ContentCommand =
   | { type: 'PING' }
   | { type: 'CAPTURE_DOM'; snapshotId: string; knownValues: readonly string[]; privacyGrade: PrivacyGrade }
   | { type: 'VERIFY_REVISION' }
+  | { type: 'SET_SCROLL_GUARD'; active: boolean }
+  | { type: 'GET_SCROLL_DRIFT' }
   | {
       type: 'EXECUTE_ACTION';
       snapshotId: string;
@@ -229,6 +231,7 @@ export type ContentResponse =
         origin: string;
         viewport: { width: number; height: number; scrollX: number; scrollY: number };
       };
+      scrollDrift?: ScrollDriftState;
       result?: string;
     }
   | { ok: false; error: string };

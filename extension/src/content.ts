@@ -1,5 +1,6 @@
 import { findingsForGrade, inputValueNeedsMask, isSensitiveField, isSensitiveTextLabel, mergeBounds, pseudoContentNeedsMask } from './privacy';
 import { isPrivacyGrade, type PrivacyGrade } from './privacy-policy';
+import { ScrollDriftGuard } from './scroll-drift-guard';
 import type {
   AgentAction,
   Bounds,
@@ -23,6 +24,7 @@ let documentRevision = 0;
 let currentSnapshotId = '';
 let currentElements = new Map<string, Element>();
 let lastExecutedActionKey = '';
+const scrollDriftGuard = new ScrollDriftGuard();
 
 new MutationObserver(() => {
   documentRevision += 1;
@@ -30,6 +32,8 @@ new MutationObserver(() => {
 window.addEventListener('scroll', () => { documentRevision += 1; }, { capture: true, passive: true });
 window.addEventListener('resize', () => { documentRevision += 1; }, { passive: true });
 window.addEventListener('orientationchange', () => { documentRevision += 1; }, { passive: true });
+window.visualViewport?.addEventListener('resize', () => { documentRevision += 1; }, { passive: true });
+window.visualViewport?.addEventListener('scroll', () => { documentRevision += 1; }, { passive: true });
 
 function opaqueElementId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -391,6 +395,14 @@ async function handleMessage(message: unknown): Promise<ContentResponse> {
           viewport: { width: window.innerWidth, height: window.innerHeight, scrollX: window.scrollX, scrollY: window.scrollY },
         },
       };
+    }
+    if (command.type === 'SET_SCROLL_GUARD') {
+      if (command.active) scrollDriftGuard.activate();
+      else scrollDriftGuard.deactivate();
+      return { ok: true, scrollDrift: scrollDriftGuard.state };
+    }
+    if (command.type === 'GET_SCROLL_DRIFT') {
+      return { ok: true, scrollDrift: scrollDriftGuard.state };
     }
     if (command.type === 'CAPTURE_DOM') {
       if (!isPrivacyGrade(command.privacyGrade)) throw new Error('Invalid privacy grade');

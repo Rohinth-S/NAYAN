@@ -9,7 +9,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 const artifacts = join(root, 'artifacts');
 const modelSource = join(root, 'models', 'version-RFB-320.onnx');
+const yoloModelSource = join(root, 'models', 'yolo-privacy-v1.onnx');
+const dbnetModelSource = join(root, 'models', 'dbnet-text-det.onnx');
 const modelIncluded = await exists(modelSource);
+const yoloModelIncluded = await exists(yoloModelSource);
+const dbnetModelIncluded = await exists(dbnetModelSource);
 const perceptionEnabled = process.argv.includes('--perception') || process.env.LOCAL_PERCEPTION === '1';
 if (perceptionEnabled) {
   const lock = JSON.parse(await readFile(join(root, 'models/perception-lock.json'), 'utf8'));
@@ -70,7 +74,12 @@ for (const [target, manifest] of [['chrome', chromeManifest], ['firefox', firefo
     sourcemap: false,
     minify: true,
     legalComments: 'none',
-    define: { __FACE_MODEL_INCLUDED__: JSON.stringify(modelIncluded), __PERCEPTION_ENABLED__: JSON.stringify(perceptionEnabled) },
+    define: {
+      __FACE_MODEL_INCLUDED__: JSON.stringify(modelIncluded),
+      __YOLO_MODEL_INCLUDED__: JSON.stringify(yoloModelIncluded),
+      __DBNET_MODEL_INCLUDED__: JSON.stringify(dbnetModelIncluded),
+      __PERCEPTION_ENABLED__: JSON.stringify(perceptionEnabled),
+    },
     alias: {
       '#local-sanitizer': join(root, 'src', target === 'chrome' ? 'sanitizer-offscreen.ts' : 'sanitizer-direct.ts'),
     },
@@ -100,7 +109,11 @@ if (process.argv.includes('--package')) {
   }
 }
 
-console.log(`Built Chrome and Firefox extension${modelIncluded ? ' with UltraFace model' : ' without model (runtime will fail closed)'}.`);
+console.log(
+  `Built Chrome and Firefox extension with ${
+    yoloModelIncluded ? 'unified YOLO' : modelIncluded ? 'UltraFace fallback' : 'no visual detector'
+  }${dbnetModelIncluded ? ' and DBNet canvas detector' : ''}.`,
+);
 
 async function copyRuntimeAssets(outdir) {
   if (perceptionEnabled) {
@@ -123,6 +136,9 @@ async function copyRuntimeAssets(outdir) {
       if (await exists(source)) await cp(source, join(outdir, 'models', file));
     }
   }
+  if (yoloModelIncluded || dbnetModelIncluded) await mkdir(join(outdir, 'models'), { recursive: true });
+  if (yoloModelIncluded) await cp(yoloModelSource, join(outdir, 'models', 'yolo-privacy-v1.onnx'));
+  if (dbnetModelIncluded) await cp(dbnetModelSource, join(outdir, 'models', 'dbnet-text-det.onnx'));
   const ortDist = join(root, 'node_modules', 'onnxruntime-web', 'dist');
   const wasmDir = join(outdir, 'wasm');
   await mkdir(wasmDir, { recursive: true });

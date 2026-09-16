@@ -5,6 +5,7 @@ import type { PrivacyGrade } from './privacy-policy';
 import { ext } from './webext';
 
 declare const __FACE_MODEL_INCLUDED__: boolean;
+declare const __YOLO_MODEL_INCLUDED__: boolean;
 
 const documentCreations = new WeakMap<object, Promise<void>>();
 
@@ -29,7 +30,11 @@ export async function ensureOffscreenDocument(api: typeof chrome): Promise<void>
 }
 
 export class OffscreenSanitizer {
-  private backend: SanitizedObservation['privacy']['detectorBackend'] = __FACE_MODEL_INCLUDED__ ? 'error' : 'missing';
+  private backend: SanitizedObservation['privacy']['detectorBackend'] =
+    (typeof __YOLO_MODEL_INCLUDED__ !== 'undefined' && __YOLO_MODEL_INCLUDED__) ||
+    (typeof __FACE_MODEL_INCLUDED__ !== 'undefined' && __FACE_MODEL_INCLUDED__)
+      ? 'error'
+      : 'missing';
 
   constructor(private readonly api: typeof chrome) {}
 

@@ -4,11 +4,17 @@ import { sanitizeText } from './privacy';
 import type { PrivacyGrade } from './privacy-policy';
 import type { RawDomSnapshot } from './types';
 import { createBrowserPerceptionRuntime } from './perception-runtime';
+import { UltraFaceAdapter } from './vision-detector';
+import { UnifiedYoloDetector } from './yolo-detector';
 
 declare const __PERCEPTION_ENABLED__: boolean;
+declare const __YOLO_MODEL_INCLUDED__: boolean;
 const perception = typeof __PERCEPTION_ENABLED__ !== 'undefined' && __PERCEPTION_ENABLED__ ? createBrowserPerceptionRuntime() : undefined;
 
-const detector = new LocalFaceDetector();
+const faceDetector = new LocalFaceDetector();
+const detector = typeof __YOLO_MODEL_INCLUDED__ !== 'undefined' && __YOLO_MODEL_INCLUDED__
+  ? new UnifiedYoloDetector()
+  : new UltraFaceAdapter(faceDetector);
 
 // Firefox has a document-backed background page. Chrome uses this module only
 // inside its offscreen document, never inside the MV3 service worker.
