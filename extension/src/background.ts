@@ -4,7 +4,7 @@ import { sendSanitizedObservation, type ReasoningRequestOptions } from './egress
 import { localSanitizer } from '#local-sanitizer';
 import { isOffscreenMessage } from './offscreen-protocol';
 import { pseudonymizeOrigin, sanitizeText } from './privacy';
-import { isPrivacyGrade } from './privacy-policy';
+import { isPrivacyGrade, REGISTRY_DIGEST } from './privacy-policy';
 import { ScrollDriftGuard } from './scroll-drift-guard';
 import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedObservation } from './types';
 import { validateObservation, type ObservationValidationOptions } from './validation';
@@ -172,6 +172,7 @@ async function captureAndSanitize(
       visualFallback: raster.visualFallback,
       rawImageRetained: false,
       redactionMode: raster.redactionMode,
+      registryDigest: REGISTRY_DIGEST,
     },
   };
   const revisionResponse = (await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' })) as ContentResponse;

@@ -52,6 +52,8 @@ class Settings(BaseModel):
     deployment_profile: Literal["development", "production"] = "development"
     job_ledger_path: str = ""
     log_level: LogLevel = "INFO"
+    # Development-only planner used when the VLM is unavailable. Production forbids this.
+    structural_fallback: bool = True
 
     @field_validator("api_key")
     @classmethod
@@ -118,6 +120,8 @@ class Settings(BaseModel):
             raise ValueError("remote Ollama requires PRIVACY_AGENT_ALLOW_REMOTE_OLLAMA=true")
         if self.deployment_profile == "production" and self.ollama_model_digest is None:
             raise ValueError("production deployment requires PRIVACY_AGENT_OLLAMA_MODEL_DIGEST")
+        if self.deployment_profile == "production" and self.structural_fallback:
+            raise ValueError("structural fallback is development-only")
 
     def origin_allowed(self, origin: str) -> bool:
         if origin in self.cors_origins:
@@ -139,6 +143,10 @@ class Settings(BaseModel):
             if item.strip()
         )
         key = os.getenv("PRIVACY_AGENT_API_KEY")
+        deployment_profile = cast(
+            Literal["development", "production"],
+            os.getenv("PRIVACY_AGENT_DEPLOYMENT_PROFILE", "development"),
+        )
         settings = cls(
             reasoning_adapter=os.getenv("PRIVACY_AGENT_REASONING_ADAPTER", "ollama"),
             gateway_url=os.getenv("PRIVACY_AGENT_GATEWAY_URL") or None,
@@ -170,12 +178,13 @@ class Settings(BaseModel):
             rate_limit_requests=int(os.getenv("PRIVACY_AGENT_RATE_LIMIT_REQUESTS", "120")),
             rate_limit_window_seconds=float(os.getenv("PRIVACY_AGENT_RATE_LIMIT_WINDOW_SECONDS", "60")),
             metrics_enabled=_env_bool("PRIVACY_AGENT_METRICS_ENABLED", True),
-            deployment_profile=cast(
-                Literal["development", "production"],
-                os.getenv("PRIVACY_AGENT_DEPLOYMENT_PROFILE", "development"),
-            ),
+            deployment_profile=deployment_profile,
             job_ledger_path=os.getenv("PRIVACY_AGENT_JOB_LEDGER_PATH", ""),
             log_level=cast(LogLevel, os.getenv("PRIVACY_AGENT_LOG_LEVEL", "INFO").upper()),
+            structural_fallback=_env_bool(
+                "PRIVACY_AGENT_STRUCTURAL_FALLBACK",
+                deployment_profile != "production",
+            ),
         )
         settings.assert_runtime_safe()
         return settings

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -52,6 +53,18 @@ def main() -> int:
         fail("action_registry_drift")
     if not (ROOT / manifest["singleEgressFile"]).is_file():
         fail("single_egress_file_missing")
+    if "registryDigest" not in protocol or "registryDigest" not in migration:
+        fail("registry_digest_migration_missing")
+
+    sys.path.insert(0, str(ROOT / "server"))
+    from app.policy_compiler import PolicyCompilerError, assert_generated_current
+
+    try:
+        digest = assert_generated_current(ROOT)
+    except PolicyCompilerError as exc:
+        fail(f"generated_policy_{exc}")
+    except OSError as exc:
+        fail(f"generated_policy_{type(exc).__name__}")
 
     try:
         files = subprocess.check_output(
@@ -79,7 +92,10 @@ def main() -> int:
     for filename in ("extension-e2e-summary.json", "live-ollama-summary.json"):
         payload = json.loads((evidence_dir / filename).read_text(encoding="utf-8"))
         check_keys(payload)
-    print("governance_check=passed protocol=1.0 policy=1.0 actions=5 grades=3 single_egress=true")
+    print(
+        "governance_check=passed protocol=1.0 policy=1.0 actions=5 grades=3 "
+        f"single_egress=true registry_digest={digest}"
+    )
     return 0
 
 

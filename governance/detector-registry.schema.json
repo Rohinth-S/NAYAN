@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sih26171.local/governance/detector-registry.schema.json",
+  "title": "SIH26171 detector registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "minimumGrades", "supplementalPatterns"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "minimumGrades": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credential",
+        "government-id",
+        "financial",
+        "biometric",
+        "custom",
+        "uninspectable",
+        "contact",
+        "location",
+        "date-of-birth",
+        "network",
+        "account-id",
+        "name",
+        "username",
+        "professional-id",
+        "unknown-populated-field"
+      ],
+      "properties": {
+        "credential": { "$ref": "#/$defs/grade" },
+        "government-id": { "$ref": "#/$defs/grade" },
+        "financial": { "$ref": "#/$defs/grade" },
+        "biometric": { "$ref": "#/$defs/grade" },
+        "custom": { "$ref": "#/$defs/grade" },
+        "uninspectable": { "$ref": "#/$defs/grade" },
+        "contact": { "$ref": "#/$defs/grade" },
+        "location": { "$ref": "#/$defs/grade" },
+        "date-of-birth": { "$ref": "#/$defs/grade" },
+        "network": { "$ref": "#/$defs/grade" },
+        "account-id": { "$ref": "#/$defs/grade" },
+        "name": { "$ref": "#/$defs/grade" },
+        "username": { "$ref": "#/$defs/grade" },
+        "professional-id": { "$ref": "#/$defs/grade" },
+        "unknown-populated-field": { "$ref": "#/$defs/grade" }
+      }
+    },
+    "supplementalPatterns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "category", "pattern"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "category": {
+            "$ref": "#/$defs/category"
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "grade": {
+      "type": "integer",
+      "enum": [1, 2, 3]
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "credential",
+        "government-id",
+        "financial",
+        "biometric",
+        "custom",
+        "uninspectable",
+        "contact",
+        "location",
+        "date-of-birth",
+        "network",
+        "account-id",
+        "name",
+        "username",
+        "professional-id",
+        "unknown-populated-field"
+      ]
+    },
+    "invariantCategory": {
+      "type": "string",
+      "enum": [
+        "credential",
+        "government-id",
+        "financial",
+        "biometric",
+        "custom",
+        "uninspectable"
+      ]
+    }
+  }
+}

@@ -1,5 +1,6 @@
 /** User-selectable privacy policy. A category is hidden when its threshold is
  * less than or equal to the selected grade. Grade 3 is the fail-safe default. */
+import { REGISTRY_DIGEST } from './generated-policy';
 import registry from '../../server/app/detector-registry.json';
 export const PRIVACY_GRADES = [1, 2, 3] as const;
 export type PrivacyGrade = (typeof PRIVACY_GRADES)[number];
@@ -23,6 +24,7 @@ export type PrivacyCategory =
 
 export const DEFAULT_PRIVACY_GRADE: PrivacyGrade = 3;
 export const DETECTOR_REGISTRY_VERSION = registry.version;
+export { REGISTRY_DIGEST };
 
 /** Shared, reviewable detector contract used by local perception and policy tests. */
 export const DETECTOR_REGISTRY = Object.freeze(registry);

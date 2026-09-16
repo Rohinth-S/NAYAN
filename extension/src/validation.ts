@@ -120,13 +120,35 @@ export function validateObservation(
   }
 
   if (!isRecord(value.privacy)) throw new Error('Invalid privacy metadata');
-  exactKeys(value.privacy, ['grade', 'detectorBackend', 'visualFallback', 'rawImageRetained'], ['redactionMode']);
+  exactKeys(
+    value.privacy,
+    ['grade', 'detectorBackend', 'visualFallback', 'rawImageRetained'],
+    ['redactionMode', 'registryDigest', 'detectorArch', 'canvasPrivacyTier'],
+  );
   if (!isPrivacyGrade(value.privacy.grade)) throw new Error('Invalid privacy grade');
   if (!['webgpu', 'wasm', 'missing', 'error'].includes(String(value.privacy.detectorBackend))) throw new Error('Invalid detector backend');
   if (!['none', 'full-mask'].includes(String(value.privacy.visualFallback))) throw new Error('Invalid visual fallback');
   if (value.privacy.rawImageRetained !== false) throw new Error('Raw image retention must be false');
   if (value.privacy.redactionMode !== undefined && !['semantic', 'opaque'].includes(String(value.privacy.redactionMode))) {
     throw new Error('Invalid redaction mode');
+  }
+  if (
+    value.privacy.registryDigest !== undefined
+    && !/^sha256:[0-9a-f]{64}$/.test(String(value.privacy.registryDigest))
+  ) {
+    throw new Error('Invalid registry digest');
+  }
+  if (
+    value.privacy.detectorArch !== undefined
+    && !['ultraface', 'yolov8n', 'yolov10n'].includes(String(value.privacy.detectorArch))
+  ) {
+    throw new Error('Invalid detector architecture');
+  }
+  if (
+    value.privacy.canvasPrivacyTier !== undefined
+    && !['visual-redaction', 'dbnet-blind-mask', 'manual-escalation'].includes(String(value.privacy.canvasPrivacyTier))
+  ) {
+    throw new Error('Invalid canvas privacy tier');
   }
   if (value.privacy.redactionMode === 'semantic' && value.privacy.visualFallback !== 'none') {
     throw new Error('Semantic redaction cannot be used with full-mask fallback');

@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from PIL import Image, UnidentifiedImageError
 
 from app.detector_registry import PATTERNS, normalize_for_detection
+from app.generated_policy import REGISTRY_DIGEST
 from app.schemas import BrowserAction, SanitizedObservation, is_redaction_placeholder
 from app.settings import Settings
 
@@ -275,6 +276,11 @@ def _verify_declared_masks(observation: SanitizedObservation, data: bytes) -> No
 
 
 def validate_observation(observation: SanitizedObservation, settings: Settings) -> bytes:
+    if (
+        observation.privacy.registryDigest is not None
+        and observation.privacy.registryDigest != REGISTRY_DIGEST
+    ):
+        raise ObservationRejected("privacy_registry_digest_mismatch")
     if len(observation.elements) > settings.max_elements:
         raise ObservationRejected("too_many_elements")
     if len(observation.redactions) > settings.max_redactions:

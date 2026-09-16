@@ -15,6 +15,23 @@ or serialized field change.
   fresh PNG, redaction metadata, and no raw page values.
 - Detector failure requires a full opaque mask or no request.
 
+## Optional `privacy.registryDigest` (v1 additive)
+
+Clients may send `privacy.registryDigest`, the SHA-256 digest of the canonical
+detector registry plus protocol version produced by
+`scripts/generate-policy-registry.py`. This is an additive v1 field:
+
+- If the field is **present**, the server requires an exact match with the
+  compiled registry. A mismatch is rejected as `privacy_registry_digest_mismatch`
+  before any model call.
+- If the field is **absent**, the server keeps the existing invariant-floor scan
+  so current and older clients continue to work. There is no protocol major bump.
+
+Changing a category threshold, pattern, or protocol version requires regenerating
+`server/app/generated_policy.py` and `extension/src/generated-policy.ts` and
+updating this record if the compatibility rule changes. A digest mismatch never
+authorizes a weaker grade or an unsanitized payload.
+
 Any 1.x change must update `governance/protocol-manifest.json`, the three
 contract documents, client/server schemas, positive and negative tests, and the
 release evidence. A breaking change requires a new major version and a migration

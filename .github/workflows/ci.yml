@@ -48,6 +48,8 @@ jobs:
       - name: Run server lint
         working-directory: server
         run: python -m ruff check .
+      - name: Verify governance and generated policy
+        run: python scripts/verify-governance.py
       - name: Run evaluation tests
         run: PYTHONPATH=evaluation python -m pytest evaluation/tests -q
       - name: Run repository security scan

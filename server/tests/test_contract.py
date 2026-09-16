@@ -205,14 +205,16 @@ async def test_every_action_serializes_only_its_exact_fields(
 
 
 @pytest.mark.asyncio
-async def test_backend_unavailable_fails_closed(
-    client: httpx.AsyncClient, fake_reasoner: FakeReasoner
-) -> None:
-    fake_reasoner.is_ready = False
-    response = await client.post("/v1/reason", json=observation_payload())
+async def test_backend_unavailable_fails_closed(settings: Settings) -> None:
+    reasoner = FakeReasoner()
+    reasoner.is_ready = False
+    app = create_app(settings.model_copy(update={"structural_fallback": False}), reasoner)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+        response = await test_client.post("/v1/reason", json=observation_payload())
     assert response.status_code == 503
     assert response.json() == {"detail": "reasoning_backend_unavailable"}
-    assert fake_reasoner.seen is None
+    assert reasoner.seen is None
 
 
 @pytest.mark.asyncio
