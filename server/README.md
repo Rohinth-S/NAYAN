@@ -51,6 +51,9 @@ Health endpoints:
 - `GET /health/live` confirms that the HTTP process is alive.
 - `GET /health/ready` returns 200 only when the exact configured Ollama model appears in `/api/tags`.
 
+Pulling Ollama models or container images requires at least 10 GB free on `/`.
+Run `python scripts/check-disk-budget.py` first; do not pull when the gate fails.
+
 With the server running, exercise the full HTTP boundary and real Ollama model using synthetic data:
 
 ```powershell
@@ -108,7 +111,8 @@ recovery answers, API/access/session tokens, private keys, Aadhaar/PAN/passport 
 cards and detected financial credentials, faces/biometrics, known canaries, and uninspectable visual regions. Grade 1
 may intentionally retain names and contact context so a workflow can use them. The extension performs this
 classification before encoding; the server's grade-aware text scan is defense in depth and never reconstructs a
-redacted value.
+redacted value. `privacy.registryDigest` is optional in v1: a present value must match the compiled registry, and an
+absent value keeps the invariant-floor scan.
 
 An asynchronous acceptance contains exactly `schemaVersion`, `snapshotId`, a random UUIDv4 `jobId`, and
 `status: "pending"`. The in-memory local queue retains at most 16 jobs, runs two model calls concurrently, and

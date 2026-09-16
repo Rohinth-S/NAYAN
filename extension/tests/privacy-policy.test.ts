@@ -3,6 +3,7 @@ import {
   CATEGORY_MINIMUM_GRADE,
   DEFAULT_PRIVACY_GRADE,
   normalizePrivacyGrade,
+  REGISTRY_DIGEST,
   shouldRedactCategory,
   shouldRedactFinding,
 } from '../src/privacy-policy';
@@ -15,6 +16,7 @@ describe('user-selectable privacy grades', () => {
     expect(normalizePrivacyGrade(undefined)).toBe(3);
     expect(normalizePrivacyGrade('3')).toBe(3);
     expect(normalizePrivacyGrade(0)).toBe(3);
+    expect(REGISTRY_DIGEST).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it('keeps irreversible and uninspectable categories protected at every grade', () => {

@@ -74,6 +74,8 @@ export type SanitizedObservation = Readonly<{
     rawImageRetained: false;
     /** Semantic placeholders are rendered locally in the sanitized raster. */
     redactionMode?: 'semantic' | 'opaque';
+    /** Optional v1 digest of the compiled detector registry. */
+    registryDigest?: string;
   }>;
 }>;
 

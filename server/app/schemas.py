@@ -114,6 +114,9 @@ class PrivacyMetadata(StrictModel):
     # Older local fixtures omit this field and are treated as opaque-black.
     # Current extensions send semantic placeholders whenever local detection is available.
     redactionMode: Literal["semantic", "opaque"] = "opaque"
+    # Optional v1 digest of the compiled detector registry plus protocol version.
+    # Absent values keep the invariant-floor scan; a present value must match exactly.
+    registryDigest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
 
     @field_validator("grade", mode="before")
     @classmethod

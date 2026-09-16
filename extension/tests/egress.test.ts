@@ -36,6 +36,15 @@ async function flushPromises(): Promise<void> {
   await Promise.resolve();
 }
 
+async function waitForAccepted(progress: readonly string[]): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (progress[0] === 'sending' && progress[1] === 'accepted') return;
+    await vi.advanceTimersByTimeAsync(0);
+    await flushPromises();
+  }
+  throw new Error(`accepted progress was not reported: ${JSON.stringify(progress)}`);
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -106,9 +115,7 @@ describe('single outbound gateway', () => {
         onProgress: (stage) => progress.push(stage),
       },
     );
-    await flushPromises();
-    for (let index = 0; index < 4; index += 1) await Promise.resolve();
-    expect(progress).toEqual(['sending', 'accepted']);
+    await waitForAccepted(progress);
     await vi.advanceTimersByTimeAsync(REASONING_POLL_MS);
     await expect(resultPromise).resolves.toEqual(completedAction());
   });

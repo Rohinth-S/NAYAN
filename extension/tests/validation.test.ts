@@ -40,6 +40,22 @@ describe('v1 protocol validation', () => {
     expect(() => validateObservation(preview, { allowEmptyTask: true })).not.toThrow();
   });
 
+  it('accepts an optional compiled registry digest and rejects a malformed one', () => {
+    const valid = {
+      ...observation(),
+      privacy: {
+        ...observation().privacy,
+        registryDigest: 'sha256:' + 'a'.repeat(64),
+      },
+    };
+    expect(() => validateObservation(valid)).not.toThrow();
+    const invalid = {
+      ...observation(),
+      privacy: { ...observation().privacy, registryDigest: 'sha256:not-a-digest' },
+    };
+    expect(() => validateObservation(invalid)).toThrow('Invalid registry digest');
+  });
+
   it('rejects extra fields and raw retention', () => {
     expect(() => validateObservation({ ...observation(), rawDom: '<html>' })).toThrow('Unexpected field');
     expect(() => validateObservation({ ...observation(), privacy: { ...observation().privacy, rawImageRetained: true } })).toThrow('retention');

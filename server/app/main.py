@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from app.action_guard import guard_reasoned_action
 from app.boundary import ReasoningBoundaryMiddleware, SafeAccessLogMiddleware, SecurityHeadersMiddleware
+from app.circuit_breaker import CircuitBreaker, CircuitOpen
 from app.gateway_adapter import GatewayReasoner
 from app.job_ledger import SQLiteJobLedger
 from app.jobs import (
@@ -40,11 +41,20 @@ from app.schemas import (
 )
 from app.settings import Settings
 from app.state import VerificationStore
+from app.structural_planner import plan_structural_response
 from app.validation import ObservationRejected, validate_action_for_observation, validate_observation
 
 LOGGER = logging.getLogger("privacy_server")
 DEMO_DIR = Path(__file__).with_name("demo")
 MAX_LONG_POLL_SECONDS = 10
+
+
+def _structural_response(observation: SanitizedObservation) -> ReasoningResponse:
+    try:
+        return plan_structural_response(observation)
+    except (TypeError, ValueError):
+        LOGGER.warning("structural_planner_failed")
+        raise ReasoningJobError(502, "invalid_reasoning_response") from None
 
 
 def preferred_wait_seconds(value: str) -> int:
@@ -59,7 +69,11 @@ def preferred_wait_seconds(value: str) -> int:
     return 0
 
 
-def create_app(settings: Settings | None = None, reasoner: Reasoner | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    reasoner: Reasoner | None = None,
+    circuit_breaker: CircuitBreaker | None = None,
+) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.assert_runtime_safe()
     logging.getLogger("privacy_server").setLevel(settings.log_level)
@@ -88,6 +102,10 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
     # endpoint must share the same concurrency budget so callers cannot bypass
     # the model resource limit by omitting Prefer: respond-async.
     reasoning_gate = asyncio.Semaphore(settings.max_concurrent_reasoning_jobs)
+    breaker = circuit_breaker or CircuitBreaker(
+        timeout_seconds=settings.ollama_timeout_seconds,
+        max_concurrency=settings.max_concurrent_reasoning_jobs,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -118,6 +136,7 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
     app.state.verification_store = store
     app.state.reasoning_jobs = jobs
     app.state.metrics = metrics
+    app.state.circuit_breaker = breaker
 
     app.add_middleware(ReasoningBoundaryMiddleware, settings=settings)
     app.add_middleware(SecurityHeadersMiddleware)
@@ -179,18 +198,30 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
         except TimeoutError:
             raise ReasoningJobError(503, "reasoning_capacity_timeout") from None
         try:
-            if not await reasoner.ready():
-                await metrics.increment("reasoning.backend_unavailable")
-                raise ReasoningJobError(503, "reasoning_backend_unavailable")
+            backend_ready = await reasoner.ready()
+            if not backend_ready or breaker.is_blocking():
+                if not settings.structural_fallback:
+                    await metrics.increment("reasoning.backend_unavailable")
+                    raise ReasoningJobError(503, "reasoning_backend_unavailable")
+                response = _structural_response(observation)
+                await metrics.increment("reasoning.structural_fallback")
+            else:
+                try:
+                    response = await breaker.call(reasoner.reason, observation)
+                except ReasonerContextLimit:
+                    raise ReasoningJobError(503, "reasoning_context_limit") from None
+                except (ReasonerUnavailable, CircuitOpen, TimeoutError):
+                    if not settings.structural_fallback:
+                        await metrics.increment("reasoning.backend_unavailable")
+                        raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
+                    response = _structural_response(observation)
+                    await metrics.increment("reasoning.structural_fallback")
+                except (ReasonerInvalidResponse, ObservationRejected):
+                    raise ReasoningJobError(502, "invalid_reasoning_response") from None
             try:
-                response = await reasoner.reason(observation)
                 response = guard_reasoned_action(observation, response)
                 validate_action_for_observation(response.snapshotId, response.action, observation)
-            except ReasonerContextLimit:
-                raise ReasoningJobError(503, "reasoning_context_limit") from None
-            except ReasonerUnavailable:
-                raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
-            except (ReasonerInvalidResponse, ObservationRejected):
+            except ObservationRejected:
                 raise ReasoningJobError(502, "invalid_reasoning_response") from None
             await store.record_reason(observation, response.action.type)
             await metrics.increment("reasoning.succeeded")
@@ -213,7 +244,9 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
             token.partition(";")[0].strip().lower() == "respond-async" for token in prefer.split(",")
         )
         if wants_async:
-            if not await reasoner.ready():
+            if not settings.structural_fallback and (
+                not await reasoner.ready() or breaker.is_blocking()
+            ):
                 raise HTTPException(status_code=503, detail="reasoning_backend_unavailable")
             try:
                 job = await jobs.submit(

@@ -6,7 +6,11 @@ import re
 import unicodedata
 from pathlib import Path
 
+from app.generated_policy import REGISTRY_VERSION
+
 REGISTRY = json.loads(Path(__file__).with_name("detector-registry.json").read_text(encoding="utf-8"))
+if REGISTRY["version"] != REGISTRY_VERSION:
+    raise RuntimeError("generated policy registry version drift")
 DETECTOR_REGISTRY_VERSION = REGISTRY["version"]
 MINIMUM_GRADES = REGISTRY["minimumGrades"]
 PATTERNS = tuple(
