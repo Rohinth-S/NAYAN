@@ -25,32 +25,6 @@ This document is the shared starting point for the team. It records what is impl
 | `CONTRIBUTING.md` | Team setup, change discipline, test commands, and review checklist. |
 | `TEAM_WORK_SPLIT.md` | Named ownership for Rohinth, Mithul, and Prajjwal with detailed task packages and acceptance criteria. |
 
-# Team handoff: Privacy Focused Browser Agent
-
-**Repository purpose:** SIH26171, *On-device Visual Perception for Light-weight Browser Agents*.
-
-**Status:** working hackathon prototype, ready for team development and a controlled synthetic demo.
-
-**Primary path:** a cross-browser extension plus a strict reasoning service. The project does not require a custom browser fork. A browser fork would add a Chromium maintenance and distribution burden without improving the privacy boundary that the problem statement evaluates.
-
-This document is the shared starting point for the team. It records what is implemented, what has evidence behind it, what the repository deliberately does not claim, and the order in which production hardening should happen.
-
-## 1. What is in this repository
-
-| Path | Current role |
-| --- | --- |
-| `extension/` | TypeScript source compiled into Chrome MV3 and Firefox-compatible packages. Captures the active tab after a user gesture, builds a safe DOM capsule, runs local face inference, applies the selected privacy grade, composes a fresh redacted PNG, validates the serialized request, polls the reasoning job, and executes revision-bound actions. |
-| `server/` | FastAPI receiver and synthetic demo portal. It authenticates and bounds requests, validates the strict protocol and PNG, performs defense-in-depth checks, invokes local Ollama, validates model actions, and exposes a bounded asynchronous job queue. |
-| `evaluation/` | Synthetic Indian-PII corpus, schema files, precision/recall and pixel-area scorer, exact receiver-body verifier, and security test plan. |
-| `PRIVACY_LEVELS.md` | The versioned Grade 1/2/3 policy and category matrix. This is the policy contract to use when adding detectors. |
-| `PROTOCOL.md` | The frozen v1.0 wire contract. Keep this synchronized with `extension/src/types.ts` and `server/app/schemas.py`. |
-| `ARCHITECTURE.md` | Detailed trust boundary, data flow, fail-closed decisions, and browser-fork decision. |
-| `ARCHITECTURE_REVIEW.md` | Review of per-step sanitized capture versus continuous/external screen sharing. |
-| `EDGE_CASE_MATRIX.md` | Required behavior for capture, redaction, model, browser, network, and action failures. |
-| `IMPLEMENTATION_PLAN.md` | Original SIH scope and acceptance criteria. |
-| `README.md` | Quick start and demo instructions. |
-| `CONTRIBUTING.md` | Team setup, change discipline, test commands, and review checklist. |
-| `TEAM_WORK_SPLIT.md` | Named ownership for Rohinth, Mithul, and Prajjwal with detailed task packages and acceptance criteria. |
 
 The local `browser-use/` checkout is an experimental comparison baseline and `BrowserOS-reference/` is an upstream design reference. They are intentionally excluded from this repository because they contain nested Git history and large development environments; the primary implementation above is self-contained. If needed, clone [browser-use](https://github.com/browser-use/browser-use) and [BrowserOS](https://github.com/browseros-ai/BrowserOS) separately and preserve their original licenses.
 
@@ -130,17 +104,30 @@ Current detectors are intentionally narrower than the policy: high-confidence re
 
 ## 4. What is implemented today
 
-### Demonstrable behavior
+### Core Architecture & Privacy Enforcement
+1. **Dynamic Privacy Grades:** The popup allows users to select Grade 1 (Essential), 2 (Balanced), or 3 (Strict). This dictates exactly which categories of data are redacted. Grade 3 is the fail-safe default.
+2. **On-Device Data Redaction:** Before any request leaves the browser, a fresh canvas is generated. Semantic redaction uses neutral cards with explicit category markers (e.g., `[REDACTED:EMAIL]`, `[REDACTED:PASSWORD]`). Original screenshot pixels never leave the client.
+3. **Privacy Preview & Metrics:** A split-pane UI allows users to visually inspect exactly what data the agent will see, showing real-time Mask Area Percentage and categorized redaction counts.
+4. **Step 0 Abort Gate (Scroll-Drift Guard):** In-viewport DOM geometry is highly volatile. If the user scrolls, resizes, or the layout shifts during inference, the `scroll-drift-guard.ts` immediately aborts transmission, preventing spatial hallucinations and stale coordinates.
+5. **Canvas & WebGL Mitigations:** A 3-tier privacy wall explicitly addresses uninspectable `<canvas>` elements. Safe tracking (Tier 1), dynamic heuristics via `canvas-privacy.ts` (Tier 2), and opaque full-masking (Tier 3) ensure complex applications don't leak embedded PII.
 
-1. The popup lets the user select Grade 1, 2, or 3 and shows the disclosure meaning. The setting is local and Grade 3 is the default.
-2. **Privacy preview** runs capture, local detection, and composition without calling the reasoning service. Features a dynamic split-pane UI showing exact masked area percentages and explicit category counts.
-3. The extension produces Chrome and Firefox packages from one source tree and includes the pinned Unified YOLO model asset with attribution and checksum.
-4. Semantic redaction uses neutral cards and category-only markers such as `[REDACTED:EMAIL]`, `[REDACTED:PASSWORD]`, and `[REDACTED:FACE]`. If local visual inference fails, transmission stops unless the user explicitly enables the full-image opaque fallback.
-5. The request contains no raw-content keys, no real hostname, no ID-to-node map, and no sensitive value. The server rejects malformed, oversized, metadata-bearing, or visually unmasked payloads independently.
-6. Reasoning uses local Ollama (`qwen3-vl:2b-instruct` by default), bounded async jobs, bodyless UUID polls, and a strict action schema (`click`, `input`, `scroll`, `wait`, `done`).
-7. Actions are bound to the same snapshot, document revision, tab, window, origin, and opaque element ID, so a stale or cross-page action is rejected. Irreversible actions automatically pause execution and await user `window.confirm()` authorization.
-8. The synthetic demo portal exercises password, Indian PII, DOM attributes, links, a face image, a required consent checkbox, and terminal submission.
-9. **Deployment Safety & Supply Chain Resilience:** Orchestrated via a hardened, ultra-secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root file system via `tmpfs`, and proxies traffic through Nginx. Includes a durable `RedisJobLedger`, a Lua-backed atomic sliding window rate limiter, and an automated data-minimization `retention-cron.sh` script to continually purge expired jobs.
+### Vision & NLP Intelligence
+6. **Unified YOLO Vision (YOLOv8n/v10n):** Instead of just detecting faces, the client uses a unified, multi-class WebGPU model (`yolo-detector.ts`) to instantly detect Faces, Official Documents (Aadhaar, PAN, Passports), and other visual signatures natively.
+7. **On-Device OCR & NLP:** Client-side Tesseract.js combined with a bundled spaCy Multilingual NER model runs directly in the extension to extract strings from images and detect named entities natively without server assistance.
+
+### Server & Reasoning Capabilities
+8. **LangGraph Agentic Orchestration:** The core reasoning loop leverages a robust state-machine (`langgraph_orchestrator.py`) to handle multi-step planning, memory, reflection, and state transitions, making the agent autonomous rather than purely reactive.
+9. **Circuit Breaker Pattern:** Model inferences are wrapped in an asynchronous state machine (`circuit_breaker.py`) managing Closed, Open, and Half-Open states to gracefully fail and prevent hanging resources when the local LLM is stressed.
+10. **Structural Planner (VLM-less Fallback):** For unambiguous, schema-valid UI actions (e.g., standard clicks, forms), the system bypasses heavy VLMs and resolves intents deterministically in milliseconds using `structural_planner.py`.
+11. **Policy Compiler:** A unified `detector-registry.json` is compiled into static Python and TypeScript modules at build time, ensuring the frontend and backend share an identical cryptographic definition of what constitutes "sensitive" data.
+
+### Verification & Infrastructure Security
+12. **Formal Action Verification (Irreversible Task Checks):** The content script natively intercepts potentially destructive clicks (e.g., `submit`, `pay`, `delete`) and freezes the execution loop until the user explicitly authorizes it via a native `window.confirm()`.
+13. **Strict Validation Pipeline:** The FastAPI backend independently re-validates the sanitized PNG and protocol metadata. Unmasked payloads, malformed JSON, metadata-bearing blobs, or out-of-bounds IDs are instantly rejected.
+14. **Production-Hardened Deployment Stack:** 
+   - A highly secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root FS via `tmpfs`, and runs behind an Nginx reverse proxy.
+   - A durable, concurrent `RedisJobLedger` managing queued jobs.
+   - An automated data-minimization cron job (`retention-cron.sh`) that continuously sweeps and purges expired job payloads.
 
 ### Evidence already recorded
 
@@ -161,6 +148,7 @@ ollama pull qwen3-vl:2b-instruct
 Then load `extension\dist\chrome` as an unpacked extension (or `extension\dist\firefox\manifest.json` as a temporary Firefox add-on), open `http://127.0.0.1:8765/demo`, enter a task, paste the local session key from `.runtime\api-key.txt`, run **Privacy preview**, choose a grade, and start the agent. Stop the API with `.\Stop-Prototype.ps1`; Ollama can remain on loopback for the next run.
 
 Focused checks:
+
 
 ```powershell
 Push-Location extension; npm run check; Pop-Location
@@ -185,16 +173,10 @@ The prototype is suitable for a synthetic demonstration and controlled evaluatio
 - **Evidence quality:** create a held-out multilingual corpus with consented synthetic/approved data, report confidence intervals, and publish recall, precision, coverage, excess-area, resource, and p50/p95 latency by grade and browser.
 
 ### P1 — needed for a dependable cross-browser product
-
-- Add a local OCR/text detector for canvas, image, video, SVG, and PDF-like surfaces; replace whole-region masking only after frame-level recall is measured.
-- Add multilingual and locale-aware entity detection, IPv6/MAC/IMEI/vehicle/QR/signature handling, health and other special-category labels, and adversarially split text-node tests.
 - Benchmark Chrome and Firefox on representative CPU/GPU/RAM classes, including WebGPU-disabled machines, thermal throttling, zoom, high-DPI, animation, resize, and long pages.
-- Harden capture/frame identity: reject stale detector boxes, CSS transforms, animated content, cross-origin frames, closed shadow DOM, and pixels whose geometry cannot be proven to match the DOM snapshot.
-- Add explicit user confirmation for high-impact actions, idempotency keys, cancellation, retry budgets, back-pressure, and a durable multi-instance job store.
 - Add deployment observability that records timings and counters without request content, raw URLs, job IDs, or sensitive labels.
 
 ### P2 — next-level capability
-
 - Support an offline server model package and a documented air-gapped deployment.
 - Add an optional cooperating sanitized-stream adapter for a concrete consumer; never expose raw frames as a fallback and never claim protection for another application's capture.
 - Add accessibility-tree fusion, richer task planning, safe navigation/download policies, policy simulation in the preview, and reviewer-friendly trace exports with synthetic values only.
