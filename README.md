@@ -38,17 +38,22 @@ The synthetic demo at `http://127.0.0.1:8765/demo` exercises this flow with Indi
 
 ## Architecture
 
+> **Architecture version:** Approach B (RFC evolution, September 2026). See the [Architecture Evolution](#architecture-evolution) section for the migration rationale.
+
 ```mermaid
 flowchart LR
     U[User gesture] --> T[Visible browser tab]
     T --> D[Content script<br/>DOM and safe structure]
     T --> S[Background<br/>visible screenshot]
     D --> C[Local text and field classifiers]
-    S --> F[UltraFace ONNX<br/>WebGPU then WASM]
+    S --> F[Unified vision detector<br/>YOLOv8n/v10n multi-class<br/>WebGPU then WASM]
+    S --> CV[Canvas privacy<br/>3-tier mitigation]
     C --> G[Grade 1 / 2 / 3 policy]
     F --> G
+    CV --> G
     G --> R[Fresh semantic redaction<br/>or opaque full mask]
-    R --> V[Serialized request<br/>leak and schema checks]
+    R --> SDG[Scroll-drift guard<br/>Step 0 Abort Gate]
+    SDG --> V[Serialized request<br/>leak and schema checks]
     D --> V
     V -->|one sanitized POST| B[FastAPI privacy boundary]
     B --> O[Local Ollama<br/>Qwen3-VL]
@@ -69,9 +74,10 @@ flowchart LR
     UI[Popup and privacy controls<br/>Grade 1 / 2 / 3, preview, task]
     CS[Content script<br/>safe roles, labels, bounds, state]
     BG[Background controller<br/>tab, origin, revision, deadlines]
-    DET[Local detectors<br/>DOM heuristics, regex, known values, UltraFace]
+    DET[Local detectors<br/>unified vision detector, DOM heuristics,<br/>regex, known values, canvas privacy]
     POL[Versioned privacy policy<br/>grade filter + invariant floor]
     COMP[Fresh local compositor<br/>semantic cards or opaque full mask]
+    SDG[Scroll-drift guard<br/>Step 0 Abort Gate]
     VAL[Outbound validator<br/>schema, PNG, bounds, canary, byte checks]
     EG[Single egress owner<br/>one sanitized POST + opaque polling]
     ACT[Action guard<br/>snapshot, origin, target, editability, idempotency]
@@ -85,7 +91,7 @@ flowchart LR
     POL --> COMP
     CS --> COMP
     BG --> COMP
-    COMP --> VAL --> EG
+    COMP --> SDG --> VAL --> EG
     EG --> ACT --> BG
     BG --> P
   end
@@ -176,6 +182,9 @@ The extension is the trusted privacy boundary in this prototype.
 - `extension/src/privacy.ts` applies deterministic DOM, field, regex, and known-private-value detection.
 - `extension/src/privacy-policy.ts` maps detector categories to the selected cumulative grade. A detector or model cannot downgrade an always-protected category.
 - `extension/src/face-detector.ts` runs the bundled UltraFace ONNX model locally, preferring WebGPU and falling back to single-threaded WASM when WebGPU initialization is unavailable. An inference failure fails closed (or requires the explicit full-mask fallback).
+- `extension/src/vision-detector.ts` provides the Approach B unified detection interface. Currently wraps UltraFace; designed for drop-in replacement with a YOLOv8n/v10n multi-class model that detects faces, Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures in a single forward pass.
+- `extension/src/canvas-privacy.ts` implements 3-tier canvas-app PII mitigation: visual-object redaction (default), opt-in DBNet detection-only blind masking, and manual escalation for canvas-rendered applications.
+- `extension/src/scroll-drift-guard.ts` implements the Approach B Step 0 Abort Gate: a passive debounced scroll listener that invalidates the SoM registry when the viewport changes during a VLM network call, preventing mid-flight race conditions.
 - `extension/src/image-redactor.ts` maps DOM and face boxes into screenshot pixels, merges overlaps, and draws neutral category cards onto a new canvas. The original screenshot is never the outbound image.
 - `extension/src/sanitizer-offscreen.ts` moves decoding, inference, composition, and PNG encoding off the service worker in Chrome. Firefox uses the compatible local runtime path.
 - `extension/src/egress.ts` is the only reasoning endpoint caller. It validates the final serialized bytes, sends one sanitized request, and polls using only an opaque UUID job ticket.
@@ -216,6 +225,21 @@ This project makes disclosure control a prerequisite for reasoning:
 
 The novelty is the composition of these controls into one agent loop: local visual perception, user-selected disclosure grades, fresh image redaction, sanitized structured context, one audited egress path, and revision-bound action execution. Removing any one of those controls weakens the claim; together they make privacy a property of the workflow rather than a hope that the model provider will delete data later.
 
+## Architecture evolution
+
+The project architecture evolved from Approach A to Approach B based on measurable bottleneck analysis documented in the [Architecture Trade-off Analysis RFC](https://app.notion.com/p/Architecture-Trade-off-Analysis-Approach-A-vs-Approach-B-RFC-Evaluation-3d8e39636db881a492eacc8fc4833c8b).
+
+Approach B is not a divergent design but a direct, evidence-driven evolution that resolves four concrete bottlenecks while preserving all of Approach A's strengths:
+
+| Bottleneck in Approach A | Approach B resolution |
+| --- | --- |
+| Multi-model detector cost (separate inference paths for faces, documents, templates) | Unified YOLOv8n/v10n multi-class detector: face, aadhaar_card, pan_card, voter_id, driving_license, passport, signature in one forward pass (~50% inference cost reduction) |
+| Canvas-app privacy gap (dense text PII in Google Docs/Figma unaddressed) | 3-tier mitigation: visual redaction, opt-in DBNet detection-only blind masking, manual escalation |
+| Coarse latency reporting (single flat <75ms ceiling) | Decoupled dual-metric budget: local ≤75ms median / ≤100-120ms p95 + ≤1.0-1.5s end-to-end |
+| Mid-flight race conditions (no protection between VLM target resolution and click dispatch) | Step 0 Abort Gate (passive debounced scroll listener) invalidates stale actions when viewport drifts during reasoning |
+
+The migration preserved the MV3 extension form factor, the zero-leak single-lifetime invariant, the fail-closed egress gate, and the explicit known-limitations disclosure model.
+
 ## Why privacy is necessary for browser agents
 
 Browser agents see unusually rich information: identity forms, private messages, health portals, banking screens, work dashboards, password fields, account numbers, faces, cookies, and one-time codes. A screenshot can reveal information that a DOM-only filter misses, while a DOM snapshot can reveal values that are invisible in a cropped image. The risk is also active: a compromised page can place secret text in a label, canvas, hidden frame, or prompt-injection instruction, and a compromised model can request an unsafe action.
@@ -231,7 +255,8 @@ The end-to-end implementation is intentionally split into small reviewable modul
 | Stage | Implementation | Security purpose |
 | --- | --- | --- |
 | Capture | `extension/src/content.ts`, `background.ts` | Collect visible structure and screenshot identity while keeping raw values transient |
-| Local classification | `privacy.ts`, `privacy-policy.ts`, `face-detector.ts` | Detect sensitive fields, patterns, known values, faces, and uninspectable regions locally |
+| Local classification | `privacy.ts`, `privacy-policy.ts`, `face-detector.ts`, `vision-detector.ts`, `canvas-privacy.ts` | Detect sensitive fields, patterns, known values, faces, document IDs, canvas text, and uninspectable regions locally |
+| Scroll-drift guard | `scroll-drift-guard.ts` | Approach B Step 0 Abort Gate: invalidate stale SoM registry on viewport drift during VLM calls |
 | Raster protection | `image-redactor.ts`, `sanitizer-offscreen.ts` | Create a new PNG with category-only cards or a full opaque mask |
 | Request boundary | `validation.ts`, `egress.ts` | Validate the exact serialized body and enforce one reasoning egress |
 | Server receiver | `server/app/boundary.py`, `schemas.py`, `validation.py` | Authenticate, bound, and independently validate sanitized observations |

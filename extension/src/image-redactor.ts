@@ -23,10 +23,24 @@ function placeholderFor(kind: Redaction['kind']): string {
     case 'password': return '[REDACTED:PASSWORD]';
     case 'sensitive-field': return '[REDACTED:SENSITIVE]';
     case 'face': return '[REDACTED:FACE]';
+    case 'aadhaar-card': return '[REDACTED:AADHAAR]';
+    case 'pan-card': return '[REDACTED:PAN]';
+    case 'voter-id': return '[REDACTED:VOTER_ID]';
+    case 'driving-license': return '[REDACTED:LICENSE]';
+    case 'passport': return '[REDACTED:PASSPORT]';
+    case 'signature': return '[REDACTED:SIGNATURE]';
+    case 'canvas-text': return '[REDACTED:CANVAS_TEXT]';
     case 'uninspectable-frame': return '[REDACTED:FRAME]';
     case 'uninspectable-media': return '[REDACTED:MEDIA]';
     case 'visual-fallback': return '[REDACTED:VISUAL]';
     case 'pii-text': return '[REDACTED:PII]';
+    case 'aadhaar-card': return '[REDACTED:AADHAAR]';
+    case 'pan-card': return '[REDACTED:PAN]';
+    case 'voter-id': return '[REDACTED:VOTER_ID]';
+    case 'driving-license': return '[REDACTED:DRIVING_LICENSE]';
+    case 'passport': return '[REDACTED:PASSPORT]';
+    case 'signature': return '[REDACTED:SIGNATURE]';
+    case 'canvas-text': return '[REDACTED:CANVAS_TEXT]';
   }
 }
 
@@ -244,3 +258,4 @@ export const imageRedactorInternals = {
   placeholderFor,
   uniformViewportScale,
 };
+

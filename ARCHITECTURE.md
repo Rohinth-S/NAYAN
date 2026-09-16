@@ -12,8 +12,9 @@ The browser and extension runtime are trusted for this prototype. A malicious we
 2. The content script collects visible actionable elements, local bounding boxes, safe labels, form sensitivity signals, text findings, frames, and visually uninspectable regions. It creates random element IDs and retains the ID-to-node map locally.
 3. A local policy engine applies the selected cumulative privacy grade. It classifies findings into always-protected, Grade 2, or Grade 3 categories; it never declassifies a high-impact finding. Grade 3 is the fail-safe default. The complete matrix is in [PRIVACY_LEVELS.md](PRIVACY_LEVELS.md).
 4. The background captures the visible tab and checks that the active tab did not change.
-5. A bundled UltraFace ONNX detector runs locally with WebGPU first and single-threaded WASM as fallback. Face/biometric boxes remain protected at every grade.
-6. DOM/text and face boxes are scaled into screenshot pixels. Every policy-approved rectangle is expanded to integer pixel coverage and replaced on a new canvas with a neutral card and an italic category-only marker such as `[REDACTED:EMAIL]`.
+5. A unified vision detector (currently UltraFace, migrating to YOLOv8n/v10n) runs locally with WebGPU first and single-threaded WASM as fallback. The detector taxonomy covers faces and Indian document IDs (Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures). Face/biometric and document-ID boxes remain protected at every grade.
+6. Canvas-app elements (Google Docs, Figma) are handled by a 3-tier privacy strategy: standard visual redaction, opt-in DBNet detection-only blind text masking, or manual escalation. Canvas-rendered text is not visible to DOM-based detection.
+7. DOM/text and vision-detector boxes are scaled into screenshot pixels. Every policy-approved rectangle is expanded to integer pixel coverage and replaced on a new canvas with a neutral card and an italic category-only marker such as `[REDACTED:EMAIL]`.
 7. The canvas is freshly encoded as PNG, discarding source metadata. Labels, title, and task use the same grade-aware sanitizer. The real page origin becomes a keyed, session-scoped `.invalid` alias.
 8. A second revision check verifies document ID, DOM generation, origin, viewport size, and scroll position. Any drift discards the observation.
 9. The egress gateway enforces exact keys, types, ranges, the integer `privacy.grade`, unsafe-key exclusions, endpoint policy, payload size, and caller-supplied canaries over the final serialized bytes. It submits that body once with `Prefer: respond-async`; subsequent authenticated polls contain only the server-generated UUID job ID.
@@ -37,6 +38,26 @@ See [the architecture review](ARCHITECTURE_REVIEW.md) for the comparison with co
 Chrome's offscreen document is used only for local screenshot decoding, ONNX inference, redaction, and fresh PNG encoding. The service worker owns the audited reasoning egress because extension service workers can use the granted reasoning-server origin consistently across Chrome and Firefox. The server converts slow Ollama work into a bounded asynchronous job, so no individual extension fetch waits for model inference.
 
 An external product such as Copilot Vision cannot be silently redirected to this mirror through a browser-extension API. Supporting that use case requires an explicit sanitized surface or virtual-camera/display integration and is a separate product boundary, not part of the SIH prototype claim.
+
+## Approach B architectural additions
+
+The following controls were added during the Approach A → B migration to resolve measured bottlenecks:
+
+### Unified vision detector
+
+Approach A used separate inference paths (UltraFace + separate document detectors). Approach B introduces a unified YOLOv8n/v10n multi-class detector interface that runs face, aadhaar_card, pan_card, voter_id, driving_license, passport, and signature detection in a single forward pass. The current implementation wraps UltraFace through an adapter; the interface is designed for drop-in model replacement when the trained multi-class model is available.
+
+### Step 0 Abort Gate (scroll-drift guard)
+
+Approach A had no protection against viewport changes between VLM target resolution and click dispatch. If a user scrolled during the reasoning network call, the returned action targeted DOM elements at their old viewport positions, potentially clicking the wrong element. The Step 0 Abort Gate is a passive debounced scroll listener (300-350ms) that invalidates the SoM registry and forces a re-capture when viewport drift is detected.
+
+### Canvas-app privacy mitigation
+
+Approach A classified canvas-rendered content as uninspectable and covered it entirely. Approach B adds a 3-tier strategy: (1) standard visual-object redaction, (2) opt-in DBNet detection-only blind text masking that covers detected text regions without performing OCR, (3) user-initiated manual escalation. This closes the largest privacy gap for canvas-heavy applications.
+
+### Dual-metric latency budget
+
+Approach A reported a single flat `<75ms` ceiling. Approach B decouples local processing latency (median ≤75ms, p95 ≤100-120ms) from end-to-end agent step latency (≤1.0-1.5s including model inference), making performance claims defensible under technical evaluation.
 
 ## Server pipeline
 

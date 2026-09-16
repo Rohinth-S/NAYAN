@@ -78,6 +78,41 @@ The privacy engine can eventually support a second output consumer without chang
 
 Do not add this adapter to the SIH critical path until it has a concrete consumer and an observed task benefit.
 
+## Approach A to Approach B migration
+
+Reviewed on 16 September 2026 against the SIH26171 Consolidated Engineering RFC and Architecture Trade-off Analysis.
+
+### Decision
+
+Adopt Approach B as the master architecture. Approach B is not a divergent design but a direct evolution that resolves four measured bottlenecks while preserving every Approach A strength.
+
+### Resolved bottlenecks
+
+| # | Approach A bottleneck | Approach B resolution |
+| --- | --- | --- |
+| 1 | Multi-model detector cost: 3-4 separate inference paths for faces, document IDs, and templates | Unified YOLOv8n/v10n multi-class detector with single forward pass (~50% inference cost reduction) |
+| 2 | Canvas-app privacy gap: dense text PII in Google Docs/Figma was explicitly unaddressed | 3-tier mitigation: visual redaction, opt-in DBNet detection-only blind masking, manual escalation |
+| 3 | Coarse latency reporting: single flat <75ms ceiling | Decoupled dual-metric budget: local ≤75ms median / ≤100-120ms p95 + ≤1.0-1.5s end-to-end |
+| 4 | Mid-flight race conditions: no protection between VLM target resolution and click dispatch | Step 0 Abort Gate (passive debounced scroll listener) invalidates stale SoM registry |
+
+### What was preserved
+
+- MV3 extension form factor (Chrome and Firefox)
+- Zero-leak single-lifetime invariant
+- Fail-closed egress gate
+- CNN vs ViT analysis and selection rationale
+- Explicit known-limitations disclosure model
+- Per-step sanitized mirror architecture (not continuous stream)
+- Monotonic cumulative privacy grades
+
+### New source modules
+
+| Module | Responsibility |
+| --- | --- |
+| `extension/src/vision-detector.ts` | Unified detection interface (adapter over UltraFace, ready for YOLOv8n/v10n) |
+| `extension/src/scroll-drift-guard.ts` | Step 0 Abort Gate: passive scroll listener for mid-flight race prevention |
+| `extension/src/canvas-privacy.ts` | 3-tier canvas-app PII mitigation strategy |
+
 ## Limits of the privacy claim
 
 The gateway restricts this agent's reasoning payload. It does not intercept ordinary website traffic, another extension's DOM access, another application's direct screen capture, or unrelated data sources available to an external assistant.

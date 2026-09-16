@@ -97,12 +97,21 @@ class Redaction(StrictModel):
         "pii-text",
         "sensitive-field",
         "face",
+        "aadhaar-card",
+        "pan-card",
+        "voter-id",
+        "driving-license",
+        "passport",
+        "signature",
+        "canvas-text",
         "uninspectable-frame",
         "uninspectable-media",
         "visual-fallback",
     ]
-    source: Literal["dom", "regex", "onnx", "fallback"]
+    source: Literal["dom", "regex", "onnx", "unified-detector", "dbnet", "fallback"]
     bounds: Bounds
+    # Approach B: confidence from unified detector, absent for rule-based sources.
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class PrivacyMetadata(StrictModel):
@@ -114,6 +123,10 @@ class PrivacyMetadata(StrictModel):
     # Older local fixtures omit this field and are treated as opaque-black.
     # Current extensions send semantic placeholders whenever local detection is available.
     redactionMode: Literal["semantic", "opaque"] = "opaque"
+    # Approach B: which detector architecture produced visual detections.
+    detectorArch: Literal["ultraface", "yolov8n", "yolov10n"] | None = None
+    # Approach B: canvas privacy tier applied to canvas-app elements.
+    canvasPrivacyTier: Literal["visual-redaction", "dbnet-blind-mask", "manual-escalation"] | None = None
 
     @field_validator("grade", mode="before")
     @classmethod

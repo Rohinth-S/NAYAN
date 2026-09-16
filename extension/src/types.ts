@@ -14,16 +14,64 @@ export const REDACTION_KINDS = [
   'pii-text',
   'sensitive-field',
   'face',
+  'aadhaar-card',
+  'pan-card',
+  'voter-id',
+  'driving-license',
+  'passport',
+  'signature',
+  'canvas-text',
   'uninspectable-frame',
   'uninspectable-media',
   'visual-fallback',
 ] as const;
 export type RedactionKind = (typeof REDACTION_KINDS)[number];
 
+/**
+ * Approach B unified multi-class detection taxonomy.
+ * A single YOLOv8n/v10n forward pass detects all classes simultaneously,
+ * replacing the multi-model ensemble from Approach A.
+ */
+export const VISION_DETECTION_CLASSES = [
+  'face',
+  'aadhaar_card',
+  'pan_card',
+  'voter_id',
+  'driving_license',
+  'passport',
+  'signature',
+] as const;
+export type VisionDetectionClass = (typeof VISION_DETECTION_CLASSES)[number];
+
+/** Approach B: 3-tier canvas-app PII mitigation strategy. */
+export type CanvasPrivacyTier =
+  | 'visual-redaction'    // Tier 1: standard visual-object redaction (default)
+  | 'dbnet-blind-mask'    // Tier 2: opt-in DBNet detection-only text masking
+  | 'manual-escalation';  // Tier 3: user-initiated manual review
+
+/** Approach B: scroll-drift guard state for mid-flight race prevention. */
+export type ScrollDriftState = Readonly<{
+  /** Whether the viewport has drifted since the last SoM registry was built. */
+  drifted: boolean;
+  /** Timestamp of last detected scroll event during a VLM network call. */
+  lastDriftTimestamp: number | null;
+  /** The debounce window in ms for the passive scroll listener. */
+  debounceMs: number;
+}>;
+
+/** Approach B: dual-metric latency budget (median/p95 + end-to-end). */
+export type LatencyBudget = Readonly<{
+  localMedianMs: number;    // Target: ≤75ms
+  localP95Ms: number;       // Target: ≤100-120ms
+  endToEndMs: number;       // Target: ≤1.0-1.5s
+}>;
+
 export type Redaction = Readonly<{
   kind: RedactionKind;
-  source: 'dom' | 'regex' | 'onnx' | 'fallback';
+  source: 'dom' | 'regex' | 'onnx' | 'unified-detector' | 'dbnet' | 'fallback';
   bounds: Bounds;
+  /** Approach B: confidence from unified detector, absent for rule-based sources. */
+  confidence?: number;
 }>;
 
 export type ElementRole =
@@ -74,6 +122,10 @@ export type SanitizedObservation = Readonly<{
     rawImageRetained: false;
     /** Semantic placeholders are rendered locally in the sanitized raster. */
     redactionMode?: 'semantic' | 'opaque';
+    /** Approach B: which detector architecture produced the visual detections. */
+    detectorArch?: 'ultraface' | 'yolov8n' | 'yolov10n';
+    /** Approach B: canvas privacy tier applied to canvas-app elements. */
+    canvasPrivacyTier?: CanvasPrivacyTier;
   }>;
 }>;
 
@@ -136,6 +188,10 @@ export type AgentStatus = Readonly<{
   redactionCount: number;
   lastLatencyMs: number | null;
   previewDataUrl: string | null;
+  /** Approach B: scroll-drift guard state for mid-flight race prevention. */
+  scrollDrift?: ScrollDriftState;
+  /** Approach B: dual-metric latency tracking. */
+  latencyBudget?: LatencyBudget;
 }>;
 
 export type PopupCommand =
