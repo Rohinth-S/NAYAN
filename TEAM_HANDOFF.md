@@ -153,7 +153,7 @@ Focused checks:
 ```powershell
 Push-Location extension; npm run check; Pop-Location
 Push-Location server; .\.venv\Scripts\pytest.exe; .\.venv\Scripts\ruff.exe check .; Pop-Location
-$env:PYTHONPATH = (Resolve-Path .\evaluation).Path
+$env:PYTHONPATH = "$((Resolve-Path .\evaluation).Path);$((Resolve-Path .\server).Path)"
 & .\server\.venv\Scripts\python.exe -m pytest .\evaluation\tests -q
 ```
 
