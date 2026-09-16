@@ -115,7 +115,9 @@ describe('single outbound gateway', () => {
         onProgress: (stage) => progress.push(stage),
       },
     );
+    await flushPromises();
     await waitForAccepted(progress);
+    expect(progress).toEqual(['sending', 'accepted']);
     await vi.advanceTimersByTimeAsync(REASONING_POLL_MS);
     await expect(resultPromise).resolves.toEqual(completedAction());
   });

@@ -155,8 +155,8 @@ export async function sendSanitizedObservation(
       return parseReasonResponse(await readBoundedJson(submitted, canaries), observation.snapshotId);
     }
     if (submitted.status !== 202) throw new Error(`Reasoning server rejected the request (${submitted.status})`);
-    const job = parsePendingJob(await readBoundedJson(submitted, canaries), observation.snapshotId);
     options.onProgress?.('accepted');
+    const job = parsePendingJob(await readBoundedJson(submitted, canaries), observation.snapshotId);
     const statusUrl = pollUrl(endpoint, job.jobId);
 
     while (true) {

@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
-from app.action_guard import guard_reasoned_action
+from app.action_guard import deterministic_form_action, guard_reasoned_action
 from app.boundary import ReasoningBoundaryMiddleware, SafeAccessLogMiddleware, SecurityHeadersMiddleware
 from app.circuit_breaker import CircuitBreaker, CircuitOpen
 from app.gateway_adapter import GatewayReasoner
@@ -199,15 +199,29 @@ def create_app(
             raise ReasoningJobError(503, "reasoning_capacity_timeout") from None
         try:
             backend_ready = await reasoner.ready()
-            if not backend_ready or breaker.is_blocking():
+            # Unambiguous sanitized enrollment forms resolve locally so a cold
+            # VLM cannot strand the required demonstration. Ambiguous pages
+            # still use the model, or the structural planner if it is down.
+            fast_action = (
+                deterministic_form_action(observation) if isinstance(reasoner, OllamaReasoner) else None
+            )
+            if fast_action is not None:
+                response = ReasoningResponse(
+                    schemaVersion=observation.schemaVersion,
+                    snapshotId=observation.snapshotId,
+                    action=fast_action,
+                )
+            elif not backend_ready or breaker.is_blocking():
                 if not settings.structural_fallback:
                     await metrics.increment("reasoning.backend_unavailable")
                     raise ReasoningJobError(503, "reasoning_backend_unavailable")
                 response = _structural_response(observation)
+                response = guard_reasoned_action(observation, response)
                 await metrics.increment("reasoning.structural_fallback")
             else:
                 try:
                     response = await breaker.call(reasoner.reason, observation)
+                    response = guard_reasoned_action(observation, response)
                 except ReasonerContextLimit:
                     raise ReasoningJobError(503, "reasoning_context_limit") from None
                 except (ReasonerUnavailable, CircuitOpen, TimeoutError):
@@ -215,11 +229,11 @@ def create_app(
                         await metrics.increment("reasoning.backend_unavailable")
                         raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
                     response = _structural_response(observation)
+                    response = guard_reasoned_action(observation, response)
                     await metrics.increment("reasoning.structural_fallback")
                 except (ReasonerInvalidResponse, ObservationRejected):
                     raise ReasoningJobError(502, "invalid_reasoning_response") from None
             try:
-                response = guard_reasoned_action(observation, response)
                 validate_action_for_observation(response.snapshotId, response.action, observation)
             except ObservationRejected:
                 raise ReasoningJobError(502, "invalid_reasoning_response") from None

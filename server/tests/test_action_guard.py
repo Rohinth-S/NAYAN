@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from conftest import CONSENT_ID, SUBMIT_ID, observation_payload
 
-from app.schemas import BrowserAction, ReasoningResponse
+from app.action_guard import deterministic_form_action
+from app.schemas import BrowserAction, ReasoningResponse, SanitizedObservation
 
 
 def _form_payload(
@@ -34,6 +35,22 @@ def _form_payload(
         ],
     )
     return payload
+
+
+def test_deterministic_form_planner_clicks_pending_checkbox_without_submit_visible() -> None:
+    payload = _form_payload(checked=False)
+    payload["elements"] = [payload["elements"][0]]
+    result = deterministic_form_action(SanitizedObservation.model_validate(payload))
+    assert result is not None
+    assert result.type == "click" and result.elementId == CONSENT_ID
+
+
+def test_deterministic_form_planner_scrolls_after_checked_checkbox() -> None:
+    payload = _form_payload(checked=True)
+    payload["elements"] = [payload["elements"][0]]
+    result = deterministic_form_action(SanitizedObservation.model_validate(payload))
+    assert result is not None
+    assert result.type == "scroll" and result.direction == "down" and result.amount == 450
 
 
 @pytest.mark.asyncio

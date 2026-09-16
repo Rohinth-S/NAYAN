@@ -123,7 +123,7 @@ export function validateObservation(
   exactKeys(
     value.privacy,
     ['grade', 'detectorBackend', 'visualFallback', 'rawImageRetained'],
-    ['redactionMode', 'registryDigest'],
+    ['redactionMode', 'registryDigest', 'detectorArch', 'canvasPrivacyTier'],
   );
   if (!isPrivacyGrade(value.privacy.grade)) throw new Error('Invalid privacy grade');
   if (!['webgpu', 'wasm', 'missing', 'error'].includes(String(value.privacy.detectorBackend))) throw new Error('Invalid detector backend');
@@ -137,6 +137,18 @@ export function validateObservation(
     && !/^sha256:[0-9a-f]{64}$/.test(String(value.privacy.registryDigest))
   ) {
     throw new Error('Invalid registry digest');
+  }
+  if (
+    value.privacy.detectorArch !== undefined
+    && !['ultraface', 'yolov8n', 'yolov10n'].includes(String(value.privacy.detectorArch))
+  ) {
+    throw new Error('Invalid detector architecture');
+  }
+  if (
+    value.privacy.canvasPrivacyTier !== undefined
+    && !['visual-redaction', 'dbnet-blind-mask', 'manual-escalation'].includes(String(value.privacy.canvasPrivacyTier))
+  ) {
+    throw new Error('Invalid canvas privacy tier');
   }
   if (value.privacy.redactionMode === 'semantic' && value.privacy.visualFallback !== 'none') {
     throw new Error('Semantic redaction cannot be used with full-mask fallback');
