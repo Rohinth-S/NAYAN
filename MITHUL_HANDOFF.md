@@ -6,6 +6,27 @@ Date: 2026-09-16
 
 The working tree contains the local privacy perception and model portability work assigned to Mithul. It is ready to be recorded as one commit on `main` after the verification commands below. The implementation keeps raw page content local, uses pinned model revisions and hashes, and sends only sanitized observations to the reasoning adapter.
 
+## Perception pipeline
+
+```mermaid
+flowchart LR
+    FRAME[Local frame + text regions] --> BUDGET[Pixel, text, character,<br/>and time budgets]
+    BUDGET --> OCR[Tesseract OCR]
+    BUDGET --> NER[Transformers.js NER]
+    BUDGET --> BAR[ZXing barcode bounds]
+    OCR --> CONF[Confidence and bounds validation]
+    NER --> CONF
+    BAR --> CONF
+    CONF --> POLICY[Grade policy + registry]
+    POLICY --> MASK[Redaction findings only]
+    MASK --> PNG[Fresh sanitized PNG]
+    CONF -. invalid / low confidence .-> BLOCK[Generic failure<br/>and zero egress]
+```
+
+The perception bundle is a local classifier, not a second network path. Raw OCR
+strings, entities, and decoded barcode values are transient and are never part
+of the reasoning payload.
+
 Implemented areas:
 
 - Local OCR (English and Hindi), NER, visual inference, and barcode detection behind the perception feature flag.
@@ -42,6 +63,18 @@ The latest integrated release gate records 157 server tests, 92 extension tests,
 and 32 evaluation tests passing. The local evaluation report records 12
 synthetic examples, OCR exact match 11/12, OCR p95 134.02 ms, and NER p95
 252.92 ms. These are development measurements, not production accuracy claims.
+
+```mermaid
+xychart-beta
+    title "Local perception latency measurements"
+    x-axis ["OCR p95", "NER p95"]
+    y-axis "Milliseconds" 0 --> 280
+    bar [134.02, 252.92]
+```
+
+The same report records OCR exact-match at 11/12 (91.7%). The JSON evidence
+remains authoritative and should be interpreted with its corpus and hardware
+limitations.
 
 ## Remaining work
 

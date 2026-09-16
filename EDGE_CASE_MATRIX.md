@@ -8,6 +8,26 @@ matter for the SIH26171 prototype. “Handled” means the implementation either
 sanitizes the case or blocks the request. It does not mean universal PII
 detection.
 
+## Universal failure decision
+
+```mermaid
+flowchart TD
+    EVENT[Page, detector, browser,<br/>network, or model event] --> CONTEXT{Snapshot still current?}
+    CONTEXT -- No --> RECAPTURE[Discard and recapture]
+    CONTEXT -- Yes --> SAFE{Can the data and action<br/>be proven safe?}
+    SAFE -- No --> BLOCK[Block / zero egress]
+    SAFE -- Yes --> MASK{Does the region need masking?}
+    MASK -- Yes --> REDACT[Fresh semantic or opaque mask]
+    MASK -- No --> STRUCTURE[Retain safe structure]
+    REDACT --> VALIDATE[Exact serialized validation]
+    STRUCTURE --> VALIDATE
+    VALIDATE -- Fail --> BLOCK
+    VALIDATE -- Pass --> SEND[Send sanitized observation]
+```
+
+Every row in the matrix should terminate in one of four observable outcomes:
+recapture, local redaction, zero egress, or a validated sanitized request.
+
 | Edge case | Required behavior | Current implementation / test location |
 | --- | --- | --- |
 | Password, OTP, payment, email, phone, address, or identity fields | Mask locally; never serialize the value | DOM sensitivity rules and local text rules in `extension/src/content.ts` and `extension/src/privacy.ts`; egress tests |

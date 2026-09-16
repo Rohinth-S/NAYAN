@@ -7,6 +7,19 @@ This document defines the client-side privacy policy used by the SIH26171 protot
 
 The local detector assigns a category; a deterministic policy then decides whether that category must be redacted at the selected grade. A model or website can propose a category, but it cannot lower the category or override an always-protected decision. Conflicting detections use the most protective result.
 
+## Grade ladder at a glance
+
+```mermaid
+flowchart LR
+    G1[Grade 1<br/>Essential] -->|adds protection for| G2[Grade 2<br/>Balanced]
+    G2 -->|adds protection for| G3[Grade 3<br/>Strict default]
+    FLOOR[Invariant floor<br/>secrets, IDs, finances,<br/>faces, known values, unknown media] -. applies at every grade .-> G1
+    FLOOR -.-> G2
+    FLOOR -.-> G3
+```
+
+The grades are disclosure choices, not three different detector implementations. The local detector produces findings once; the policy assigns the minimum grade for each category and the selected grade decides whether the finding is hidden.
+
 ## Non-downgradable protection at every grade
 
 The following classes are always redacted when detected. The user cannot make them shareable by choosing a lower grade:
@@ -22,6 +35,21 @@ The following classes are always redacted when detected. The user cannot make th
 | Uninspectable or unknown visual regions | Cross-origin frames, canvas/video, embedded objects, image text, CSS-generated content or a failed visual detector | Conservative DOM/media classification and full-mask fallback |
 
 Unknown content is not treated as low sensitivity. If the client cannot establish that a region is safe with the available detector, it masks that region at every grade.
+
+### Category decision graph
+
+```mermaid
+flowchart TD
+    FINDING[Local finding] --> VALID{Bounds, confidence,<br/>and category valid?}
+    VALID -- No --> UNKNOWN[Uninspectable / block]
+    VALID -- Yes --> FLOOR{Invariant floor category?}
+    FLOOR -- Yes --> HIDE[Redact at every grade]
+    FLOOR -- No --> THRESHOLD[Read minimumPrivacyGrade]
+    THRESHOLD --> SELECTED{minimum grade ≤ selected grade?}
+    SELECTED -- Yes --> HIDE
+    SELECTED -- No --> KEEP[Retain only sanitized safe context]
+    UNKNOWN --> HIDE
+```
 
 ## Grade 1 — Essential / Personalized
 
@@ -77,6 +105,25 @@ For every screenshot step, the client applies the following sequence locally:
 8. Validate the exact serialized request and allow the single reasoning egress only if all checks pass.
 
 The request contains the numeric `privacy.grade` so the server can enforce the same versioned policy and understand why some context is intentionally visible. It never receives the original values, detector input, user-declared private-value list or ID-to-DOM mapping.
+
+### Local policy pipeline
+
+```mermaid
+sequenceDiagram
+    participant Page as Page content
+    participant Detect as Local detectors
+    participant Policy as Grade policy
+    participant Raster as Fresh compositor
+    participant Gate as Egress gate
+    participant Server as Reasoning service
+
+    Page->>Detect: DOM, labels, pixels, metadata
+    Detect->>Policy: Category findings
+    Policy->>Raster: Protected bounds + safe labels
+    Raster->>Gate: New semantic or opaque PNG
+    Gate->>Gate: Canary, schema, revision, byte checks
+    Gate->>Server: Sanitized observation only
+```
 
 ## Current coverage and limits
 

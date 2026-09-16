@@ -2,6 +2,30 @@
 
 The extension is the trusted privacy boundary. The server is treated as an untrusted recipient that is allowed to see only the schema below.
 
+## Protocol lifecycle
+
+```mermaid
+sequenceDiagram
+    participant C as Extension client
+    participant B as Boundary middleware
+    participant V as Protocol validator
+    participant J as Bounded job store
+    participant M as Ollama/provider
+
+    C->>B: POST /v1/reason<br/>sanitized observation
+    B->>V: Authenticate + parse
+    V->>V: Schema, PNG, grade, canary, digest checks
+    V->>J: Admit validated observation
+    J-->>C: 202 pending + opaque jobId
+    C->>J: GET /v1/reason/{jobId}<br/>Prefer: wait=10
+    J->>M: Sanitized context only
+    M-->>J: Strict action JSON
+    J-->>C: 200 action result
+    C->>C: Snapshot, revision, target, confirmation checks
+```
+
+Only the first request carries an observation body. Polling is a capability lookup by opaque UUID; it is not another channel for page data.
+
 ## Request
 
 `POST /v1/reason` with `Content-Type: application/json` and an `X-Privacy-Agent-Key` header whenever server authentication is configured.
@@ -65,6 +89,23 @@ The extension polls `GET /v1/reason/{jobId}` with the same authentication and `P
 
 No other properties are permitted. `state.required` is structural form metadata only; it never carries a field value. `redactionMode: "semantic"` means each sensitive rectangle is replaced locally with a neutral background and an italic category-only marker such as `[REDACTED:EMAIL]`; `redactionMode: "opaque"` is reserved for the explicit full-mask fallback. Older clients may omit `redactionMode` and the server treats it as `opaque`. Older clients may omit `grade` and the server treats it as the fail-safe Grade 3. Older clients may omit `state.required` and the server treats it as `false`. Clients may send `privacy.registryDigest` as `sha256:` plus 64 lowercase hex characters; when present the server requires an exact match with the compiled detector-registry digest, and when absent the server keeps the existing invariant-floor scan. `page.origin` is a keyed, session-scoped alias with the exact shape `https://site-<20 lowercase hex>.invalid`; it does not reveal the visited hostname and deliberately contains no path, query, fragment, credentials, or full URL. Values, HTML, selectors, DOM attributes, cookies, local file paths, original image bytes, and secret maps are forbidden. The HTTP `Origin` header used for server CORS is separate from this aliased observation field.
 
+### What crosses the boundary
+
+```mermaid
+flowchart LR
+    subgraph LOCAL[Local extension]
+        RAW[Raw screenshot, DOM values,<br/>selectors, cookies, real URL]
+        SAN[Sanitized PNG + safe structure]
+        RAW -. forbidden .-> DROP[Discard / never serialize]
+        SAN --> REQUEST[Versioned request]
+    end
+    REQUEST --> SERVER[Reasoning server]
+    SERVER --> ACTION[One strict action]
+    ACTION --> LOCAL_GUARD[Local snapshot and target guard]
+```
+
+The diagram is a data-flow constraint, not just a component diagram: the forbidden raw branch ends before request construction.
+
 ## User-selected privacy grade
 
 `privacy.grade` is a cumulative local disclosure policy. It controls which otherwise-useful context the local classifier may retain in the sanitized DOM capsule and raster. The classifier applies the selected grade before encoding or network transport; the server receives the grade only to interpret the remaining context and to apply a defense-in-depth text check. A grade never authorizes the client or server to reconstruct a placeholder, read a hidden value, or send a private form value to the reasoning model. The value is an integer `1`, `2`, or `3`; an omitted value is interpreted as `3`, while any other type or value is rejected.
@@ -106,8 +147,40 @@ Exactly one action is returned. Allowed actions and their complete field sets ar
 
 No other action properties are permitted. The extension rejects a mismatched snapshot, changed document or viewport, missing element, disallowed field, invalid range, or stale DOM target. Version 1.0 does not support inserting private values: private form values remain local and are never requested from the reasoning server.
 
+### Action grammar
+
+```mermaid
+flowchart TD
+    RESPONSE[Model response] --> SHAPE{Exactly one allowed action?}
+    SHAPE -- No --> REJECT[Reject response]
+    SHAPE -- Yes --> SNAP{Snapshot and document match?}
+    SNAP -- No --> REJECT
+    SNAP -- Yes --> TARGET{Target visible, connected, enabled, editable as required?}
+    TARGET -- No --> REJECT
+    TARGET -- Yes --> RISK{Destructive or irreversible?}
+    RISK -- Yes --> CONFIRM[Native user confirmation]
+    RISK -- No --> EXECUTE[Execute locally]
+    CONFIRM -- Approved --> EXECUTE
+    CONFIRM -- Denied --> STOP[Stop safely]
+```
+
 ## Failure behavior
 
 Capture, inference, decoding, redaction, validation, encoding, or transport preparation failure produces no reasoning request. Uninspectable visual regions receive semantic placeholders when local detection is available. If detection is unavailable, the explicit full-image opaque fallback is required. The sanitized image is encoded into a new PNG; an overlay on top of the original pixels is not a valid outbound artifact.
 
 The guarantee applies to reasoning-server traffic. Normal traffic between the visited page and its own servers remains visible to that site and is governed separately.
+
+### Failure contract
+
+```mermaid
+flowchart TD
+    EVENT[Capture, detector, encoder,<br/>validator, transport, or model event] --> OK{Can the observation<br/>be proven safe?}
+    OK -- Yes --> SEND[Send sanitized request]
+    OK -- No --> FALLBACK{Explicit opaque fallback enabled?}
+    FALLBACK -- Yes --> OPAQUE[Fresh full-image opaque mask]
+    OPAQUE --> VALIDATE[Revalidate exact bytes]
+    VALIDATE --> SEND
+    FALLBACK -- No --> ZERO[Zero egress and report blocked]
+```
+
+The client never retries by relaxing the privacy grade or sending the original pixels.

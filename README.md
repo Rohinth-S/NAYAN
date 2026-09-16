@@ -144,6 +144,36 @@ The server receives a versioned observation containing a fresh PNG, safe structu
 
 The privacy guarantee is scoped to this extension-to-configured-reasoning-service channel. It does not control ordinary website traffic, another extension, another application, a compromised browser, external screen sharing, or a provider outside the configured protocol.
 
+### Read the system in four layers
+
+```mermaid
+flowchart TB
+    subgraph L1[1. Observe locally]
+        P[Live webpage] --> C[Content script]
+        P --> S[Visible screenshot]
+        C --> CAPS[Safe DOM capsule]
+    end
+    subgraph L2[2. Protect locally]
+        CAPS --> D[DOM, regex, known-value, face, optional perception]
+        S --> D
+        D --> G[Selected privacy grade]
+        G --> R[Fresh semantic or opaque redaction]
+    end
+    subgraph L3[3. Reason remotely]
+        R --> V[Schema, PNG, canary, revision, byte gates]
+        V --> E[Single sanitized egress]
+        E --> Q[FastAPI validation + bounded job]
+        Q --> M[Ollama or sanitized provider]
+    end
+    subgraph L4[4. Act safely]
+        M --> A[Strict action JSON]
+        A --> X[Live snapshot and confirmation guard]
+        X --> P
+    end
+```
+
+The first two layers run on the user's machine. The reasoning service only receives the output of the protection layer. The final layer returns to the live page through a local opaque-ID map; the model never receives selectors or DOM handles.
+
 ### One step, end to end
 
 ```mermaid
@@ -175,6 +205,28 @@ sequenceDiagram
 ```
 
 If the page scrolls, resizes, navigates, changes origin, or otherwise invalidates the captured context during reasoning, the returned action is discarded and the extension captures a fresh step.
+
+### The privacy decision ladder
+
+```mermaid
+flowchart TD
+    OBS[Observed page pixels and structure] --> INSPECT{Can the region be inspected safely?}
+    INSPECT -- No --> UNKNOWN[Classify as uninspectable]
+    INSPECT -- Yes --> FIND[Run local field, text, face, and optional perception detectors]
+    UNKNOWN --> FLOOR[Invariant protection floor]
+    FIND --> CAT[Assign a registry category]
+    CAT --> GRADE{Does the selected grade hide it?}
+    GRADE -- Yes --> MASK[Replace with category-only mask]
+    GRADE -- No --> SAFE[Retain only the minimum safe context]
+    FLOOR --> MASK
+    MASK --> FRESH[Encode a new PNG]
+    SAFE --> FRESH
+    FRESH --> GATE{All local gates pass?}
+    GATE -- No --> BLOCK[Zero egress or explicit opaque fallback]
+    GATE -- Yes --> SEND[Send sanitized observation]
+```
+
+The ladder explains why a lower grade never disables the invariant floor: unknown or high-impact data reaches the mask path before the grade-specific disclosure choice is considered.
 
 ## Client extension
 
@@ -264,6 +316,31 @@ The model can return only these actions:
 The content script rejects arbitrary JavaScript, selectors, URLs, keyboard injection, unknown action fields, stale snapshot IDs, stale document revisions, cross-origin targets, hidden/detached elements, disabled/read-only controls, and duplicate in-flight actions.
 
 Clicks with destructive or irreversible labels such as submit, pay, delete, checkout, confirm, or navigation pause for native `window.confirm()` approval. The model cannot silently bypass that confirmation.
+
+### Agent state machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Capturing: Preview or Start
+    Capturing --> Sanitizing: DOM + PNG captured
+    Sanitizing --> Blocked: Detector, revision, or validation failure
+    Sanitizing --> Reasoning: Sanitized observation accepted
+    Reasoning --> Capturing: Scroll/resize/navigation drift
+    Reasoning --> Executing: Strict action returned
+    Reasoning --> Error: Timeout or unavailable service
+    Executing --> Confirming: Destructive action
+    Executing --> Capturing: Safe action completed
+    Confirming --> Capturing: User approves
+    Confirming --> Blocked: User denies
+    Capturing --> Done: Task already complete
+    Executing --> Done: Model returns done
+    Done --> [*]
+    Blocked --> [*]
+    Error --> [*]
+```
+
+The state machine is bounded by the configured maximum step count and total operation deadline. It never retries by relaxing redaction.
 
 ### Local privacy policy
 
@@ -625,6 +702,18 @@ The evidence is synthetic or aggregate:
 | `evidence/sih-demo-package.json` | Synthetic grade matrix, demonstrations, data-handling statement, and limitations. |
 
 These results prove repository contracts and the controlled demo. They do not prove universal PII recall, all-language coverage, all-browser/device behavior, or public deployment security.
+
+### Verification scorecard
+
+```mermaid
+xychart-beta
+    title "Automated test suites in the latest release gate"
+    x-axis ["Extension", "Server", "Evaluation"]
+    y-axis "Passing tests" 0 --> 170
+    bar [92, 157, 32]
+```
+
+The bar chart shows test volume, not a privacy score. Accuracy, recall, redaction IoU, excess area, resource use, and live browser coverage require separate evidence.
 
 Run the aggregate local checks:
 

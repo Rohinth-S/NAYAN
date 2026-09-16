@@ -179,6 +179,31 @@ The following remain local and are not sent in the reasoning request:
 
 The privacy guarantee is scoped to this extension-to-configured-reasoning-server path. It does not control ordinary website traffic, another extension, another application, a compromised browser, or an external screen recorder.
 
+### Handoff visual: one task run
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Capturing: User starts or previews
+    Capturing --> Sanitizing: DOM + screenshot ready
+    Sanitizing --> Blocked: Local detector/validation failure
+    Sanitizing --> Reasoning: Sanitized packet accepted
+    Reasoning --> Recapture: Page drift detected
+    Reasoning --> Executing: Strict action returned
+    Recapture --> Capturing: Settle and retry locally
+    Executing --> Confirming: Destructive action
+    Executing --> Capturing: Safe action completed
+    Confirming --> Capturing: User approves
+    Confirming --> Blocked: User denies
+    Executing --> Done: Model returns done
+    Capturing --> Error: Deadline or user stop
+    Done --> [*]
+    Blocked --> [*]
+    Error --> [*]
+```
+
+This state graph is bounded by the configured step limit and operation deadline. It never retries by relaxing the selected privacy grade.
+
 ## 4. Runtime sequence
 
 Each agent step follows this order:
@@ -204,6 +229,23 @@ Each agent step follows this order:
 15. The extension disables the page-owned scroll guard after the response. If drift occurred, it discards the response and captures a new step.
 16. The content script verifies the action against the current snapshot/document/revision and live DOM. Destructive clicks require a native confirmation.
 17. The action executes, status/activity metrics update, and the loop repeats until `done`, the maximum step count, timeout, user stop, or a fail-closed error.
+
+### Handoff visual: server admission
+
+```mermaid
+flowchart TD
+    SUBMIT[Sanitized POST] --> AUTH[Auth + Origin + size checks]
+    AUTH --> CONTRACT[Strict schema + PNG + policy digest]
+    CONTRACT --> QUEUE[Bounded job admission]
+    QUEUE --> MODEL[Ollama/provider + circuit breaker]
+    MODEL --> RESULT[Strict action result]
+    RESULT --> POLL[Opaque ticket poll]
+    POLL --> LOCAL[Local action guard]
+    LOCAL --> ACT[Execute or recapture]
+    CONTRACT -. invalid .-> STOP[Reject before model]
+    QUEUE -. saturated .-> STOP
+    MODEL -. timeout/malformed .-> STOP
+```
 
 ## 5. Extension behavior in detail
 

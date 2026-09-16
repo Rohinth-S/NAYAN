@@ -4,6 +4,21 @@ This report records the SIH26171 prototype evidence available on 16 September 20
 
 The current raster policy is semantic redaction: locally detected sensitive regions are replaced by neutral cards with italic category-only markers. Grade 3 is the default. A detector failure can use the explicit opaque full-image fallback.
 
+## Evidence pipeline
+
+```mermaid
+flowchart LR
+    SRC[Source code] --> UNIT[Extension, server,<br/>evaluation tests]
+    UNIT --> PACK[Chrome + Firefox<br/>package builds]
+    PACK --> GATE[Governance, security,<br/>SBOM, metadata gates]
+    GATE --> SYN[Synthetic deterministic<br/>browser flow]
+    SYN --> LIVE[Authenticated local<br/>Ollama smoke/e2e]
+    LIVE --> REPORT[Aggregate evidence files]
+    REPORT --> CLAIMS[Scoped claims only]
+```
+
+The pipeline separates contract evidence from model-accuracy evidence. Passing the release gate proves that the repository checks pass; it does not turn a small synthetic corpus into universal PII recall.
+
 ## Evidence snapshot
 
 | Area | Observed result | Evidence and interpretation |
@@ -29,6 +44,31 @@ The final package hashes are recorded after the last `npm run check`:
 | `sih-private-agent-firefox-0.1.0.zip` | `82F5901765E0281800257A278FC571D03EB6851307B47D07C4407C1A308420F7` (6,629,394 bytes) |
 
 The deterministic browser runs observed the WASM fallback. Chrome uses an offscreen document for local ONNX inference; Firefox uses the direct local runtime. A WebGPU-capable run should be recorded separately rather than inferred from the WASM result. The automated release gate now also validates that production configuration requires Redis, a pinned model digest, authentication, and disabled structural fallback.
+
+### Automated suite scorecard
+
+```mermaid
+xychart-beta
+    title "Passing automated tests"
+    x-axis ["Extension", "Server", "Evaluation"]
+    y-axis "Tests" 0 --> 170
+    bar [92, 157, 32]
+```
+
+### Evidence versus claim boundary
+
+```mermaid
+flowchart TD
+    TESTS[92 + 157 + 32 automated tests] --> CONTRACTS[Protocol, privacy, action,<br/>PNG, queue, and source invariants]
+    E2E[Synthetic deterministic +<br/>local Ollama runs] --> DEMO[Controlled demo works]
+    PERCEPTION[Small local OCR/NER corpus] --> EXPERIMENT[Development measurements]
+    CONTRACTS -->|supports| CLAIM1[Implementation contracts pass]
+    DEMO -->|supports| CLAIM2[Synthetic task completes]
+    EXPERIMENT -->|supports| CLAIM3[Model path is measurable]
+    CLAIM1 -. does not prove .-> UNIVERSAL[Universal PII recall,<br/>all browsers, or production security]
+    CLAIM2 -. does not prove .-> UNIVERSAL
+    CLAIM3 -. does not prove .-> UNIVERSAL
+```
 
 ## What the evidence establishes
 

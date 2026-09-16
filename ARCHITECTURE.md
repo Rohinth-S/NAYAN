@@ -6,6 +6,23 @@ The reasoning service is outside the trusted client boundary. A compromise, logg
 
 The browser and extension runtime are trusted for this prototype. A malicious website is treated as untrusted input: its text cannot alter the server system prompt or the local action policy. The operating system, browser itself, extension signing pipeline, and dependencies are outside the threat model and need separate supply-chain controls before deployment.
 
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    PAGE[Untrusted page] --> OBS[Local observation]
+    OBS --> FUSE[DOM + visual + policy fusion]
+    FUSE --> REDACT[Fresh redacted raster]
+    REDACT --> GATE[Client validation gate]
+    GATE -->|sanitized only| SERVER[Untrusted reasoning service]
+    SERVER --> ACTION[Strict action]
+    ACTION --> VERIFY[Local target and revision verification]
+    VERIFY --> PAGE
+    GATE -. failure .-> STOP[Zero egress / opaque fallback]
+```
+
+The critical architectural property is the direction of the arrows: the reasoning service is downstream of local classification and redaction, never upstream of them.
+
 ## Client pipeline
 
 1. The popup grants one use of `activeTab` and optional access to the configured reasoning origin.
@@ -15,11 +32,39 @@ The browser and extension runtime are trusted for this prototype. A malicious we
 5. The local visual detector is asset-gated: the unified YOLOv8n/v10n multi-class path runs with WebGPU first and WASM fallback when `yolo-privacy-v1.onnx` is packaged; otherwise the checked-in UltraFace adapter provides the fallback face path. The default repository build therefore does not claim document-ID model coverage.
 6. Canvas-app elements (Google Docs, Figma) are handled by a 3-tier privacy strategy: standard visual redaction, opt-in DBNet detection-only blind text masking, or manual escalation. Canvas-rendered text is not visible to DOM-based detection.
 7. DOM/text and vision-detector boxes are scaled into screenshot pixels. Every policy-approved rectangle is expanded to integer pixel coverage and replaced on a new canvas with a neutral card and an italic category-only marker such as `[REDACTED:EMAIL]`.
-7. The canvas is freshly encoded as PNG, discarding source metadata. Labels, title, and task use the same grade-aware sanitizer. The real page origin becomes a keyed, session-scoped `.invalid` alias.
-8. A second revision check verifies document ID, DOM generation, origin, viewport size, and scroll position. Any drift discards the observation.
-9. The egress gateway enforces exact keys, types, ranges, the integer `privacy.grade`, unsafe-key exclusions, endpoint policy, payload size, and caller-supplied canaries over the final serialized bytes. It submits that body once with `Prefer: respond-async`; subsequent authenticated polls contain only the server-generated UUID job ID.
-10. Short submit/poll requests avoid Chrome MV3's long-fetch service-worker limit. Each poll waits on the server for at most 10 seconds and returns immediately on completion, reducing wakeups without approaching the browser limit. A bounded extension-API heartbeat runs only while one reasoning operation is active, and the entire operation expires after 100 seconds.
-11. The returned action must echo the current snapshot ID and match its exact action-specific schema. The content script verifies the live document again immediately before acting.
+8. The canvas is freshly encoded as PNG, discarding source metadata. Labels, title, and task use the same grade-aware sanitizer. The real page origin becomes a keyed, session-scoped `.invalid` alias.
+9. A second revision check verifies document ID, DOM generation, origin, viewport size, and scroll position. Any drift discards the observation.
+10. The egress gateway enforces exact keys, types, ranges, the integer `privacy.grade`, unsafe-key exclusions, endpoint policy, payload size, and caller-supplied canaries over the final serialized bytes. It submits that body once with `Prefer: respond-async`; subsequent authenticated polls contain only the server-generated UUID job ID.
+11. Short submit/poll requests avoid Chrome MV3's long-fetch service-worker limit. Each poll waits on the server for at most 10 seconds and returns immediately on completion, reducing wakeups without approaching the browser limit. A bounded extension-API heartbeat runs only while one reasoning operation is active, and the entire operation expires after 100 seconds.
+12. The returned action must echo the current snapshot ID and match its exact action-specific schema. The content script verifies the live document again immediately before acting.
+
+### Client trust-boundary sequence
+
+```mermaid
+sequenceDiagram
+    participant Page as Untrusted page
+    participant CS as Content script
+    participant Local as Offscreen/direct sanitizer
+    participant BG as Background controller
+    participant E as Egress owner
+    participant API as FastAPI
+    participant Model as Ollama/provider
+
+    CS->>BG: Safe DOM capsule + document revision
+    BG->>Local: Visible PNG + local task context
+    Local->>Local: Detect, grade, redraw, encode
+    Local-->>BG: Fresh PNG + redaction metadata
+    BG->>CS: Verify revision and viewport
+    CS-->>BG: Stable or drifted
+    BG->>E: Validated observation
+    E->>API: One sanitized POST
+    API->>Model: Sanitized context only
+    Model-->>API: Strict action JSON
+    API-->>E: Action or opaque ticket result
+    E-->>BG: Validated response
+    BG->>CS: Snapshot-bound action
+    CS->>Page: Native click/input/scroll
+```
 
 ## Architecture decision: direct capture and sanitization with per-step snapshots
 
@@ -59,6 +104,17 @@ Approach A classified canvas-rendered content as uninspectable and covered it en
 
 Approach A reported a single flat `<75ms` ceiling. Approach B decouples local processing latency (median ≤75ms, p95 ≤100-120ms) from end-to-end agent step latency (≤1.0-1.5s including model inference), making performance claims defensible under technical evaluation.
 
+```mermaid
+flowchart TB
+    CAPTURE[Capture + DOM collection] --> LOCAL[Local processing budget]
+    LOCAL -->|median / p95| REDACT[Redaction + PNG encoding]
+    REDACT --> NETWORK[Submit + bounded poll]
+    NETWORK --> MODEL[Model reasoning]
+    MODEL --> ACTION[Action verification + execution]
+    LOCAL -. measured separately .-> LOCAL_METRIC["Local metric<br/>target ≤75ms median<br/>≤100–120ms p95"]
+    ACTION -. measured separately .-> E2E_METRIC["End-to-end metric<br/>target ≤1.0–1.5s"]
+```
+
 ## Server pipeline
 
 1. ASGI boundary middleware limits the body before JSON parsing and enforces content type, configured API-key authentication, and the browser Origin policy.
@@ -70,6 +126,24 @@ Approach A reported a single flat `<75ms` ceiling. Approach B decouples local pr
 7. Ollama receives only the validated protocol context and sanitized image. Its client is pinned to the configured endpoint, disables environment proxies, and does not follow redirects.
 8. Structured model output is parsed through the same strict response schema and checked against the supplied elements before return. A narrow semantic grounding guard may redirect a high-confidence terminal form action to an enabled required consent checkbox or unique submit-like control; it uses only sanitized metadata and preserves ambiguity or fill-oriented tasks.
 9. Poll endpoints enforce the same API-key and Origin boundary as submission. Pending responses contain only schema version, snapshot ID, random job ID, and status; completed responses contain the ordinary strict action. Dynamic job IDs are normalized out of access logs.
+
+### Server admission and action flow
+
+```mermaid
+flowchart TD
+    POST[POST /v1/reason] --> BOUNDARY[Auth, origin, size, content type]
+    BOUNDARY --> SCHEMA[Strict schema validation]
+    SCHEMA --> PNG[PNG, mask, grade, canary, digest checks]
+    PNG --> READY{Provider and queue ready?}
+    READY -- No --> FAIL[Bounded failure response]
+    READY -- Yes --> TICKET[Opaque UUID job ticket]
+    TICKET --> JOB[Bounded job + circuit breaker]
+    JOB --> MODEL[Ollama or provider adapter]
+    MODEL --> RESPONSE[Strict response validation]
+    RESPONSE --> POLL[Bodyless poll result]
+    POLL --> CLIENT[Local action guard]
+    CLIENT --> EXEC[Execute or recapture]
+```
 
 ## Data inventory
 
@@ -93,13 +167,27 @@ No request is emitted following capture failure, page drift, missing DOM data, u
 
 Visible pixels that v1 cannot inspect reliably are fully covered at every grade. This includes frames, canvas, video, SVG, images, object/embed content, CSS backgrounds, pseudo-element generated content, and custom or shadow-root hosts. This is deliberately conservative and is exposed in redaction metadata for measurement.
 
+```mermaid
+flowchart TD
+    START[Capture attempt] --> DETECT{Detector and compositor healthy?}
+    DETECT -- Yes --> POLICY[Apply selected grade]
+    POLICY --> ENCODE[Fresh PNG + serialized checks]
+    DETECT -- No --> FALLBACK{Explicit full-mask fallback enabled?}
+    FALLBACK -- Yes --> OPAQUE[Opaque full-image PNG]
+    FALLBACK -- No --> BLOCK[Block request]
+    ENCODE --> VALID{All revision and byte checks pass?}
+    OPAQUE --> VALID
+    VALID -- Yes --> SEND[Send sanitized request]
+    VALID -- No --> BLOCK
+```
+
 ## Extension versus a custom browser
 
 The problem statement asks for client-side extension/JavaScript in Chrome and Firefox. A browser fork would add a large Chromium maintenance and distribution burden without improving the evaluated privacy boundary for the prototype. The extension is therefore the main product. The guarded `browser-use` integration remains available as an experimental Python comparison path, while BrowserOS remains a design reference.
 
 ## Validation status
 
-The current evidence is summarized in [VALIDATION_REPORT.md](VALIDATION_REPORT.md). The current source suites pass 73 extension tests, 126 server tests and 28 evaluation tests. The deterministic isolated Chrome flow completed three sanitized requests through the WASM path and finished the synthetic enrollment task. A fresh authenticated local Ollama smoke test returned a valid structured action. The recorded full browser task completed three reasoning requests and submitted the synthetic enrollment after the grounding guard. Grade-specific disclosure behavior is covered by monotonic policy, server and receiver tests.
+The current evidence is summarized in [VALIDATION_REPORT.md](VALIDATION_REPORT.md). The current source suites pass 92 extension tests, 157 server tests and 32 evaluation tests. The deterministic isolated Chrome flow completed three sanitized requests through the WASM path and finished the synthetic enrollment task. A fresh authenticated local Ollama smoke test returned a valid structured action. The recorded full browser task completed three reasoning requests and submitted the synthetic enrollment after the grounding guard. Grade-specific disclosure behavior is covered by monotonic policy, server and receiver tests.
 
 ## Appendix A: MV3 vs. Native Daemon Tradeoff Analysis
 
