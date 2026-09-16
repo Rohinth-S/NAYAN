@@ -23,7 +23,7 @@ describe('AgentStateGraph', () => {
 
     const graph = graphInternals.buildAgentGraph(nodes);
     const initialState = graphInternals.createInitialState({ maxSteps: 5 } as any);
-    initialState.scrollDrift.drifted = false;
+    initialState.scrollDrift = { ...initialState.scrollDrift, drifted: false };
 
     let finalState: AgentGraphState | undefined;
     for await (const state of graph.stream(initialState)) {
