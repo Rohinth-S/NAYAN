@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import base64
 import io
+import ipaddress
 import json
 import logging
 import math
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 import httpx
 from PIL import Image
 from pydantic import ValidationError
 
+from app.model_adapter import ModelManifest, validate_adapter_response
 from app.schemas import ReasoningResponse, SanitizedObservation
 
 LOGGER = logging.getLogger("privacy_server.backend")
+MODEL_PROMPT_VERSION = "2026-09-16.1"
 
 
 class ReasonerUnavailable(RuntimeError):
@@ -184,8 +188,17 @@ def build_ollama_request(observation: SanitizedObservation, model: str) -> dict[
 
 
 class OllamaReasoner:
-    def __init__(self, base_url: str, model: str, timeout_seconds: float) -> None:
+    def __init__(
+        self, base_url: str, model: str, timeout_seconds: float, model_digest: str | None = None
+    ) -> None:
         self.model = model
+        self.model_digest = model_digest
+        host = urlsplit(base_url).hostname or ""
+        try:
+            offline = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            offline = host == "localhost"
+        self.manifest = ModelManifest("ollama", model, model_digest, MODEL_PROMPT_VERSION, offline)
         self._client = httpx.AsyncClient(
             base_url=base_url,
             timeout=httpx.Timeout(timeout_seconds),
@@ -203,11 +216,18 @@ class OllamaReasoner:
             response.raise_for_status()
             payload = response.json()
             models = payload.get("models", [])
-            return any(item.get("name") == self.model or item.get("model") == self.model for item in models)
+            for item in models:
+                if item.get("name") == self.model or item.get("model") == self.model:
+                    digest = str(item.get("digest", "")).removeprefix("sha256:")
+                    if self.model_digest is None or "sha256:" + digest == self.model_digest:
+                        return True
+            return False
         except (httpx.HTTPError, ValueError, TypeError, AttributeError):
             return False
 
     async def reason(self, observation: SanitizedObservation) -> ReasoningResponse:
+        if self.model_digest is not None and not await self.ready():
+            raise ReasonerUnavailable("reasoning_model_digest_unverified")
         request = build_ollama_request(observation, self.model)
         try:
             response = await self._client.post("/api/chat", json=request)
@@ -229,6 +249,6 @@ class OllamaReasoner:
             if not isinstance(content, str) or len(content) > 20_000:
                 raise TypeError
             decoded = json.loads(content)
-            return ReasoningResponse.model_validate(decoded)
+            return validate_adapter_response(ReasoningResponse.model_validate(decoded), observation)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError, ValidationError) as exc:
             raise ReasonerInvalidResponse("invalid_reasoning_response") from exc

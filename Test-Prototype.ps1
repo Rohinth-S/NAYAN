@@ -38,7 +38,7 @@ if ((Get-FileHash -LiteralPath $model -Algorithm SHA256).Hash -ne $expectedModel
     throw 'UltraFace model checksum mismatch.'
 }
 
-$fetchOwners = rg -l '\bfetch\s*\(' (Join-Path $projectRoot 'extension\src') -g '*.ts'
+$fetchOwners = Select-String -Path (Get-ChildItem (Join-Path $projectRoot 'extension\src\*.ts')).FullName -Pattern '\bfetch\s*\(' | Select-Object -ExpandProperty Path -Unique
 if (($fetchOwners | Measure-Object).Count -ne 1 -or -not ($fetchOwners -match 'egress\.ts$')) {
     throw 'The source-level reasoning egress invariant failed.'
 }

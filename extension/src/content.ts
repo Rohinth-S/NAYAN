@@ -271,8 +271,28 @@ function captureDom(snapshotId: string, knownValues: readonly string[], privacyG
     title: document.title,
     viewport: { width: window.innerWidth, height: window.innerHeight, scrollX: window.scrollX, scrollY: window.scrollY },
     elements,
+    ...((typeof __PERCEPTION_ENABLED__ !== 'undefined' && __PERCEPTION_ENABLED__) ? { textRegions: collectPerceptionText() } : {}),
     redactions: merged,
   };
+}
+
+declare const __PERCEPTION_ENABLED__: boolean;
+function collectPerceptionText(): Array<{ text: string; bounds: Bounds }> {
+  const regions: Array<{ text: string; bounds: Bounds }> = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  let characters = 0;
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (!parent || ['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(parent.tagName) || !visible(parent)) continue;
+    const bounds = clippedBounds(parent.getBoundingClientRect());
+    const text = node.textContent?.trim() ?? '';
+    if (!bounds || !text) continue;
+    characters += text.length;
+    if (regions.length >= 128 || characters > 24_000 || text.length > 1500) throw new Error('Local perception text budget exceeded');
+    regions.push({ text, bounds });
+  }
+  return regions;
 }
 
 function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {

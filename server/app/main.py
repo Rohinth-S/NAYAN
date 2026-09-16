@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from app.action_guard import deterministic_form_action, guard_reasoned_action
 from app.boundary import ReasoningBoundaryMiddleware, SafeAccessLogMiddleware, SecurityHeadersMiddleware
+from app.gateway_adapter import GatewayReasoner
 from app.job_ledger import SQLiteJobLedger
 from app.jobs import (
     ReasoningJobError,
@@ -63,11 +64,17 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
     settings.assert_runtime_safe()
     logging.getLogger("privacy_server").setLevel(settings.log_level)
     owned_reasoner = reasoner is None
-    reasoner = reasoner or OllamaReasoner(
-        base_url=settings.ollama_base_url,
-        model=settings.ollama_model,
-        timeout_seconds=settings.ollama_timeout_seconds,
-    )
+    if reasoner is None:
+        reasoner = (
+            GatewayReasoner(settings)
+            if settings.reasoning_adapter == "gateway"
+            else OllamaReasoner(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model,
+                timeout_seconds=settings.ollama_timeout_seconds,
+                model_digest=settings.ollama_model_digest,
+            )
+        )
     store = VerificationStore()
     metrics = PrivacyMetrics()
     ledger = SQLiteJobLedger(settings.job_ledger_path) if settings.job_ledger_path else None
@@ -85,6 +92,9 @@ def create_app(settings: Settings | None = None, reasoner: Reasoner | None = Non
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         ready = await reasoner.ready()
+        if owned_reasoner and settings.ollama_model_digest and not ready:
+            await reasoner.close()
+            raise RuntimeError("Pinned reasoning model is unavailable or mismatched")
         LOGGER.info("startup backend_ready=%s model_configured=true", ready)
         try:
             yield

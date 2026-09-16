@@ -1,4 +1,5 @@
 import type { Bounds, RedactionKind } from './types';
+import registry from '../../server/app/detector-registry.json';
 import {
   CATEGORY_MINIMUM_GRADE,
   categoryForFinding,
@@ -15,6 +16,7 @@ export type TextFinding = Readonly<{
 }>;
 
 const PATTERNS: readonly Readonly<{ kind: string; regex: RegExp }>[] = [
+  ...registry.supplementalPatterns.map(p => ({ kind: p.kind, regex: new RegExp(p.pattern, 'giu') })),
   { kind: 'SECRET', regex: /\b(?:password|passcode|one[- ]time (?:code|password)|otp|(?:login|transaction|security|atm|upi) pin|pin (?:number|code)|cvv|cvc|security code|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|auth(?:entication)?[-_ ]?token|private key|recovery code)\s*[:=-]\s*[^\s,;]{3,200}/giu },
   { kind: 'EMAIL', regex: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu },
   { kind: 'AADHAAR', regex: /(?<![+\d])(?:\d[ -]?){11}\d(?!\d)/gu },

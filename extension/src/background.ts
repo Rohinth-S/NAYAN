@@ -151,6 +151,7 @@ async function captureAndSanitize(
     settings.allowFullMaskFallback,
     settings.canaries,
     settings.privacyGrade,
+    settings.task,
   );
   // Do not retain the raw screenshot. Only the freshly encoded sanitized PNG is kept for preview/request.
   const observation: SanitizedObservation = {
@@ -159,9 +160,9 @@ async function captureAndSanitize(
     documentId: dom.documentId,
     page: {
       origin: await pseudonymizeOrigin(dom.origin, await originAliasKey),
-      title: sanitizeText(dom.title, settings.canaries, 300, settings.privacyGrade),
+      title: sanitizeText(raster.safeTitle ?? dom.title, settings.canaries, 300, settings.privacyGrade),
     },
-    task: sanitizeText(settings.task, settings.canaries, 2_000, settings.privacyGrade),
+    task: sanitizeText(raster.safeTask ?? settings.task, settings.canaries, 2_000, settings.privacyGrade),
     elements: raster.elements,
     image: { mime: 'image/png', dataBase64: raster.dataBase64, width: raster.width, height: raster.height },
     redactions: raster.redactions,

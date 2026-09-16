@@ -172,7 +172,7 @@ flowchart TD
   J -- All checks pass --> K[Send sanitized PNG and safe structure]
 ```
 
-The current prototype uses deterministic DOM/field/regex detection and a bundled UltraFace model for local face detection. It does not claim that a small face detector is a general-purpose visual-language model. OCR, NER, and broader media recognition are explicit production roadmap items; until they are evaluated, unknown media is conservatively masked.
+The client includes an opt-in local perception bundle: quantized multilingual NER, English/Hindi Tesseract OCR, QR/barcode decoding, and a small visual-model asset with immutable source revisions. Build it with `npm run package:perception`; if an asset is missing, corrupt, low-confidence, or over budget, the request is blocked and the existing opaque media mask remains in force. The checked-in deterministic baseline remains the default build until the team records held-out accuracy and resource results.
 
 ### Client side
 
@@ -198,6 +198,7 @@ The server is an untrusted recipient of the sanitized protocol object and provid
 - `server/app/schemas.py` rejects unknown fields and invalid protocol values.
 - `server/app/validation.py` checks base64 and PNG structure, dimensions, metadata, animation, declared placeholder regions, opaque fallback pixels, bounds, canaries, and grade-aware text rules.
 - `server/app/ollama.py` sends only validated sanitized context to the local model and parses strict structured output.
+- `server/app/model_adapter.py` defines the provider-neutral sanitized adapter contract and rejects mismatched snapshot responses. Production settings require an immutable Ollama digest; mutable model tags remain development-only.
 - `server/app/action_guard.py` uses sanitized task, role, label, state, and bounds metadata to guard high-confidence consent and submit prerequisites without seeing raw values.
 - `server/app/jobs.py` turns slow model work into a bounded asynchronous queue with expiry, concurrency limits, and cancellation during shutdown. Synchronous compatibility requests share the same model-admission gate and time out with a controlled capacity error. The current store is in memory and single process; replicated production deployment needs a protected shared store or sticky routing.
 - The container profile requires `PRIVACY_AGENT_API_KEY` at startup; local development can use the loopback launcher, which generates a session key automatically.

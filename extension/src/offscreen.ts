@@ -17,6 +17,7 @@ ext.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     request.allowFullMaskFallback,
     request.canaries,
     request.privacyGrade,
+    request.task ?? '',
   )
     .then((raster) => sendResponse({
       target: OFFSCREEN_TARGET, requestId: request.requestId, ok: true, type: 'SANITIZE_RESULT', raster,
@@ -32,7 +33,6 @@ ext.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
 });
 
 function localSanitizationError(error: unknown): string {
-  if (!(error instanceof Error)) return 'Local sanitization failed';
-  const detail = error.message.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, 240);
-  return detail ? `Local sanitization failed: ${detail}` : 'Local sanitization failed';
+  // Detector errors can contain raw tokens. Never reflect their messages.
+  return error instanceof Error ? 'Local sanitization failed; transmission blocked' : 'Local sanitization failed';
 }

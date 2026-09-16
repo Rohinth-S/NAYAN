@@ -162,6 +162,8 @@ export type RawDomSnapshot = Readonly<{
   title: string;
   viewport: Readonly<{ width: number; height: number; scrollX: number; scrollY: number }>;
   elements: readonly RawElement[];
+  /** Extension-local only: never included in SanitizedObservation. */
+  textRegions?: readonly Readonly<{ text: string; bounds: CssBounds }>[];
   redactions: readonly Readonly<{
     kind: RedactionKind;
     source: 'dom' | 'regex';

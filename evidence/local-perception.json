@@ -1,0 +1,496 @@
+{
+  "reportVersion": "1.0",
+  "registryVersion": "1.1.0",
+  "corpusVersion": "1.0.0",
+  "synthetic": true,
+  "measurement": "real quantized model inference; category-presence, not span or population accuracy",
+  "machine": {
+    "platform": "win32",
+    "architecture": "x64",
+    "logicalCpus": 32
+  },
+  "backend": "NER/visual native CPU; OCR WASM",
+  "browser": null,
+  "modelAssets": [
+    {
+      "path": "models/Xenova/bert-base-multilingual-cased-ner-hrl/config.json",
+      "sha256": "7aa891abae067f95a40f5e2005b3de44824a083f256802934a993d301ec25076",
+      "bytes": 1207
+    },
+    {
+      "path": "models/Xenova/bert-base-multilingual-cased-ner-hrl/tokenizer.json",
+      "sha256": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+      "bytes": 2919362
+    },
+    {
+      "path": "models/Xenova/bert-base-multilingual-cased-ner-hrl/tokenizer_config.json",
+      "sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a",
+      "bytes": 367
+    },
+    {
+      "path": "models/Xenova/bert-base-multilingual-cased-ner-hrl/onnx/model_quantized.onnx",
+      "sha256": "5b65139844be260b624a2a13782b01d122e613d64ce16ed0ba4d82e0b816f1a9",
+      "bytes": 178495423
+    },
+    {
+      "path": "models/Xenova/mobilevit-small/config.json",
+      "sha256": "8e9d1b6f98ec638b7e83746cfda453800cb90e87a5255bca3cfb509de1b2061a",
+      "bytes": 69990
+    },
+    {
+      "path": "models/Xenova/mobilevit-small/preprocessor_config.json",
+      "sha256": "1b6e9d83ef7410bcbd1b41e7a14e7d1c8eaa36d4abbdb2bc03db5794576fb6ec",
+      "bytes": 403
+    },
+    {
+      "path": "models/Xenova/mobilevit-small/onnx/model_quantized.onnx",
+      "sha256": "a23d400ab0892bff1edf875b2ff40a99b6e83ee975c0339bbc9cc9cb437c3d8a",
+      "bytes": 6303767
+    },
+    {
+      "path": "lang-data/eng.traineddata",
+      "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "bytes": 4113088
+    },
+    {
+      "path": "lang-data/hin.traineddata",
+      "sha256": "4c73ffc59d497c186b19d1e90f5d721d678ea6b2e277b719bee4e2af12271825",
+      "bytes": 1122751
+    }
+  ],
+  "ner": {
+    "samples": 15,
+    "initMs": 770.7417,
+    "p50Ms": 6.36629999999991,
+    "p95Ms": 106.56880000000001,
+    "metrics": [
+      {
+        "language": "en",
+        "category": "name",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 9,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "en",
+        "category": "location",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 9,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "en",
+        "category": "professional-id",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 9,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "en",
+        "category": "uninspectable",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "tn": 7,
+        "precision": null,
+        "recall": 0,
+        "f1": null,
+        "precision95": null,
+        "recall95": [
+          0,
+          0.6576280471103807
+        ]
+      },
+      {
+        "language": "en",
+        "category": "name",
+        "grade": 2,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 9,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "en",
+        "category": "location",
+        "grade": 2,
+        "tp": 2,
+        "fp": 0,
+        "fn": 0,
+        "tn": 7,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "precision95": [
+          0.34237195288961925,
+          1
+        ],
+        "recall95": [
+          0.34237195288961925,
+          1
+        ]
+      },
+      {
+        "language": "en",
+        "category": "professional-id",
+        "grade": 2,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 9,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "en",
+        "category": "uninspectable",
+        "grade": 2,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "tn": 7,
+        "precision": null,
+        "recall": 0,
+        "f1": null,
+        "precision95": null,
+        "recall95": [
+          0,
+          0.6576280471103807
+        ]
+      },
+      {
+        "language": "en",
+        "category": "name",
+        "grade": 3,
+        "tp": 2,
+        "fp": 0,
+        "fn": 0,
+        "tn": 7,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "precision95": [
+          0.34237195288961925,
+          1
+        ],
+        "recall95": [
+          0.34237195288961925,
+          1
+        ]
+      },
+      {
+        "language": "en",
+        "category": "location",
+        "grade": 3,
+        "tp": 2,
+        "fp": 0,
+        "fn": 0,
+        "tn": 7,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "precision95": [
+          0.34237195288961925,
+          1
+        ],
+        "recall95": [
+          0.34237195288961925,
+          1
+        ]
+      },
+      {
+        "language": "en",
+        "category": "professional-id",
+        "grade": 3,
+        "tp": 1,
+        "fp": 1,
+        "fn": 0,
+        "tn": 7,
+        "precision": 0.5,
+        "recall": 1,
+        "f1": 0.6666666666666666,
+        "precision95": [
+          0.09452865480086614,
+          0.9054713451991339
+        ],
+        "recall95": [
+          0.20654329147389294,
+          1
+        ]
+      },
+      {
+        "language": "en",
+        "category": "uninspectable",
+        "grade": 3,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "tn": 7,
+        "precision": null,
+        "recall": 0,
+        "f1": null,
+        "precision95": null,
+        "recall95": [
+          0,
+          0.6576280471103807
+        ]
+      },
+      {
+        "language": "hi",
+        "category": "name",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 6,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "location",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 6,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "professional-id",
+        "grade": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 6,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "uninspectable",
+        "grade": 1,
+        "tp": 0,
+        "fp": 3,
+        "fn": 0,
+        "tn": 3,
+        "precision": 0,
+        "recall": null,
+        "f1": null,
+        "precision95": [
+          0,
+          0.5615060804490177
+        ],
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "name",
+        "grade": 2,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 6,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "location",
+        "grade": 2,
+        "tp": 2,
+        "fp": 0,
+        "fn": 0,
+        "tn": 4,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "precision95": [
+          0.34237195288961925,
+          1
+        ],
+        "recall95": [
+          0.34237195288961925,
+          1
+        ]
+      },
+      {
+        "language": "hi",
+        "category": "professional-id",
+        "grade": 2,
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 6,
+        "precision": null,
+        "recall": null,
+        "f1": null,
+        "precision95": null,
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "uninspectable",
+        "grade": 2,
+        "tp": 0,
+        "fp": 3,
+        "fn": 0,
+        "tn": 3,
+        "precision": 0,
+        "recall": null,
+        "f1": null,
+        "precision95": [
+          0,
+          0.5615060804490177
+        ],
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "name",
+        "grade": 3,
+        "tp": 2,
+        "fp": 0,
+        "fn": 1,
+        "tn": 3,
+        "precision": 1,
+        "recall": 0.6666666666666666,
+        "f1": 0.8,
+        "precision95": [
+          0.34237195288961925,
+          1
+        ],
+        "recall95": [
+          0.2076549551264879,
+          0.9385096847238394
+        ]
+      },
+      {
+        "language": "hi",
+        "category": "location",
+        "grade": 3,
+        "tp": 2,
+        "fp": 0,
+        "fn": 0,
+        "tn": 4,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "precision95": [
+          0.34237195288961925,
+          1
+        ],
+        "recall95": [
+          0.34237195288961925,
+          1
+        ]
+      },
+      {
+        "language": "hi",
+        "category": "professional-id",
+        "grade": 3,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "tn": 5,
+        "precision": 0,
+        "recall": null,
+        "f1": null,
+        "precision95": [
+          0,
+          0.7934567085261071
+        ],
+        "recall95": null
+      },
+      {
+        "language": "hi",
+        "category": "uninspectable",
+        "grade": 3,
+        "tp": 0,
+        "fp": 3,
+        "fn": 0,
+        "tn": 3,
+        "precision": 0,
+        "recall": null,
+        "f1": null,
+        "precision95": [
+          0,
+          0.5615060804490177
+        ],
+        "recall95": null
+      }
+    ]
+  },
+  "ocr": {
+    "samples": 15,
+    "exactMatches": 14,
+    "exactMatchRate": 0.9333333333333333,
+    "exactMatch95": [
+      0.7018292244757601,
+      0.9881334113938051
+    ],
+    "initMs": 172.84149999999988,
+    "p50Ms": 23.47050000000013,
+    "p95Ms": 109.22399999999993
+  },
+  "visual": {
+    "initMs": 176.13409999999976,
+    "inferenceMs": 107.51119999999992,
+    "decision": "Not admitted to the privacy decision path: image classification has no verified PII boxes or page-semantic accuracy."
+  },
+  "resource": {
+    "sampledProcessPeakRssBytes": 585482240,
+    "gpuMemoryBytes": null,
+    "browserMainThreadMs": null
+  },
+  "limitations": [
+    "Small synthetic corpus; independent review pending",
+    "No GPU or browser measurements in this report",
+    "Redaction IoU and excess area require pixel fixtures; not inferred from category predictions",
+    "Media remains fully masked at every grade"
+  ]
+}

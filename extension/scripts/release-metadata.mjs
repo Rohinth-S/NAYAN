@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
+const root = fileURLToPath(new URL('../', import.meta.url));
 const dist = join(root, 'dist');
 if (!existsSync(dist)) throw new Error('Run npm run package before generating release metadata');
 
@@ -27,6 +27,18 @@ for (const browser of ['chrome', 'firefox']) {
     throw new Error(`Missing ${browser} release archive`);
   }
 }
-const output = { metadataVersion: '1.0', node: process.version, signingStatus: 'unsigned', artifacts: files.sort((a, b) => a.path.localeCompare(b.path)) };
+const digest = process.env.PRIVACY_AGENT_OLLAMA_MODEL_DIGEST || null;
+if (digest && !/^sha256:[0-9a-f]{64}$/.test(digest)) throw new Error('Invalid reasoning model digest');
+const output = {
+  metadataVersion: '1.1',
+  node: process.version,
+  signingStatus: 'unsigned',
+  model: { id: process.env.PRIVACY_AGENT_OLLAMA_MODEL || 'qwen3-vl:2b-instruct', digest, digestRequired: Boolean(digest) },
+  promptVersion: '2026-09-16.1',
+  detectorRegistryVersion: '1.1.0',
+  perceptionEnabled: existsSync(join(dist, 'chrome/perception')),
+  perceptionLockSha256: createHash('sha256').update(readFileSync(join(root, 'models/perception-lock.json'))).digest('hex'),
+  artifacts: files.sort((a, b) => a.path.localeCompare(b.path)),
+};
 writeFileSync(join(dist, 'RELEASE_METADATA.json'), `${JSON.stringify(output, null, 2)}\n`);
 console.log(`Recorded ${files.length} artifact checksums in dist/RELEASE_METADATA.json`);

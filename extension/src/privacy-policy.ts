@@ -1,5 +1,6 @@
 /** User-selectable privacy policy. A category is hidden when its threshold is
  * less than or equal to the selected grade. Grade 3 is the fail-safe default. */
+import registry from '../../server/app/detector-registry.json';
 export const PRIVACY_GRADES = [1, 2, 3] as const;
 export type PrivacyGrade = (typeof PRIVACY_GRADES)[number];
 
@@ -21,29 +22,17 @@ export type PrivacyCategory =
   | 'unknown-populated-field';
 
 export const DEFAULT_PRIVACY_GRADE: PrivacyGrade = 3;
+export const DETECTOR_REGISTRY_VERSION = registry.version;
+
+/** Shared, reviewable detector contract used by local perception and policy tests. */
+export const DETECTOR_REGISTRY = Object.freeze(registry);
 
 /**
  * Grade 1: irreversible/high-impact data and anything that cannot be inspected.
  * Grade 2: Grade 1 plus contact, location and linkable contextual identifiers.
  * Grade 3: Grade 2 plus identity labels and unknown populated form values.
  */
-export const CATEGORY_MINIMUM_GRADE: Readonly<Record<PrivacyCategory, PrivacyGrade>> = Object.freeze({
-  credential: 1,
-  'government-id': 1,
-  financial: 1,
-  biometric: 1,
-  custom: 1,
-  uninspectable: 1,
-  contact: 2,
-  location: 2,
-  'date-of-birth': 2,
-  network: 2,
-  'account-id': 2,
-  name: 3,
-  username: 3,
-  'professional-id': 3,
-  'unknown-populated-field': 3,
-});
+export const CATEGORY_MINIMUM_GRADE = Object.freeze(registry.minimumGrades) as Readonly<Record<PrivacyCategory, PrivacyGrade>>;
 
 export function isPrivacyGrade(value: unknown): value is PrivacyGrade {
   return value === 1 || value === 2 || value === 3;
@@ -58,6 +47,7 @@ export function shouldRedactCategory(category: PrivacyCategory, grade: PrivacyGr
 }
 
 const FINDING_CATEGORIES: Readonly<Record<string, PrivacyCategory>> = Object.freeze({
+  ...Object.fromEntries(registry.supplementalPatterns.map(p => [p.kind, p.category as PrivacyCategory])),
   SECRET: 'credential',
   AADHAAR: 'government-id',
   PAN: 'government-id',
@@ -72,6 +62,10 @@ const FINDING_CATEGORIES: Readonly<Record<string, PrivacyCategory>> = Object.fre
   IMEI: 'network',
   MAC: 'network',
   IPV6: 'network',
+  QR_CONTENT: 'uninspectable',
+  BARCODE_CONTENT: 'uninspectable',
+  NER_NAME: 'name',
+  NER_ADDRESS: 'location',
   KNOWN: 'custom',
   EMAIL: 'contact',
   PHONE: 'contact',

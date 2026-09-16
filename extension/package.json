@@ -6,13 +6,18 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "package": "node scripts/build.mjs --package",
+    "package:perception": "node scripts/build.mjs --package --perception",
+    "evaluate:perception": "node scripts/evaluate-perception.mjs",
     "release-metadata": "node scripts/release-metadata.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test && npm run package"
   },
   "dependencies": {
-    "onnxruntime-web": "1.22.0"
+    "@huggingface/transformers": "4.3.0",
+    "@zxing/library": "0.21.3",
+    "onnxruntime-web": "1.22.0",
+    "tesseract.js": "6.0.1"
   },
   "devDependencies": {
     "@types/chrome": "0.0.326",

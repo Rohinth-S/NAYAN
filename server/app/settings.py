@@ -25,6 +25,10 @@ class Settings(BaseModel):
     schema_version: str = "1.0"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3-vl:2b-instruct"
+    ollama_model_digest: str | None = None
+    reasoning_adapter: Literal["ollama", "gateway"] = "ollama"
+    gateway_url: str | None = None
+    gateway_api_key: SecretStr | None = None
     ollama_timeout_seconds: float = Field(default=90.0, ge=2.0, le=300.0)
     allow_remote_ollama: bool = False
     api_key: SecretStr | None = None
@@ -81,7 +85,25 @@ class Settings(BaseModel):
             raise ValueError("Ollama URL cannot include a path")
         return value.rstrip("/")
 
+    @field_validator("ollama_model_digest")
+    @classmethod
+    def validate_model_digest(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+            raise ValueError("PRIVACY_AGENT_OLLAMA_MODEL_DIGEST must be sha256:<64 lowercase hex characters>")
+        return value
+
     def assert_runtime_safe(self) -> None:
+        if self.reasoning_adapter == "gateway":
+            parts = urlsplit(self.gateway_url or "")
+            local = parts.hostname in {"localhost", "127.0.0.1", "::1"}
+            if (not parts.hostname or parts.username or parts.password or parts.query or parts.fragment
+                    or parts.path not in {"", "/"} or parts.scheme not in {"http", "https"}
+                    or (not local and parts.scheme != "https")):
+                raise ValueError("gateway requires HTTPS or loopback HTTP without URL credentials or paths")
+            if not local and self.gateway_api_key is None:
+                raise ValueError("hosted gateway requires a separate gateway API key")
+            if self.ollama_model_digest is None:
+                raise ValueError("gateway requires an exact model digest")
         if self.require_api_key and self.api_key is None:
             raise ValueError("PRIVACY_AGENT_API_KEY is required for this deployment profile")
         parts = urlsplit(self.ollama_base_url)
@@ -94,6 +116,8 @@ class Settings(BaseModel):
                 is_local = False
         if not is_local and not self.allow_remote_ollama:
             raise ValueError("remote Ollama requires PRIVACY_AGENT_ALLOW_REMOTE_OLLAMA=true")
+        if self.deployment_profile == "production" and self.ollama_model_digest is None:
+            raise ValueError("production deployment requires PRIVACY_AGENT_OLLAMA_MODEL_DIGEST")
 
     def origin_allowed(self, origin: str) -> bool:
         if origin in self.cors_origins:
@@ -116,8 +140,13 @@ class Settings(BaseModel):
         )
         key = os.getenv("PRIVACY_AGENT_API_KEY")
         settings = cls(
+            reasoning_adapter=os.getenv("PRIVACY_AGENT_REASONING_ADAPTER", "ollama"),
+            gateway_url=os.getenv("PRIVACY_AGENT_GATEWAY_URL") or None,
+            gateway_api_key=SecretStr(os.environ["PRIVACY_AGENT_GATEWAY_API_KEY"])
+            if os.getenv("PRIVACY_AGENT_GATEWAY_API_KEY") else None,
             ollama_base_url=os.getenv("PRIVACY_AGENT_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
             ollama_model=os.getenv("PRIVACY_AGENT_OLLAMA_MODEL", "qwen3-vl:2b-instruct"),
+            ollama_model_digest=os.getenv("PRIVACY_AGENT_OLLAMA_MODEL_DIGEST") or None,
             ollama_timeout_seconds=float(os.getenv("PRIVACY_AGENT_OLLAMA_TIMEOUT_SECONDS", "90")),
             allow_remote_ollama=_env_bool("PRIVACY_AGENT_ALLOW_REMOTE_OLLAMA"),
             api_key=SecretStr(key) if key else None,
