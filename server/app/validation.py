@@ -10,6 +10,7 @@ from collections.abc import Iterable
 
 from PIL import Image, UnidentifiedImageError
 
+from app.detector_registry import PATTERNS, normalize_for_detection
 from app.schemas import BrowserAction, SanitizedObservation, is_redaction_placeholder
 from app.settings import Settings
 
@@ -114,7 +115,9 @@ PII_PATTERNS = ALWAYS_PROTECTED_PATTERNS + GRADE_2_PROTECTED_PATTERNS + GRADE_3_
 
 
 def protected_text_patterns(grade: int) -> tuple[tuple[str, re.Pattern[str]], ...]:
-    patterns = ALWAYS_PROTECTED_PATTERNS
+    patterns = ALWAYS_PROTECTED_PATTERNS + tuple(
+        (kind, pattern) for kind, minimum, pattern in PATTERNS if minimum <= grade
+    )
     if grade >= 2:
         patterns += GRADE_2_PROTECTED_PATTERNS
     if grade >= 3:
@@ -200,6 +203,9 @@ def _reject_obvious_unredacted_pii(observation: SanitizedObservation) -> None:
         for _, pattern in protected_text_patterns(observation.privacy.grade):
             if pattern.search(value):
                 raise ObservationRejected("unredacted_pii_detected")
+        if any(pattern.search(normalize_for_detection(value)) for _, minimum, pattern in PATTERNS
+               if minimum <= observation.privacy.grade):
+            raise ObservationRejected("unredacted_pii_detected")
 
 
 def _verify_declared_masks(observation: SanitizedObservation, data: bytes) -> None:
@@ -303,3 +309,6 @@ def validate_action_for_observation(
         for _, pattern in protected_text_patterns(observation.privacy.grade):
             if pattern.search(action.text):
                 raise ObservationRejected("model_returned_pii")
+        if any(pattern.search(normalize_for_detection(action.text)) for _, minimum, pattern in PATTERNS
+               if minimum <= observation.privacy.grade):
+            raise ObservationRejected("model_returned_pii")

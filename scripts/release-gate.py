@@ -81,7 +81,7 @@ def main() -> int:
         "passed": all(checks.values()), "checks": checks, "testSuites": suites,
         "packages": packages, "signingStatus": "unsigned", "liveBrowserMatrix": "separate-evidence-required",
     }
-    REPORT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    REPORT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"release_gate={'passed' if report['passed'] else 'failed'} report=evidence/latest-release.json")
     return 0 if report["passed"] else 1
 

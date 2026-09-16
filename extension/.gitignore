@@ -4,3 +4,4 @@ artifacts/
 models/*.onnx
 !models/version-RFB-320.onnx
 !models/.gitkeep
+models/perception/

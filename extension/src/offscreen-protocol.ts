@@ -13,6 +13,7 @@ export type OffscreenSanitizeRequest = Readonly<{
   allowFullMaskFallback: boolean;
   canaries: readonly string[];
   privacyGrade: PrivacyGrade;
+  task?: string;
 }>;
 
 export type OffscreenRequest = OffscreenSanitizeRequest;
@@ -62,6 +63,7 @@ export function validateOffscreenRequest(value: unknown): asserts value is Offsc
     typeof request.allowFullMaskFallback !== 'boolean' ||
     !isPrivacyGrade(request.privacyGrade) ||
     !validCanaries(request.canaries) ||
+    (request.task !== undefined && (typeof request.task !== 'string' || request.task.length > 2000)) ||
     !request.dom || typeof request.dom !== 'object' ||
     !Array.isArray(request.dom.elements) || !Array.isArray(request.dom.redactions) ||
     !request.dom.viewport || !Number.isFinite(request.dom.viewport.width) || !Number.isFinite(request.dom.viewport.height) ||

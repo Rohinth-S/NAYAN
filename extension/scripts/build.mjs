@@ -3,12 +3,21 @@ import { zipSync } from 'fflate';
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 const artifacts = join(root, 'artifacts');
 const modelSource = join(root, 'models', 'version-RFB-320.onnx');
 const modelIncluded = await exists(modelSource);
+const perceptionEnabled = process.argv.includes('--perception') || process.env.LOCAL_PERCEPTION === '1';
+if (perceptionEnabled) {
+  const lock = JSON.parse(await readFile(join(root, 'models/perception-lock.json'), 'utf8'));
+  for (const asset of lock.artifacts) {
+    const bytes = await readFile(join(root, 'models/perception', asset.path));
+    if (createHash('sha256').update(bytes).digest('hex') !== asset.sha256) throw new Error('Perception model checksum mismatch');
+  }
+}
 const reproducibleArchiveDate = new Date('1980-01-01T00:00:00.000Z');
 
 const commonManifest = {
@@ -61,7 +70,7 @@ for (const [target, manifest] of [['chrome', chromeManifest], ['firefox', firefo
     sourcemap: false,
     minify: true,
     legalComments: 'none',
-    define: { __FACE_MODEL_INCLUDED__: JSON.stringify(modelIncluded) },
+    define: { __FACE_MODEL_INCLUDED__: JSON.stringify(modelIncluded), __PERCEPTION_ENABLED__: JSON.stringify(perceptionEnabled) },
     alias: {
       '#local-sanitizer': join(root, 'src', target === 'chrome' ? 'sanitizer-offscreen.ts' : 'sanitizer-direct.ts'),
     },
@@ -94,6 +103,18 @@ if (process.argv.includes('--package')) {
 console.log(`Built Chrome and Firefox extension${modelIncluded ? ' with UltraFace model' : ' without model (runtime will fail closed)'}.`);
 
 async function copyRuntimeAssets(outdir) {
+  if (perceptionEnabled) {
+    const perceptionDir = join(outdir, 'perception');
+    await cp(join(root, 'models/perception'), perceptionDir, { recursive: true });
+    await cp(join(root, 'node_modules/tesseract.js/dist/worker.min.js'), join(perceptionDir, 'worker.min.js'));
+    await cp(join(root, 'node_modules/tesseract.js-core'), join(perceptionDir, 'core'), { recursive: true });
+    const nestedOrt = join(root, 'node_modules/@huggingface/transformers/node_modules/onnxruntime-web/dist');
+    const nerOrt = await exists(nestedOrt) ? nestedOrt : join(root, 'node_modules/onnxruntime-web/dist');
+    await mkdir(join(perceptionDir, 'ner-wasm'), { recursive: true });
+    for (const name of await readdir(nerOrt)) {
+      if (name.endsWith('.wasm') || name.endsWith('.mjs')) await cp(join(nerOrt, name), join(perceptionDir, 'ner-wasm', name));
+    }
+  }
   if (modelIncluded) {
     await mkdir(join(outdir, 'models'), { recursive: true });
     await cp(modelSource, join(outdir, 'models', 'version-RFB-320.onnx'));

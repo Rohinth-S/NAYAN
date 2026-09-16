@@ -1,6 +1,7 @@
 import type { Bounds, RawDomSnapshot, Redaction, SanitizedElement, SanitizedObservation } from './types';
 import { LocalFaceDetector } from './face-detector';
 import { shouldRedactCategory, type PrivacyGrade } from './privacy-policy';
+import { perceive, type PerceptionRuntime, type PerceptionResult } from './perception';
 
 export type SanitizedRaster = Readonly<{
   dataBase64: string;
@@ -12,6 +13,9 @@ export type SanitizedRaster = Readonly<{
   detectorBackend: SanitizedObservation['privacy']['detectorBackend'];
   visualFallback: SanitizedObservation['privacy']['visualFallback'];
   redactionMode: 'semantic' | 'opaque';
+  safeTask?: string;
+  safeTitle?: string;
+  perceptionMs?: number;
 }>;
 
 const PLACEHOLDER_BACKGROUND = '#f3f4f6';
@@ -37,6 +41,7 @@ export async function sanitizeRaster(
   allowFullMaskFallback: boolean,
   privacyGrade: PrivacyGrade,
   sanitizeLabel: (value: string) => string,
+  perception?: { runtime: PerceptionRuntime; task: string; canaries: readonly string[] },
 ): Promise<SanitizedRaster> {
   if (!screenshotDataUrl.startsWith('data:image/png;base64,')) throw new Error('Capture was not a PNG');
   const rawBlob = dataUrlToBlob(screenshotDataUrl);
@@ -58,6 +63,25 @@ export async function sanitizeRaster(
       throw new Error(`Local face detector unavailable (${detector.diagnostic}); transmission blocked`);
     }
 
+    const privateCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const privateContext = privateCanvas.getContext('2d', { willReadFrequently: true });
+    if (!privateContext) throw new Error('Canvas is unavailable');
+    privateContext.drawImage(bitmap, 0, 0);
+    let local: PerceptionResult | undefined;
+    try {
+      local = perception ? await perceive(
+      perception.runtime, privateCanvas,
+      [
+        ...(dom.textRegions ?? []),
+        ...dom.elements.map(e => ({ text: e.label, bounds: e.bounds })),
+      ].map(region => ({ text: region.text, bounds: scaleBounds(region.bounds, scaleX, scaleY, bitmap.width, bitmap.height) })),
+      [dom.title, perception.task, ...dom.elements.map(e => e.label)], privacyGrade, perception.canaries,
+    ) : undefined;
+    } finally {
+      privateContext.clearRect(0, 0, bitmap.width, bitmap.height);
+      privateCanvas.width = 1;
+      privateCanvas.height = 1;
+    }
     const domRedactions: Redaction[] = dom.redactions.map((item) => ({
       kind: item.kind,
       source: item.source,
@@ -72,7 +96,10 @@ export async function sanitizeRaster(
     // A full-image fallback supersedes all narrower regions. Sending only the
     // canonical full-frame declaration keeps the receiver's overlap/area cap
     // deterministic while still proving every transmitted pixel is black.
-    const redactions = detectorReady ? [...domRedactions, ...faceRedactions] : fallbackRedactions;
+    const localRedactions: Redaction[] = local?.findings.map(finding => ({
+      kind: 'pii-text', source: 'fallback', bounds: padded(finding.bounds, bitmap.width, bitmap.height),
+    })) ?? [];
+    const redactions = detectorReady ? [...domRedactions, ...faceRedactions, ...localRedactions] : fallbackRedactions;
 
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext('2d', { alpha: false });
@@ -105,9 +132,9 @@ export async function sanitizeRaster(
     // convertToBlob creates a new PNG and drops metadata from the original capture.
     const sanitizedBlob = await canvas.convertToBlob({ type: 'image/png' });
     const dataBase64 = bytesToBase64(new Uint8Array(await sanitizedBlob.arrayBuffer()));
-    const elements: SanitizedElement[] = dom.elements.map((element) => ({
+    const elements: SanitizedElement[] = dom.elements.map((element, index) => ({
       ...element,
-      label: sanitizeLabel(element.label),
+      label: sanitizeLabel(local?.safeTexts[index + 2] ?? element.label),
       bounds: scaleBounds(element.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
     }));
     return {
@@ -120,6 +147,7 @@ export async function sanitizeRaster(
       detectorBackend: detection.backend,
       visualFallback: detectorReady ? 'none' : 'full-mask',
       redactionMode: detectorReady ? 'semantic' : 'opaque',
+      ...(local ? { safeTitle: local.safeTexts[0]!, safeTask: local.safeTexts[1]!, perceptionMs: local.durationMs } : {}),
     };
   } finally {
     bitmap.close();

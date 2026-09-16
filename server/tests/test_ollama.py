@@ -89,6 +89,25 @@ async def test_readiness_requires_exact_configured_model() -> None:
         await reasoner.close()
 
 
+@pytest.mark.asyncio
+async def test_readiness_rejects_model_digest_mismatch() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"models": [{"name": "qwen3-vl:2b-instruct", "digest": "sha256:" + "a" * 64}]},
+        )
+
+    reasoner = OllamaReasoner(
+        "http://127.0.0.1:11434", "qwen3-vl:2b-instruct", 10, "sha256:" + "b" * 64
+    )
+    await reasoner.close()
+    reasoner._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://ollama")
+    try:
+        assert await reasoner.ready() is False
+    finally:
+        await reasoner.close()
+
+
 def test_large_structured_capture_uses_dom_prompt_without_large_image() -> None:
     payload = observation_payload()
     payload["image"] = {**payload["image"], "width": 1920, "height": 1080}

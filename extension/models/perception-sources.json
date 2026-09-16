@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "models": {
+    "ner": {
+      "id": "Xenova/bert-base-multilingual-cased-ner-hrl",
+      "revision": "263e82c06569c8c2ac46238a7ae5107598934234",
+      "files": [
+        "config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "onnx/model_quantized.onnx"
+      ],
+      "license": "Apache-2.0"
+    },
+    "visual": {
+      "id": "Xenova/mobilevit-small",
+      "revision": "a0e5dde3e1b3d9e49894dcaeeb1e046ed01edfc8",
+      "files": [
+        "config.json",
+        "preprocessor_config.json",
+        "onnx/model_quantized.onnx"
+      ],
+      "license": "Apache-2.0"
+    }
+  },
+  "ocr": {
+    "revision": "87416418657359cb625c412a48b6e1d6d41c29bd",
+    "languages": [
+      "eng",
+      "hin"
+    ],
+    "license": "Apache-2.0"
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "version": "1.0.0",
+  "synthetic": true,
+  "scope": "held-out category-presence fixtures; not representative population accuracy",
+  "cases": [
+    {
+      "id": "en-person-1",
+      "language": "en",
+      "text": "Ananya Iyer attended the appointment.",
+      "categories": [
+        "name"
+      ],
+      "ocr": "Ananya Iyer"
+    },
+    {
+      "id": "en-person-2",
+      "language": "en",
+      "text": "Send the invitation to Ravi Menon.",
+      "categories": [
+        "name"
+      ],
+      "ocr": "Ravi Menon"
+    },
+    {
+      "id": "en-place-1",
+      "language": "en",
+      "text": "The parcel should arrive in Jaipur.",
+      "categories": [
+        "location"
+      ],
+      "ocr": "Jaipur"
+    },
+    {
+      "id": "en-place-2",
+      "language": "en",
+      "text": "Delivery destination is Chennai.",
+      "categories": [
+        "location"
+      ],
+      "ocr": "Chennai"
+    },
+    {
+      "id": "en-org-1",
+      "language": "en",
+      "text": "The project is funded by Microsoft.",
+      "categories": [
+        "professional-id"
+      ],
+      "ocr": "Microsoft"
+    },
+    {
+      "id": "en-safe-1",
+      "language": "en",
+      "text": "Click the next button to continue.",
+      "categories": [],
+      "ocr": "Continue"
+    },
+    {
+      "id": "en-safe-2",
+      "language": "en",
+      "text": "Choose a delivery option.",
+      "categories": [],
+      "ocr": "Choose an option"
+    },
+    {
+      "id": "hi-person-1",
+      "language": "hi",
+      "text": "अनन्या शर्मा ने आवेदन पूरा किया।",
+      "categories": [
+        "name"
+      ],
+      "ocr": "अनन्या शर्मा"
+    },
+    {
+      "id": "hi-person-2",
+      "language": "hi",
+      "text": "रवि कुमार से संपर्क करें।",
+      "categories": [
+        "name"
+      ],
+      "ocr": "रवि कुमार"
+    },
+    {
+      "id": "hi-place-1",
+      "language": "hi",
+      "text": "यह कार्यालय दिल्ली में स्थित है।",
+      "categories": [
+        "location"
+      ],
+      "ocr": "दिल्ली"
+    },
+    {
+      "id": "hi-place-2",
+      "language": "hi",
+      "text": "पार्सल जयपुर भेजें।",
+      "categories": [
+        "location"
+      ],
+      "ocr": "जयपुर"
+    },
+    {
+      "id": "hi-safe-1",
+      "language": "hi",
+      "text": "जारी रखने के लिए अगला बटन दबाएं।",
+      "categories": [],
+      "ocr": "अगला बटन"
+    },
+    {
+      "id": "qr-positive-1",
+      "language": "en",
+      "text": "Scan QR code to initiate UPI payment to user@upi.",
+      "categories": [
+        "uninspectable"
+      ],
+      "ocr": "upi://pay?pa=user@upi"
+    },
+    {
+      "id": "barcode-positive-1",
+      "language": "en",
+      "text": "Boarding pass barcode containing passenger sequence identity.",
+      "categories": [
+        "uninspectable"
+      ],
+      "ocr": "M1SMITH/JOHN EABC123"
+    },
+    {
+      "id": "aadhaar-fixture-1",
+      "language": "hi",
+      "text": "आधार संख्या 9999 8888 7777 का उपयोग सत्यापन के लिए किया गया।",
+      "categories": [
+        "name"
+      ],
+      "ocr": "9999 8888 7777"
+    }
+  ]
+}

@@ -3,6 +3,10 @@ import { sanitizeRaster } from './image-redactor';
 import { sanitizeText } from './privacy';
 import type { PrivacyGrade } from './privacy-policy';
 import type { RawDomSnapshot } from './types';
+import { createBrowserPerceptionRuntime } from './perception-runtime';
+
+declare const __PERCEPTION_ENABLED__: boolean;
+const perception = typeof __PERCEPTION_ENABLED__ !== 'undefined' && __PERCEPTION_ENABLED__ ? createBrowserPerceptionRuntime() : undefined;
 
 const detector = new LocalFaceDetector();
 
@@ -16,6 +20,7 @@ export const localSanitizer = {
     allowFullMaskFallback: boolean,
     canaries: readonly string[],
     privacyGrade: PrivacyGrade,
+    task = '',
   ) {
     return sanitizeRaster(
       screenshot,
@@ -24,6 +29,7 @@ export const localSanitizer = {
       allowFullMaskFallback,
       privacyGrade,
       (label) => sanitizeText(label, canaries, 300, privacyGrade),
+      perception ? { runtime: perception, task, canaries } : undefined,
     );
   },
 };
