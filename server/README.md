@@ -9,9 +9,10 @@ screenshot. Unknown request fields are rejected. Request and response content is
 
 The boundary applies a per-client sliding-window limit (`PRIVACY_AGENT_RATE_LIMIT_REQUESTS`, default 120 per
 minute) before parsing a reasoning body. `GET /health/metrics` exposes aggregate counters only; it never includes
-snapshots, labels, URLs, request bodies, or job IDs. The in-memory job store is the development profile. A
-production deployment must use an external durable job/metrics backend and HTTPS termination, as described in
-`RELEASE_CHECKLIST.md` and `TEAM_WORK_SPLIT.md`.
+snapshots, labels, URLs, request bodies, or job IDs. The in-memory job store and process-local limiter are the
+development profile. Set `PRIVACY_AGENT_REDIS_URL` to activate the shared Redis job ledger and atomic limiter;
+production startup requires that backend, a pinned model digest, authentication, and HTTPS termination as described
+in `RELEASE_CHECKLIST.md` and `TEAM_WORK_SPLIT.md`.
 
 ## Local setup
 

@@ -40,17 +40,19 @@ unpacked**, and select `extension/dist/chrome`.
 For Firefox, open `about:debugging#/runtime/this-firefox`, choose **Load
 Temporary Add-on**, and select `extension/dist/firefox/manifest.json`.
 
-Open an HTTP(S) test page, click the extension icon, and choose **Privacy
-preview** first. A task is optional for this local preview; enter one when you
-are ready to run the agent. The preview never calls the reasoning server. Check
-the detector state and masked image, then choose **Start agent**. The browser
-will ask for access to the configured reasoning-server origin. Endpoint access
-is optional and granted per origin; page access uses `activeTab` after the user
-opens the extension.
+Open an HTTP(S) test page and click the extension icon. In Chrome the icon opens
+the persistent side panel; in Firefox the build exposes a sidebar panel. Use
+**Privacy preview** first. A task is optional for this local preview; enter one
+when you are ready to run the agent. The preview never calls the reasoning
+server. Check the detector state and masked image, then choose **Start agent**.
+The side panel stays open while the run captures, reasons, scrolls, clicks,
+fills fields, waits, or stops. The browser will ask for access to the configured
+reasoning-server origin. Endpoint access is optional and granted per origin;
+page access uses `activeTab` after the user opens the extension.
 
 The default endpoint is `http://127.0.0.1:8765/v1/reason`. Non-loopback
 endpoints must use HTTPS. API keys and known private values are kept in the
-background/popup memory and are not saved to extension storage. The endpoint,
+background/panel memory and are not saved to extension storage. The endpoint,
 step count, full-mask preference, and selected privacy grade are saved locally.
 The default is Grade 3 (strict). See [`../PRIVACY_LEVELS.md`](../PRIVACY_LEVELS.md)
 for the complete category matrix and detector limits.

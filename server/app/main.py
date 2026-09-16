@@ -22,7 +22,7 @@ from app.gateways.ollama import (
     ReasonerInvalidResponse,
     ReasonerUnavailable,
 )
-from app.job_ledger import SQLiteJobLedger
+from app.job_ledger import RedisJobLedger, SQLiteJobLedger
 from app.jobs import (
     ReasoningJobError,
     ReasoningJobNotFound,
@@ -30,6 +30,7 @@ from app.jobs import (
     ReasoningQueueFull,
 )
 from app.observability import PrivacyMetrics
+from app.rate_limit import RedisRateLimiter
 from app.schemas import (
     DemoState,
     DemoSubmit,
@@ -91,7 +92,26 @@ def create_app(
         )
     store = VerificationStore()
     metrics = PrivacyMetrics()
-    ledger = SQLiteJobLedger(settings.job_ledger_path) if settings.job_ledger_path else None
+    redis_client = None
+    redis_limiter = None
+    if settings.redis_url:
+        try:
+            import redis.asyncio as redis
+        except ModuleNotFoundError as exc:
+            raise RuntimeError("PRIVACY_AGENT_REDIS_URL is configured but redis is not installed") from exc
+        redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        redis_limiter = RedisRateLimiter(
+            redis_client,
+            settings.rate_limit_requests,
+            settings.rate_limit_window_seconds,
+        )
+    ledger = (
+        RedisJobLedger(redis_client)
+        if redis_client is not None
+        else SQLiteJobLedger(settings.job_ledger_path)
+        if settings.job_ledger_path
+        else None
+    )
     jobs = ReasoningJobStore(
         max_jobs=settings.max_reasoning_jobs,
         ttl_seconds=settings.reasoning_job_ttl_seconds,
@@ -109,6 +129,12 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if redis_client is not None:
+            try:
+                await redis_client.ping()
+            except Exception as exc:
+                await redis_client.aclose()
+                raise RuntimeError("configured Redis backend is unavailable") from exc
         ready = await reasoner.ready()
         if owned_reasoner and settings.ollama_model_digest and not ready:
             await reasoner.close()
@@ -122,6 +148,8 @@ def create_app(
                 ledger.close()
             if owned_reasoner:
                 await reasoner.close()
+            if redis_client is not None:
+                await redis_client.aclose()
 
     app = FastAPI(
         title="SIH Privacy Reasoning Server",
@@ -138,7 +166,7 @@ def create_app(
     app.state.metrics = metrics
     app.state.circuit_breaker = breaker
 
-    app.add_middleware(ReasoningBoundaryMiddleware, settings=settings)
+    app.add_middleware(ReasoningBoundaryMiddleware, settings=settings, limiter=redis_limiter)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(SafeAccessLogMiddleware)
     app.add_middleware(

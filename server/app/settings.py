@@ -50,6 +50,7 @@ class Settings(BaseModel):
     rate_limit_window_seconds: float = Field(default=60.0, ge=1.0, le=3_600.0)
     metrics_enabled: bool = True
     deployment_profile: Literal["development", "production"] = "development"
+    redis_url: str | None = None
     job_ledger_path: str = ""
     log_level: LogLevel = "INFO"
     # Development-only planner used when the VLM is unavailable. Production forbids this.
@@ -94,6 +95,18 @@ class Settings(BaseModel):
             raise ValueError("PRIVACY_AGENT_OLLAMA_MODEL_DIGEST must be sha256:<64 lowercase hex characters>")
         return value
 
+    @field_validator("redis_url")
+    @classmethod
+    def validate_redis_url(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        parts = urlsplit(value)
+        if parts.scheme not in {"redis", "rediss"} or not parts.hostname:
+            raise ValueError("PRIVACY_AGENT_REDIS_URL must be a redis:// or rediss:// URL")
+        if parts.username or (parts.password and len(parts.password) < 16):
+            raise ValueError("Redis URL credentials must be omitted or use a strong password")
+        return value.rstrip("/")
+
     def assert_runtime_safe(self) -> None:
         if self.reasoning_adapter == "gateway":
             parts = urlsplit(self.gateway_url or "")
@@ -129,6 +142,8 @@ class Settings(BaseModel):
             raise ValueError("production deployment requires PRIVACY_AGENT_OLLAMA_MODEL_DIGEST")
         if self.deployment_profile == "production" and self.structural_fallback:
             raise ValueError("structural fallback is development-only")
+        if self.deployment_profile == "production" and self.redis_url is None:
+            raise ValueError("production deployment requires PRIVACY_AGENT_REDIS_URL")
 
     def origin_allowed(self, origin: str) -> bool:
         if origin in self.cors_origins:
@@ -183,6 +198,7 @@ class Settings(BaseModel):
             rate_limit_window_seconds=float(os.getenv("PRIVACY_AGENT_RATE_LIMIT_WINDOW_SECONDS", "60")),
             metrics_enabled=_env_bool("PRIVACY_AGENT_METRICS_ENABLED", True),
             deployment_profile=deployment_profile,
+            redis_url=os.getenv("PRIVACY_AGENT_REDIS_URL") or None,
             job_ledger_path=os.getenv("PRIVACY_AGENT_JOB_LEDGER_PATH", ""),
             log_level=cast(LogLevel, os.getenv("PRIVACY_AGENT_LOG_LEVEL", "INFO").upper()),
             structural_fallback=_env_bool(

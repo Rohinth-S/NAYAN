@@ -20,14 +20,46 @@ Latest local validation baseline:
 
 | Area | Result |
 | --- | ---: |
-| Extension tests | 77 passed |
-| Server tests | 132 passed |
-| Evaluation tests | 28 passed |
+| Extension tests | 92 passed |
+| Server tests | 157 passed |
+| Evaluation tests | 32 passed |
 | Chrome package | Builds successfully |
 | Firefox package | Builds successfully |
 | Full `Test-Prototype.ps1` | Passed, exit code 0 |
 
 These tests prove the current contracts and synthetic scenarios. They do not prove universal PII detection, multilingual coverage, safe operation across every browser/device, or production deployment security.
+
+## Implementation audit — 16 September 2026
+
+The codebase has now been audited against every workstream in this document. The
+following items are implemented and covered by the local release gate:
+
+| Workstream | Current implementation |
+| --- | --- |
+| M2 capture/redaction races | Revision checks plus page-owned Step 0 scroll/resize guard; stale actions are discarded and recaptured. |
+| M3 action safety | Snapshot, tab, window, origin, editability, confirmation, duplicate-action, and allowlisted-action guards. |
+| M5 privacy UX | Grade 1/2/3 controls, local preview, category counts, mask area, expandable full-screen preview, task presets, and persistent Chrome side panel / Firefox sidebar. |
+| M7 release artifacts | Chrome/Firefox builds, model checksum checks, release metadata, security scan, SBOM, and reproducible package metadata. |
+| P1 deployment boundary | Authentication, origin checks, HTTPS policy outside loopback, request limits, bounded timeouts, and safe logs. |
+| P2/P11 production profile | Optional Redis-backed job ledger and shared sliding-window limiter; production refuses to start without Redis, a model digest, API key, and disabled structural fallback. |
+| P3/P10 model gateway | Provider-neutral sanitized adapter, Ollama digest verification, gateway manifest verification, circuit breaker, strict output schema, and structural fallback in development only. |
+| P4/P8 policy parity | Generated registry, shared digest, server-side invariant validation, governance checker, and mismatch tests. |
+| P5/P9 evaluation | Protocol/model/PNG fuzz tests, action-state tests, source-level single-egress check, security scan, SBOM, and aggregate release report. |
+| P12/P13 | Hardened compose profile, release runbook, action invariants, capability allowlist, and browser-package metadata are documented and tested locally. |
+
+The following items cannot be truthfully completed by source changes alone and
+remain release gates:
+
+- trained `yolo-privacy-v1.onnx` and `dbnet-text-det.onnx` assets plus held-out
+  precision/recall and redaction-IoU evidence;
+- real Chrome and Firefox runs on the team laptop across WebGPU/WASM, zoom,
+  high-DPI, canvas, SVG, video, PDF, worker, and cross-origin media cases;
+- a hosted provider deployment with HTTPS, key rotation, and independent
+  multi-instance Redis failover evidence;
+- independent security review and signed production artifacts.
+
+Until those external gates are recorded, the project remains a controlled
+synthetic prototype even though the local code and release checks pass.
 
 ## Non-negotiable rules
 
@@ -199,7 +231,11 @@ Prajjwal owns the receiving boundary and the measurement system. The server must
 
 ### P2. Make jobs durable and restart-safe — P1
 
-Replace the in-memory `ReasoningJobStore` with protected Redis or PostgreSQL for multi-instance deployment. Preserve opaque job IDs and bodyless polling.
+The production profile now selects the protected Redis ledger and shared limiter
+when `PRIVACY_AGENT_REDIS_URL` is configured. The in-memory store remains an
+explicit development profile; the metadata-only SQLite ledger remains available
+for single-instance restart diagnostics. Preserve opaque job IDs and bodyless
+polling.
 
 Implement durable status transitions, worker leases, retry budgets, expiration, cleanup, per-user quotas, cancellation, restart recovery, duplicate/idempotency handling, and load tests for queue saturation. Keep the current in-memory store as an explicitly documented single-instance development profile.
 
@@ -243,9 +279,12 @@ tracked-file secret scanning, and a generated CycloneDX SBOM. A metadata-only
 SQLite ledger is available through `PRIVACY_AGENT_JOB_LEDGER_PATH`; it persists
 validated job status/action outcomes and marks in-flight jobs as
 `server_restarted` rather than silently losing or replaying them. The default
-in-memory store remains explicit for local development. External Redis/Postgres,
-TLS termination, hosted secret management, and a live multi-instance failover
-test remain deployment-profile work and are assigned below.
+in-memory store remains explicit for local development. The compose production
+profile now wires `PRIVACY_AGENT_REDIS_URL` into both the durable job ledger and
+atomic rate limiter, and production startup refuses to run without Redis, a
+pinned model digest, authentication, and structural fallback disabled. External
+secret management, TLS certificate operations, and live multi-instance failover
+evidence remain deployment-profile work.
 
 The reproducible commands are:
 

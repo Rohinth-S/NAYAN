@@ -132,7 +132,7 @@ Current detectors are intentionally narrower than the policy: high-confidence re
 
 ### Evidence already recorded
 
-The latest local validation snapshot is in `VALIDATION_REPORT.md`. The source suites currently report 73 extension tests, 126 server tests, and 28 evaluation tests, with Ruff clean. Recorded synthetic browser evidence uses the WASM fallback and shows three sanitized reasoning requests, absent canaries, nine redactions per request, and successful enrollment. A fresh authenticated local-Ollama HTTP smoke test has also returned a valid structured action.
+The latest local validation snapshot is in `VALIDATION_REPORT.md`. The source suites currently report 92 extension tests, 157 server tests, and 32 evaluation tests, with Ruff clean. Recorded synthetic browser evidence uses the WASM fallback and shows three sanitized reasoning requests, absent canaries, nine redactions per request, and successful enrollment. A fresh authenticated local-Ollama HTTP smoke test has also returned a valid structured action.
 
 ## 5. Runbook for teammates
 

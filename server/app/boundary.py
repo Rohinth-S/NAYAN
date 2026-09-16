@@ -7,7 +7,7 @@ import time
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.rate_limit import SlidingWindowRateLimiter
+from app.rate_limit import RedisRateLimiter, SlidingWindowRateLimiter
 from app.settings import Settings
 
 LOGGER = logging.getLogger("privacy_server.access")
@@ -35,11 +35,17 @@ def is_reasoning_path(path: str) -> bool:
 class ReasoningBoundaryMiddleware:
     """Authenticate and bound the sole model-facing endpoint before parsing its body."""
 
-    def __init__(self, app: ASGIApp, settings: Settings) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        settings: Settings,
+        limiter: SlidingWindowRateLimiter | RedisRateLimiter | None = None,
+    ) -> None:
         self.app = app
         self.settings = settings
-        self._limiter = SlidingWindowRateLimiter(
-            settings.rate_limit_requests, settings.rate_limit_window_seconds
+        self._limiter = limiter or SlidingWindowRateLimiter(
+            settings.rate_limit_requests,
+            settings.rate_limit_window_seconds,
         )
 
     async def _respond(self, send: Send, status: int, code: str) -> None:

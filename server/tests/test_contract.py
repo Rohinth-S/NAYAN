@@ -157,6 +157,23 @@ def test_production_profile_requires_api_key() -> None:
         SanitizedObservation.model_validate(zero_area)
 
 
+def test_production_profile_requires_shared_redis_backend() -> None:
+    settings = Settings(
+        deployment_profile="production",
+        require_api_key=True,
+        api_key=SecretStr("a" * 32),
+        ollama_model_digest="sha256:" + "b" * 64,
+        structural_fallback=False,
+    )
+    with pytest.raises(ValueError, match="REDIS_URL"):
+        settings.assert_runtime_safe()
+
+
+def test_redis_url_rejects_weak_password() -> None:
+    with pytest.raises(ValueError, match="Redis URL"):
+        Settings(redis_url="redis://:short@127.0.0.1:6379/0")
+
+
 @pytest.mark.asyncio
 async def test_scroll_may_target_only_a_scroll_region(
     client: httpx.AsyncClient, fake_reasoner: FakeReasoner

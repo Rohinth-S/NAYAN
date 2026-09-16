@@ -38,7 +38,10 @@ Set-Location ..
 git diff --check
 ```
 
-The last recorded results were 133 server tests and 80 extension tests passing. The local evaluation report records 12 synthetic examples, OCR exact match 11/12, OCR p95 134.02 ms, and NER p95 252.92 ms. These are development measurements, not production accuracy claims.
+The latest integrated release gate records 157 server tests, 92 extension tests,
+and 32 evaluation tests passing. The local evaluation report records 12
+synthetic examples, OCR exact match 11/12, OCR p95 134.02 ms, and NER p95
+252.92 ms. These are development measurements, not production accuracy claims.
 
 ## Remaining work
 

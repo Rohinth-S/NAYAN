@@ -1,8 +1,9 @@
-/** Small, privacy-neutral starter tasks for the popup.
+/** Small starter tasks for the popup and persistent side panel.
  *
  * Presets only fill the local task text box. They never inspect the page,
- * persist values, or change the reasoning protocol. A user can edit the
- * generated task before starting the agent.
+ * persist values, or change the reasoning protocol. Demo data must remain
+ * synthetic and editable because it is processed under the selected grade
+ * only after the user explicitly starts a run.
  */
 export type TaskPresetId = 'review-submit' | 'fill-public-fields' | 'find-information' | 'scroll-summary';
 
@@ -21,7 +22,7 @@ export const TASK_PRESETS: readonly TaskPreset[] = [
   {
     id: 'fill-public-fields',
     label: 'Fill public fields from my instructions',
-    task: 'Fill the requested public fields using only the values I provided in this task, then stop before submitting.',
+    task: 'Fill the public demo form fields with: preferred name Kavya Menon, work email kavya.menon@example.test, phone +91 90000 12345, city Bengaluru, benefit plan Orbital Health Plus, coverage start date 2026-10-01. Then check the consent box and submit the enrollment.',
   },
   {
     id: 'find-information',

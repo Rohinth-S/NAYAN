@@ -27,7 +27,13 @@ try {
 
 $oldPythonPath = $env:PYTHONPATH
 try {
-    $env:PYTHONPATH = Join-Path $projectRoot 'evaluation'
+    # Evaluation tests import both evaluation.helpers and the server package.
+    # Keep the upstream browser-use checkout outside pytest collection while
+    # exposing the two first-party Python package roots explicitly.
+    $env:PYTHONPATH = @(
+        (Join-Path $projectRoot 'server')
+        (Join-Path $projectRoot 'evaluation')
+    ) -join [IO.Path]::PathSeparator
     & $serverPython -m pytest (Join-Path $projectRoot 'evaluation\tests') -q
     if ($LASTEXITCODE -ne 0) { throw "Evaluation tests failed with exit code $LASTEXITCODE." }
 } finally {

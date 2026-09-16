@@ -54,7 +54,11 @@ def main() -> int:
     checks["extension"] = run("extension", [npm, "test", "--", "--reporter=junit", f"--outputFile={OUTPUT / 'extension.xml'}"], ROOT / "extension")
     checks["server"] = run("server", [executable, "-m", "pytest", "-p", "no:cacheprovider", f"--junitxml={OUTPUT / 'server.xml'}"], ROOT / "server")
     checks["lint"] = run("lint", [executable, "-m", "ruff", "check", "."], ROOT / "server")
-    eval_env = dict(os.environ, PYTHONPATH=str(ROOT / "evaluation"))
+    # Evaluation tests exercise both the evaluation helpers and the first-party
+    # server package. Do not rely on the caller's working directory and do not
+    # expose vendored upstream checkouts to pytest collection.
+    eval_pythonpath = os.pathsep.join((str(ROOT / "server"), str(ROOT / "evaluation")))
+    eval_env = dict(os.environ, PYTHONPATH=eval_pythonpath)
     checks["evaluation"] = run("evaluation", [executable, "-m", "pytest", "-p", "no:cacheprovider", "evaluation/tests", "-q", f"--junitxml={OUTPUT / 'evaluation.xml'}"], env=eval_env)
     checks["packages"] = run("packages", [npm, "run", "package"], ROOT / "extension")
     checks["metadata"] = run("metadata", [npm, "run", "release-metadata"], ROOT / "extension") if checks["packages"] else False

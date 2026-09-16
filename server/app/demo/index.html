@@ -45,8 +45,22 @@
           <div class="profile-field"><dt>PAN</dt><dd>ABCDE1234F</dd></div>
           <div class="profile-field"><dt>Aadhaar</dt><dd>2345 6789 1234</dd></div>
           <div class="profile-field"><dt>Employee code</dt><dd>ORB-2048</dd></div>
+          <div class="profile-field"><dt>Date of birth</dt><dd>14/08/1998</dd></div>
+          <div class="profile-field"><dt>Home address</dt><dd>42 Orbit Avenue, Bengaluru</dd></div>
+          <div class="profile-field"><dt>Username</dt><dd>aarav.sharma</dd></div>
+          <div class="profile-field"><dt>Customer ID</dt><dd>CUST-8841-2048</dd></div>
+          <div class="profile-field"><dt>IP address</dt><dd>192.0.2.44</dd></div>
+          <div class="profile-field"><dt>Bank account</dt><dd>Account: 001234567890</dd></div>
         </dl>
         <div class="privacy-note"><span class="note-icon" aria-hidden="true">✦</span><span><strong>Privacy-aware by design</strong><br><small>Only the minimum page structure needed for assistance is shared.</small></span></div>
+        <div class="privacy-spectrum" aria-label="Privacy grade coverage">
+          <div class="spectrum-heading"><span>Privacy spectrum</span><small>Change the grade in the agent panel to compare</small></div>
+          <div class="spectrum-grid">
+            <div class="spectrum-item"><span class="spectrum-level level-one">G1</span><span><strong>Critical</strong><small>passwords · IDs · finance · face</small></span></div>
+            <div class="spectrum-item"><span class="spectrum-level level-two">G2</span><span><strong>Personal</strong><small>email · phone · address · network</small></span></div>
+            <div class="spectrum-item"><span class="spectrum-level level-three">G3</span><span><strong>Identity</strong><small>names · usernames · employee IDs</small></span></div>
+          </div>
+        </div>
       </section>
 
       <section class="card enrollment-card" aria-labelledby="enrollment-heading">
@@ -61,6 +75,11 @@
             <div class="demo-field"><label for="city">City <span class="label-hint">Public demo field</span></label><input class="form-control" id="city" name="city" type="text" placeholder="e.g. Bengaluru" autocomplete="address-level2" data-public-field="true"></div>
             <div class="demo-field"><label for="benefit-plan">Benefit plan <span class="label-hint">Choose one</span></label><select class="form-control" id="benefit-plan" name="benefitPlan"><option value="">Choose a plan</option><option value="orbital-health">Orbital Health Plus</option><option value="family-care">Family Care Standard</option><option value="wellness">Wellness Essentials</option></select></div>
             <div class="demo-field"><label for="start-date">Coverage start date <span class="label-hint">Public demo field</span></label><input class="form-control" id="start-date" name="startDate" type="date" data-public-field="true"></div>
+            <div class="demo-field"><label for="portal-username">Portal username <span class="label-hint">Grade 3</span></label><input class="form-control" id="portal-username" name="username" type="text" value="aarav.sharma" autocomplete="username"></div>
+            <div class="demo-field"><label for="date-of-birth">Date of birth <span class="label-hint">Grade 2</span></label><input class="form-control" id="date-of-birth" name="dateOfBirth" type="date" value="1998-08-14" autocomplete="bday"></div>
+            <div class="demo-field"><label for="home-address">Home address <span class="label-hint">Grade 2</span></label><input class="form-control" id="home-address" name="homeAddress" type="text" value="42 Orbit Avenue, Bengaluru" autocomplete="street-address"></div>
+            <div class="demo-field"><label for="customer-id">Customer ID <span class="label-hint">Grade 2</span></label><input class="form-control" id="customer-id" name="customerId" type="text" value="CUST-8841-2048"></div>
+            <div class="demo-field"><label for="bank-account">Bank account <span class="label-hint">Grade 1</span></label><input class="form-control" id="bank-account" name="bankAccount" type="text" value="001234567890"></div>
           </div>
           <label for="employee-code">Employee code <span class="label-hint">Read only</span></label>
           <div class="input-wrap"><span class="input-prefix" aria-hidden="true">ID</span><input id="employee-code" name="employeeCode" value="ORB-2048" readonly></div>

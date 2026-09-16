@@ -226,8 +226,8 @@ The server is an untrusted recipient of the sanitized protocol object and provid
 - `server/app/circuit_breaker.py` wraps model calls in an asynchronous Closed/Open/Half-Open state machine, ensuring that if a model adapter crashes, the API gracefully fast-fails instead of hanging or retrying endlessly.
 - `server/app/model_adapter.py` defines the provider-neutral sanitized adapter contract and rejects mismatched snapshot responses.
 - `server/app/action_guard.py` uses sanitized task, role, label, state, and bounds metadata to guard high-confidence consent and submit prerequisites without seeing raw values.
-- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue backed by a highly available `RedisJobLedger`. Synchronous compatibility requests share the same model-admission gate and time out with a controlled capacity error.
-- `server/app/rate_limit.py` protects the cluster with an atomic Lua-scripted sliding window rate limiter in Redis.
+- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue. The configured production profile uses `RedisJobLedger`; development can use the in-memory store or metadata-only SQLite ledger.
+- `server/app/rate_limit.py` protects a configured multi-instance deployment with an atomic Lua-scripted Redis sliding window; development falls back to a bounded process-local limiter.
 - The container profile requires `PRIVACY_AGENT_API_KEY` at startup; local development can use the loopback launcher, which generates a session key automatically.
 
 ### Threat model and scope
@@ -391,6 +391,7 @@ Normal website traffic remains the website's own responsibility. The guarantee c
 ## Features implemented today
 
 - One TypeScript source tree builds Chrome MV3 and Firefox-compatible extension packages.
+- Persistent Chrome side panel and Firefox sidebar surfaces keep task controls, activity, and the sanitized preview visible during long runs.
 - User-selectable cumulative Grade 1/2/3 privacy levels with Grade 3 default and fail-safe handling.
 - Local DOM, field metadata, regex, known-private-value, and face detection.
 - Bundled unified YOLOv8n/v10n ONNX model with WebGPU first and WASM fallback. WebGPU uses the browser API; the model and WASM assets are packaged locally.
@@ -404,7 +405,11 @@ Normal website traffic remains the website's own responsibility. The guarantee c
 - FastAPI authentication, CORS/origin checks, request limits, safe logs, bounded jobs, and local Ollama integration.
 - Strict action types: `click`, `input`, `scroll`, `wait`, and `done`.
 - Revision-bound action execution that rejects stale pages, changed origins, changed tabs, changed scroll state, and unknown targets.
-- Synthetic demo portal containing password, Indian PII, links, a face image, consent state, and terminal submission.
+- Synthetic demo portal containing password, Indian PII, links, a face image,
+  a privacy-spectrum gallery, public form fields (preferred name, work email,
+  phone, city, benefit plan, and coverage date), and Grade 1/2/3 comparison
+  fields for username, date of birth, home address, customer ID, bank account,
+  and employee identity.
 - Evaluation corpus, receiver-body verifier, precision/recall scorer, pixel-area metrics, and security test plan.
 - CI workflow, contribution guide, pull-request checklist, issue templates, model attribution, and aggregate synthetic evidence.
 
@@ -412,9 +417,9 @@ Normal website traffic remains the website's own responsibility. The guarantee c
 
 The checked-in [VALIDATION_REPORT.md](VALIDATION_REPORT.md) records the evidence snapshot. The current source suites report:
 
-- **73 extension tests passed**;
-- **126 server tests passed**;
-- **28 evaluation tests passed**;
+- **92 extension tests passed**;
+- **157 server tests passed**;
+- **32 evaluation tests passed**;
 - Ruff clean;
 - Chrome and Firefox packages built;
 - Detector asset status recorded by the build; model checksums and held-out precision/recall must be supplied before claiming trained-model performance.
@@ -475,6 +480,8 @@ For Chrome:
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked**.
 3. Select `extension\dist\chrome`.
+4. Click the extension icon. Chrome opens the persistent **Private Browser
+   Agent** side panel, which remains visible while the agent works.
 
 For Firefox:
 
@@ -485,13 +492,23 @@ For Firefox:
 ### Run the synthetic task
 
 1. Open `http://127.0.0.1:8765/demo`.
-2. Use the popup's **Quick start** menu to choose **Review and submit a form**, or enter `Check the confirmation checkbox, then submit the enrollment.` yourself. The generated task remains editable and is filled locally.
+2. Use the side panel's **Quick start** menu to choose **Review and submit a
+   form** or **Fill public fields from my instructions**, or enter your own
+   task. The generated task remains editable and is filled locally.
 3. Open `.runtime\api-key.txt`, copy its contents, and paste that value into **Optional API key**. Paste the key value, not the file path.
 4. Optionally add the fictional demo values under **Known private values** to exercise canary checks.
 5. Select **Privacy preview** and inspect the locally generated image. Use **Expand** and then **Open full view** for a fit-to-screen viewer in a separate extension tab. Enter a task as usual; preview still makes no reasoning request.
 6. Select Grade 1, Grade 2, or Grade 3 and review its disclosure description.
 7. Select **Start agent** and approve the local endpoint if the browser asks.
 8. Confirm the page reaches `Enrollment submitted successfully.`
+
+For a privacy-grade recording, run **Privacy preview** three times on the
+fresh demo page: Grade 1 masks critical secrets, government/financial IDs, and
+the face; Grade 2 adds contact, location, date-of-birth, customer/account, and
+network fields; Grade 3 adds names, usernames, employee IDs, and other
+populated fields. The labels remain visible, so the audience can see why each
+value was classified without exposing the synthetic value to the reasoning
+service.
 
 If the popup reports `Local offscreen sanitization failed; transmission
 blocked`, the request was stopped before the reasoning server and the API key
@@ -540,7 +557,7 @@ Stop the API with:
 - **Orchestration & State Management:** Bounded client agent loop with the Approach B state topology documented in `agent-graph.ts`; the Step 0 Abort Gate is live in the page content script and is enabled around each reasoning request.
 - **Formal Action Verification:** Deployed rigorous, heuristic-based action interception directly in the content scripts. Irreversible tasks (like submitting a payment, deleting data, or checking out) automatically freeze the agent and mandate a native `window.confirm()` before executing, strictly enforcing human-in-the-loop oversight over destructive mutations.
 - **Privacy Enforcement:** Grade 1/2/3 local filtering policy, semantic category redaction, Policy Compiler checksum verification, and a zero-leak single-egress validator.
-- **Deployment Safety & Supply Chain Resilience:** Orchestrated via a hardened, ultra-secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root file system via `tmpfs`, and proxies traffic through Nginx. Includes a durable `RedisJobLedger`, a Lua-backed atomic sliding window rate limiter, and an automated data-minimization `retention-cron.sh` script to continually purge expired jobs.
+- **Deployment Safety & Supply Chain Resilience:** Orchestrated via a hardened, ultra-secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root file system via `tmpfs`, and proxies traffic through Nginx. When `PRIVACY_AGENT_REDIS_URL` is configured, the server uses a durable `RedisJobLedger` and Lua-backed atomic sliding-window limiter; local development remains explicit and bounded.
 - **Extensibility & Reliability:** Implemented the pluggable Ollama gateway, circuit breaker, bounded jobs, and structural planner in the existing FastAPI backend. The RFC's Node/LangGraph deployment is an explicit future adapter, not a claim about the current server.
 - **Security Assurance:** Added a comprehensive adversarial fuzzing suite (via `hypothesis`) that blasts the FastAPI boundary with malformed JSON and arbitrary PNG bytes to verify fail-closed behavior. Additionally, formal state-machine tests verify that `action_guard.py` mathematically prevents cross-origin side effects. Finally, release provenance scripts (`scripts/sign-release.ps1`) automatically emit SHA256 hashes and optional GPG signatures for supply-chain integrity.
 
