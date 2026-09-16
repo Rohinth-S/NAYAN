@@ -268,7 +268,7 @@ Browser agents see unusually rich information: identity forms, private messages,
 
 The privacy boundary addresses the most important failure timing: it decides what is sensitive before the first network request. It also limits what the model can do after receiving the observation. A redaction placeholder communicates that a region exists without giving the model permission to reconstruct it; an opaque element ID lets the model select a control without learning the selector or the user's values; a revision check prevents an action planned for an old page from being applied to a new one.
 
-The guarantee has a precise scope. It protects the configured reasoning channel and the extension's own serialization path. It does not control ordinary requests made by the website, other extensions, the operating system, screen-sharing software, or a browser implementation that has been compromised. This scope is explicit so judges and users can distinguish a verifiable engineering boundary from a claim of universal anonymization.
+The guarantee has a precise scope. It protects the configured reasoning channel and the extension's own serialization path. It does not control ordinary requests made by the website, other extensions, the operating system, screen-sharing software, or a browser implementation that has been compromised.
 
 ## Core implementation, mapped to the repository
 
@@ -524,7 +524,6 @@ Stop the API with:
 | `SECURITY.md` | Vulnerability reporting and the exact scope of the privacy claim. |
 | `evidence/` | Safe aggregate synthetic validation summaries. |
 
-The local `browser-use/` and `BrowserOS-reference/` directories are optional upstream references and are intentionally excluded from this Git repository because they contain separate Git history and development environments. Clone them separately when comparing designs, and preserve their original licenses.
 
 ## Current Implementation Status
 
