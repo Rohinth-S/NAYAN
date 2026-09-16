@@ -12,6 +12,7 @@ server/.venv/
 **/__pycache__/
 **/.pytest_cache/
 **/.ruff_cache/
+.hypothesis/
 *.log
 *.env
 *.pem
