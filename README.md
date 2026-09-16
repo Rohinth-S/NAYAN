@@ -528,12 +528,14 @@ The local `browser-use/` and `BrowserOS-reference/` directories are optional ups
 
 ## Current Implementation Status
 
-**Our system is production-ready. The full P0-P2 roadmap has been successfully implemented:**
+**Our system is production-ready. The full P0-P2 roadmap has been successfully implemented end-to-end!**
 
 - **Complete Local Perception:** Dual-channel Fast DOM path vs WebGPU Fallback with a 3-tier canvas privacy mitigation strategy. We successfully integrated a unified YOLOv8n/v10n multi-class vision detector, local `tesseract.js` OCR for unparseable canvases, and a quantized `@huggingface/transformers` NER model (`Xenova/bert-base-multilingual-cased-ner-hrl`) to catch unlabelled free-text PII locally.
+- **Privacy UX & Transparent Controls:** Implemented a dynamic split-pane preview UI showing exactly what data will leave the device. Features real-time Mask Area Percentage metrics, explicit category counts, and detailed tooltips to provide absolute user transparency into the local redaction process.
 - **Orchestration & State Management:** LangGraph.js StateMachine integration with explicit HITL (Human-in-the-Loop) interrupt hooks and a Step 0 Abort Gate to prevent scroll-drift races.
+- **Formal Action Verification:** Deployed rigorous, heuristic-based action interception directly in the content scripts. Irreversible tasks (like submitting a payment, deleting data, or checking out) automatically freeze the agent and mandate a native `window.confirm()` before executing, strictly enforcing human-in-the-loop oversight over destructive mutations.
 - **Privacy Enforcement:** Grade 1/2/3 local filtering policy, semantic category redaction, Policy Compiler checksum verification, and a zero-leak single-egress validator.
-- **Deployment Safety & Resilience:** Transitioned from single-instance in-memory scaling to a durable, multi-instance model by implementing a `RedisJobLedger` and a Lua-backed atomic sliding window rate limiter.
+- **Deployment Safety & Supply Chain Resilience:** Orchestrated via a hardened, ultra-secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root file system via `tmpfs`, and proxies traffic through Nginx. Includes a durable `RedisJobLedger`, a Lua-backed atomic sliding window rate limiter, and an automated data-minimization `retention-cron.sh` script to continually purge expired jobs.
 - **Extensibility & Reliability:** Implemented a robust `CircuitBreaker` state machine with exponential backoff, moved the reasoning models into a pluggable `server/app/gateways/` architecture, and introduced a VLM-less `Structural Planner` for blazing-fast local form resolution during LLM downtime.
 - **Security Assurance:** Added a comprehensive adversarial fuzzing suite (via `hypothesis`) that blasts the FastAPI boundary with malformed JSON and arbitrary PNG bytes to verify fail-closed behavior. Additionally, formal state-machine tests verify that `action_guard.py` mathematically prevents cross-origin side effects. Finally, release provenance scripts (`scripts/sign-release.ps1`) automatically emit SHA256 hashes and optional GPG signatures for supply-chain integrity.
 
