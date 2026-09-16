@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
-from app.job_ledger import SQLiteJobLedger, RedisJobLedger
+from app.job_ledger import RedisJobLedger, SQLiteJobLedger
 from app.schemas import ReasoningResponse
 
 LOGGER = logging.getLogger("privacy_server")
@@ -75,11 +75,7 @@ class ReasoningJobStore:
         self._ledger = ledger
 
     def _expire_locked(self, now: float) -> None:
-        expired = [
-            job_id
-            for job_id, job in self._jobs.items()
-            if now - job.updated_at >= self._ttl_seconds
-        ]
+        expired = [job_id for job_id, job in self._jobs.items() if now - job.updated_at >= self._ttl_seconds]
         for job_id in expired:
             job = self._jobs.pop(job_id)
             job.changed.set()

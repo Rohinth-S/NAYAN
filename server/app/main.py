@@ -15,6 +15,13 @@ from app.action_guard import deterministic_form_action, guard_reasoned_action
 from app.boundary import ReasoningBoundaryMiddleware, SafeAccessLogMiddleware, SecurityHeadersMiddleware
 from app.circuit_breaker import CircuitBreaker, CircuitOpen
 from app.gateway_adapter import GatewayReasoner
+from app.gateways.ollama import (
+    OllamaReasoner,
+    Reasoner,
+    ReasonerContextLimit,
+    ReasonerInvalidResponse,
+    ReasonerUnavailable,
+)
 from app.job_ledger import SQLiteJobLedger
 from app.jobs import (
     ReasoningJobError,
@@ -23,13 +30,6 @@ from app.jobs import (
     ReasoningQueueFull,
 )
 from app.observability import PrivacyMetrics
-from app.gateways.ollama import (
-    OllamaReasoner,
-    Reasoner,
-    ReasonerContextLimit,
-    ReasonerInvalidResponse,
-    ReasonerUnavailable,
-)
 from app.schemas import (
     DemoState,
     DemoSubmit,
@@ -258,9 +258,7 @@ def create_app(
             token.partition(";")[0].strip().lower() == "respond-async" for token in prefer.split(",")
         )
         if wants_async:
-            if not settings.structural_fallback and (
-                not await reasoner.ready() or breaker.is_blocking()
-            ):
+            if not settings.structural_fallback and (not await reasoner.ready() or breaker.is_blocking()):
                 raise HTTPException(status_code=503, detail="reasoning_backend_unavailable")
             try:
                 job = await jobs.submit(

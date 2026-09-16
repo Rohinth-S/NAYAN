@@ -3,6 +3,7 @@
 The operator chooses one endpoint; there is no provider discovery or automatic
 fallback. A gateway must expose the reviewed manifest at /v1/model-manifest.
 """
+
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -10,8 +11,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from app.model_adapter import ModelManifest, validate_adapter_response
 from app.gateways.ollama import MODEL_PROMPT_VERSION, ReasonerInvalidResponse, ReasonerUnavailable
+from app.model_adapter import ModelManifest, validate_adapter_response
 from app.schemas import ReasoningResponse, SanitizedObservation
 from app.settings import Settings
 from app.validation import validate_observation
@@ -22,14 +23,20 @@ class GatewayReasoner:
         self.settings = settings
         self.model = settings.ollama_model
         self.manifest = ModelManifest(
-            "sanitized-gateway", self.model, settings.ollama_model_digest, MODEL_PROMPT_VERSION,
+            "sanitized-gateway",
+            self.model,
+            settings.ollama_model_digest,
+            MODEL_PROMPT_VERSION,
             urlsplit(settings.gateway_url or "").hostname in {"localhost", "127.0.0.1", "::1"},
         )
         self._client = httpx.AsyncClient(
-            base_url=settings.gateway_url or "", timeout=settings.ollama_timeout_seconds,
+            base_url=settings.gateway_url or "",
+            timeout=settings.ollama_timeout_seconds,
             headers={"Authorization": "Bearer " + settings.gateway_api_key.get_secret_value()}
-            if settings.gateway_api_key else {},
-            follow_redirects=False, trust_env=False,
+            if settings.gateway_api_key
+            else {},
+            follow_redirects=False,
+            trust_env=False,
             limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
         )
 
@@ -48,6 +55,7 @@ class GatewayReasoner:
 
     async def ready(self) -> bool:
         import json
+
         try:
             manifest = json.loads(await self._bounded("GET", "/v1/model-manifest"))
             return manifest == asdict(self.manifest)

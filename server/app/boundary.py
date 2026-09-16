@@ -84,9 +84,7 @@ class ReasoningBoundaryMiddleware:
                 return
 
         method = scope.get("method")
-        if (path == "/v1/reason" and method != "POST") or (
-            path != "/v1/reason" and method != "GET"
-        ):
+        if (path == "/v1/reason" and method != "POST") or (path != "/v1/reason" and method != "GET"):
             await self._respond(send, 405, "method_not_allowed")
             return
 

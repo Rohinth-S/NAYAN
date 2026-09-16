@@ -106,6 +106,7 @@ def _model_image(observation: SanitizedObservation) -> tuple[str, int, int]:
         resized.save(output, format="PNG")
     return base64.b64encode(output.getvalue()).decode("ascii"), *size
 
+
 # Ollama's grammar engine currently rejects Pydantic's $defs/anyOf/pattern schema. This deliberately small
 # schema still constrains JSON shape at generation time; ReasoningResponse performs the complete strict check.
 OLLAMA_RESPONSE_FORMAT: dict[str, Any] = {
@@ -137,8 +138,15 @@ def _model_context(observation: SanitizedObservation, width: int, height: int) -
     def scaled_record(item: Any) -> dict[str, Any]:
         record = item.model_dump()
         record["bounds"] = {
-            key: round(value * (width / observation.image.width if key in {"x", "width"}
-                                else height / observation.image.height), 2)
+            key: round(
+                value
+                * (
+                    width / observation.image.width
+                    if key in {"x", "width"}
+                    else height / observation.image.height
+                ),
+                2,
+            )
             for key, value in record["bounds"].items()
         }
         return record

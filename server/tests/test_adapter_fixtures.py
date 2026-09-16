@@ -8,8 +8,8 @@ import pytest
 from conftest import SNAPSHOT_ID, SUBMIT_ID, FakeReasoner, observation_payload
 
 from app.circuit_breaker import CircuitBreaker
-from app.main import create_app
 from app.gateways.ollama import OllamaReasoner, ReasonerInvalidResponse, ReasonerUnavailable
+from app.main import create_app
 from app.schemas import BrowserAction, ReasoningResponse, SanitizedObservation
 from app.settings import Settings
 

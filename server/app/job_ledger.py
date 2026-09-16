@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
 from app.schemas import ReasoningResponse
 
+LedgerRecord = tuple[str, str, ReasoningResponse | None, int | None, str | None]
+
 
 class SQLiteJobLedger:
     """Metadata-only restart ledger; sanitized observations are never persisted."""
@@ -54,7 +56,9 @@ class SQLiteJobLedger:
         )
         self._connection.commit()
 
-    async def get(self, job_id: str) -> tuple[str, str, ReasoningResponse | None, int | None, str | None] | None:
+    async def get(
+        self, job_id: str
+    ) -> LedgerRecord | None:
         row = self._connection.execute(
             "SELECT snapshot_id,state,response_json,failure_status,failure_code "
             "FROM reasoning_jobs WHERE job_id=?",
@@ -76,50 +80,64 @@ class RedisJobLedger:
         self._redis = redis_client
 
     async def pending(self, job_id: str, snapshot_id: str) -> None:
-        await self._redis.hset(f"job:{job_id}", mapping={
-            "snapshot_id": snapshot_id,
-            "state": "pending",
-            "updated_at": time.time(),
-        })
+        await self._redis.hset(
+            f"job:{job_id}",
+            mapping={
+                "snapshot_id": snapshot_id,
+                "state": "pending",
+                "updated_at": time.time(),
+            },
+        )
         await self._redis.expire(f"job:{job_id}", 3600)  # 1 hour TTL
 
     async def success(self, job_id: str, response: ReasoningResponse) -> None:
-        await self._redis.hset(f"job:{job_id}", mapping={
-            "state": "succeeded",
-            "response_json": response.model_dump_json(),
-            "updated_at": time.time(),
-        })
+        await self._redis.hset(
+            f"job:{job_id}",
+            mapping={
+                "state": "succeeded",
+                "response_json": response.model_dump_json(),
+                "updated_at": time.time(),
+            },
+        )
 
     async def failure(self, job_id: str, status: int, code: str) -> None:
-        await self._redis.hset(f"job:{job_id}", mapping={
-            "state": "failed",
-            "failure_status": str(status),
-            "failure_code": code,
-            "updated_at": time.time(),
-        })
+        await self._redis.hset(
+            f"job:{job_id}",
+            mapping={
+                "state": "failed",
+                "failure_status": str(status),
+                "failure_code": code,
+                "updated_at": time.time(),
+            },
+        )
 
-    async def get(self, job_id: str) -> tuple[str, str, ReasoningResponse | None, int | None, str | None] | None:
+    async def get(
+        self, job_id: str
+    ) -> LedgerRecord | None:
         data = await self._redis.hgetall(f"job:{job_id}")
         if not data:
             return None
-        
+
         # Redis returns bytes or decoded strings depending on decode_responses
         def decode(v: bytes | str | None) -> str | None:
-            if v is None: return None
-            return v.decode('utf-8') if isinstance(v, bytes) else str(v)
-            
-        snapshot_id = decode(data.get(b'snapshot_id', data.get('snapshot_id')))
-        state = decode(data.get(b'state', data.get('state')))
-        response_json = decode(data.get(b'response_json', data.get('response_json')))
-        failure_status_str = decode(data.get(b'failure_status', data.get('failure_status')))
-        failure_code = decode(data.get(b'failure_code', data.get('failure_code')))
-        
+            if v is None:
+                return None
+            if isinstance(v, bytes):
+                return v.decode("utf-8")
+            return str(v)
+
+        snapshot_id = decode(data.get(b"snapshot_id", data.get("snapshot_id")))
+        state = decode(data.get(b"state", data.get("state")))
+        response_json = decode(data.get(b"response_json", data.get("response_json")))
+        failure_status_str = decode(data.get(b"failure_status", data.get("failure_status")))
+        failure_code = decode(data.get(b"failure_code", data.get("failure_code")))
+
         if not snapshot_id or not state:
             return None
-            
+
         response = ReasoningResponse.model_validate(json.loads(response_json)) if response_json else None
         failure_status = int(failure_status_str) if failure_status_str else None
-        
+
         return snapshot_id, state, response, failure_status, failure_code
 
     async def close(self) -> None:

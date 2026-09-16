@@ -98,9 +98,16 @@ class Settings(BaseModel):
         if self.reasoning_adapter == "gateway":
             parts = urlsplit(self.gateway_url or "")
             local = parts.hostname in {"localhost", "127.0.0.1", "::1"}
-            if (not parts.hostname or parts.username or parts.password or parts.query or parts.fragment
-                    or parts.path not in {"", "/"} or parts.scheme not in {"http", "https"}
-                    or (not local and parts.scheme != "https")):
+            if (
+                not parts.hostname
+                or parts.username
+                or parts.password
+                or parts.query
+                or parts.fragment
+                or parts.path not in {"", "/"}
+                or parts.scheme not in {"http", "https"}
+                or (not local and parts.scheme != "https")
+            ):
                 raise ValueError("gateway requires HTTPS or loopback HTTP without URL credentials or paths")
             if not local and self.gateway_api_key is None:
                 raise ValueError("hosted gateway requires a separate gateway API key")
@@ -151,7 +158,8 @@ class Settings(BaseModel):
             reasoning_adapter=os.getenv("PRIVACY_AGENT_REASONING_ADAPTER", "ollama"),
             gateway_url=os.getenv("PRIVACY_AGENT_GATEWAY_URL") or None,
             gateway_api_key=SecretStr(os.environ["PRIVACY_AGENT_GATEWAY_API_KEY"])
-            if os.getenv("PRIVACY_AGENT_GATEWAY_API_KEY") else None,
+            if os.getenv("PRIVACY_AGENT_GATEWAY_API_KEY")
+            else None,
             ollama_base_url=os.getenv("PRIVACY_AGENT_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
             ollama_model=os.getenv("PRIVACY_AGENT_OLLAMA_MODEL", "qwen3-vl:2b-instruct"),
             ollama_model_digest=os.getenv("PRIVACY_AGENT_OLLAMA_MODEL_DIGEST") or None,
@@ -166,15 +174,11 @@ class Settings(BaseModel):
             max_elements=int(os.getenv("PRIVACY_AGENT_MAX_ELEMENTS", "500")),
             max_redactions=int(os.getenv("PRIVACY_AGENT_MAX_REDACTIONS", "1000")),
             max_reasoning_jobs=int(os.getenv("PRIVACY_AGENT_MAX_REASONING_JOBS", "16")),
-            max_concurrent_reasoning_jobs=int(
-                os.getenv("PRIVACY_AGENT_MAX_CONCURRENT_REASONING_JOBS", "2")
-            ),
+            max_concurrent_reasoning_jobs=int(os.getenv("PRIVACY_AGENT_MAX_CONCURRENT_REASONING_JOBS", "2")),
             reasoning_admission_timeout_seconds=float(
                 os.getenv("PRIVACY_AGENT_REASONING_ADMISSION_TIMEOUT_SECONDS", "5")
             ),
-            reasoning_job_ttl_seconds=float(
-                os.getenv("PRIVACY_AGENT_REASONING_JOB_TTL_SECONDS", "300")
-            ),
+            reasoning_job_ttl_seconds=float(os.getenv("PRIVACY_AGENT_REASONING_JOB_TTL_SECONDS", "300")),
             rate_limit_requests=int(os.getenv("PRIVACY_AGENT_RATE_LIMIT_REQUESTS", "120")),
             rate_limit_window_seconds=float(os.getenv("PRIVACY_AGENT_RATE_LIMIT_WINDOW_SECONDS", "60")),
             metrics_enabled=_env_bool("PRIVACY_AGENT_METRICS_ENABLED", True),

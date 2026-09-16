@@ -4,12 +4,13 @@ The breaker never retries a request, never changes privacy.grade, and never
 substitutes an unsanitized payload. Timeouts and concurrency are bounded; an
 open circuit fails closed until a single half-open probe is allowed.
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from enum import Enum
+from enum import StrEnum
 from typing import TypeVar
 
 from app.gateways.ollama import ReasonerUnavailable
@@ -17,7 +18,7 @@ from app.gateways.ollama import ReasonerUnavailable
 T = TypeVar("T")
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"

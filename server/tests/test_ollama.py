@@ -97,9 +97,7 @@ async def test_readiness_rejects_model_digest_mismatch() -> None:
             json={"models": [{"name": "qwen3-vl:2b-instruct", "digest": "sha256:" + "a" * 64}]},
         )
 
-    reasoner = OllamaReasoner(
-        "http://127.0.0.1:11434", "qwen3-vl:2b-instruct", 10, "sha256:" + "b" * 64
-    )
+    reasoner = OllamaReasoner("http://127.0.0.1:11434", "qwen3-vl:2b-instruct", 10, "sha256:" + "b" * 64)
     await reasoner.close()
     reasoner._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://ollama")
     try:

@@ -76,9 +76,6 @@ class RedisRateLimiter:
     async def allow(self, key: str) -> tuple[bool, int]:
         now = time.time()
         redis_key = f"ratelimit:{key}"
-        result = await self._script(
-            keys=[redis_key],
-            args=[self.limit, self.window_seconds, now]
-        )
+        result = await self._script(keys=[redis_key], args=[self.limit, self.window_seconds, now])
         allowed, retry_after = result
         return bool(allowed), int(retry_after)

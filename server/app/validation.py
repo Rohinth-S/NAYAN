@@ -204,8 +204,11 @@ def _reject_obvious_unredacted_pii(observation: SanitizedObservation) -> None:
         for _, pattern in protected_text_patterns(observation.privacy.grade):
             if pattern.search(value):
                 raise ObservationRejected("unredacted_pii_detected")
-        if any(pattern.search(normalize_for_detection(value)) for _, minimum, pattern in PATTERNS
-               if minimum <= observation.privacy.grade):
+        if any(
+            pattern.search(normalize_for_detection(value))
+            for _, minimum, pattern in PATTERNS
+            if minimum <= observation.privacy.grade
+        ):
             raise ObservationRejected("unredacted_pii_detected")
 
 
@@ -315,6 +318,9 @@ def validate_action_for_observation(
         for _, pattern in protected_text_patterns(observation.privacy.grade):
             if pattern.search(action.text):
                 raise ObservationRejected("model_returned_pii")
-        if any(pattern.search(normalize_for_detection(action.text)) for _, minimum, pattern in PATTERNS
-               if minimum <= observation.privacy.grade):
+        if any(
+            pattern.search(normalize_for_detection(action.text))
+            for _, minimum, pattern in PATTERNS
+            if minimum <= observation.privacy.grade
+        ):
             raise ObservationRejected("model_returned_pii")

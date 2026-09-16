@@ -5,9 +5,9 @@ import pytest
 from conftest import CONSENT_ID, SUBMIT_ID, FakeReasoner, observation_payload
 
 from app.circuit_breaker import CircuitBreaker
+from app.gateways.ollama import ReasonerUnavailable
 from app.generated_policy import REGISTRY_DIGEST
 from app.main import create_app
-from app.gateways.ollama import ReasonerUnavailable
 from app.schemas import ReasoningResponse, SanitizedObservation
 from app.settings import Settings
 from app.structural_planner import plan_structural_action, plan_structural_response

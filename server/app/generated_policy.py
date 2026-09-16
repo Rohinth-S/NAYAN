@@ -3,6 +3,7 @@
 Produced by scripts/generate-policy-registry.py from
 server/app/detector-registry.json and governance/protocol-manifest.json.
 """
+
 from __future__ import annotations
 
 PROTOCOL_VERSION = "1.0"

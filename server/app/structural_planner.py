@@ -5,6 +5,7 @@ submit control, wait for a unique disabled terminal control, or stop with done.
 It never emits input, never fills a value, and never copies a redacted label
 into the response.
 """
+
 from __future__ import annotations
 
 from app.action_guard import _is_pending_prerequisite, _is_submit_like, _is_terminal_label
@@ -24,9 +25,7 @@ def plan_structural_action(observation: SanitizedObservation) -> BrowserAction:
     if len(submits) == 1:
         return BrowserAction(type="click", elementId=submits[0].id)
     disabled_terminal = [
-        element
-        for element in observation.elements
-        if _is_terminal_label(element) and element.state.disabled
+        element for element in observation.elements if _is_terminal_label(element) and element.state.disabled
     ]
     if len(disabled_terminal) == 1:
         return BrowserAction(type="wait", milliseconds=WAIT_MILLISECONDS)

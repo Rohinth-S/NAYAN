@@ -1,4 +1,5 @@
 """Compile the shared detector registry into typed client and server modules."""
+
 from __future__ import annotations
 
 import hashlib
@@ -147,9 +148,7 @@ def validate_registry(registry: dict[str, Any], *, protocol_version: str) -> Non
 
 
 def render_python(registry: dict[str, Any], protocol_version: str, digest: str) -> str:
-    grades = ",\n    ".join(
-        f"{json.dumps(key)}: {value}" for key, value in registry["minimumGrades"].items()
-    )
+    grades = ",\n    ".join(f"{json.dumps(key)}: {value}" for key, value in registry["minimumGrades"].items())
     invariants = ",\n    ".join(json.dumps(item) for item in INVARIANT_CATEGORIES)
     return (
         '"""Generated policy registry. Do not edit by hand.\n\n'
@@ -174,9 +173,7 @@ def _ts_string(value: str) -> str:
 
 
 def render_typescript(registry: dict[str, Any], protocol_version: str, digest: str) -> str:
-    grades = ",\n  ".join(
-        f"{_ts_string(key)}: {value}" for key, value in registry["minimumGrades"].items()
-    )
+    grades = ",\n  ".join(f"{_ts_string(key)}: {value}" for key, value in registry["minimumGrades"].items())
     invariants = ",\n  ".join(_ts_string(item) for item in INVARIANT_CATEGORIES)
     return (
         "/** Generated policy registry. Do not edit by hand. */\n"

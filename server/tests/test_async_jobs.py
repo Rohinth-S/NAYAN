@@ -154,9 +154,7 @@ async def test_async_queue_is_bounded(settings: Settings) -> None:
             await release.wait()
             return await super().reason(observation)
 
-    bounded = settings.model_copy(
-        update={"max_reasoning_jobs": 1, "max_concurrent_reasoning_jobs": 1}
-    )
+    bounded = settings.model_copy(update={"max_reasoning_jobs": 1, "max_concurrent_reasoning_jobs": 1})
     app = create_app(bounded, BlockingReasoner())
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -225,9 +223,7 @@ async def test_job_poll_requires_same_auth_and_origin_boundary(settings: Setting
             headers={**auth_headers, "Prefer": "respond-async"},
         )
         job_id = accepted.json()["jobId"]
-        missing_auth = await client.get(
-            f"/v1/reason/{job_id}", headers={"Origin": extension_origin}
-        )
+        missing_auth = await client.get(f"/v1/reason/{job_id}", headers={"Origin": extension_origin})
         wrong_origin = await client.get(
             f"/v1/reason/{job_id}",
             headers={"Origin": "https://attacker.example", "X-Privacy-Agent-Key": key},

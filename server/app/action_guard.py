@@ -150,8 +150,11 @@ def deterministic_form_action(observation: SanitizedObservation) -> BrowserActio
         return _click(target.id)
     # A checked prerequisite with no visible terminal means the terminal is
     # below the viewport. Scroll instead of toggling consent off.
-    if not submit_like and not disabled_terminal and not pending and any(
-        element.role == "checkbox" and element.state.checked for element in elements
+    if (
+        not submit_like
+        and not disabled_terminal
+        and not pending
+        and any(element.role == "checkbox" and element.state.checked for element in elements)
     ):
         return BrowserAction(type="scroll", direction="down", amount=450)
     if not submit_like and not pending and len(disabled_terminal) == 1:
