@@ -38,8 +38,26 @@ const previewModal = byId<HTMLDivElement>('previewModal');
 const previewModalImage = byId<HTMLImageElement>('previewModalImage');
 const previewClose = byId<HTMLButtonElement>('previewClose');
 const openPreviewTab = byId<HTMLButtonElement>('openPreviewTab');
+const activityLog = document.getElementById('activityLog') as HTMLOListElement | null;
 
 let previewReturnFocus: HTMLElement | null = null;
+let lastActivity = '';
+
+function recordActivity(phase: AgentStatus['phase'], text: string): void {
+  if (!activityLog || !text || text === lastActivity) return;
+  lastActivity = text;
+  const item = document.createElement('li');
+  const dot = document.createElement('span');
+  dot.className = 'activity-dot';
+  const copy = document.createElement('span');
+  copy.textContent = text;
+  item.append(dot, copy);
+  activityLog.append(item);
+  while (activityLog.children.length > 12) activityLog.firstElementChild?.remove();
+  // Keep the newest event in view without stealing focus from a running task.
+  activityLog.scrollTop = activityLog.scrollHeight;
+  item.dataset.phase = phase;
+}
 
 function openPreviewViewer(): void {
   const source = previewImage.currentSrc || previewImage.src;
@@ -148,7 +166,9 @@ async function send(command: PopupCommand): Promise<AgentStatus> {
 function render(current: AgentStatus): void {
   state.textContent = current.phase;
   state.dataset.phase = current.phase;
-  message.textContent = popupError ?? current.message;
+  const visibleMessage = popupError ?? current.message;
+  message.textContent = visibleMessage;
+  recordActivity(current.phase, visibleMessage);
   step.textContent = String(current.step);
   const hasRun = current.phase !== 'idle' || current.step > 0 || current.redactionCount > 0 || current.previewDataUrl !== null;
   detector.textContent = hasRun ? current.detectorBackend : 'not run';

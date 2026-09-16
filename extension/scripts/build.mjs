@@ -34,10 +34,11 @@ const commonManifest = {
 const chromeManifest = {
   ...commonManifest,
   manifest_version: 3,
-  permissions: [...commonManifest.permissions, 'scripting', 'offscreen'],
+  permissions: [...commonManifest.permissions, 'scripting', 'offscreen', 'sidePanel'],
   optional_host_permissions: ['http://*/*', 'https://*/*'],
   background: { service_worker: 'background.js' },
-  action: { default_popup: 'popup.html', default_title: 'Private Browser Agent' },
+  action: { default_title: 'Open Private Browser Agent' },
+  side_panel: { default_path: 'sidepanel.html' },
   content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
 };
 
@@ -47,7 +48,12 @@ const firefoxManifest = {
   permissions: [...commonManifest.permissions],
   optional_permissions: ['http://*/*', 'https://*/*'],
   background: { scripts: ['background.js'], persistent: false },
-  browser_action: { default_popup: 'popup.html', default_title: 'Private Browser Agent' },
+  browser_action: { default_title: 'Open Private Browser Agent' },
+  sidebar_action: {
+    default_title: 'Private Browser Agent',
+    default_panel: 'sidepanel.html',
+    width: 420,
+  },
   content_security_policy: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
   browser_specific_settings: { gecko: { id: 'sih-private-agent@example.invalid', strict_min_version: '121.0' } },
 };
@@ -63,6 +69,7 @@ for (const [target, manifest] of [['chrome', chromeManifest], ['firefox', firefo
       background: join(root, 'src', 'background.ts'),
       content: join(root, 'src', 'content.ts'),
       popup: join(root, 'src', 'popup.ts'),
+      sidepanel: join(root, 'src', 'popup.ts'),
       preview: join(root, 'src', 'preview.ts'),
       ...(target === 'chrome' ? { offscreen: join(root, 'src', 'offscreen.ts') } : {}),
     },
@@ -86,6 +93,8 @@ for (const [target, manifest] of [['chrome', chromeManifest], ['firefox', firefo
   });
   await cp(join(root, 'src', 'popup.html'), join(outdir, 'popup.html'));
   await cp(join(root, 'src', 'popup.css'), join(outdir, 'popup.css'));
+  await cp(join(root, 'src', 'sidepanel.html'), join(outdir, 'sidepanel.html'));
+  await cp(join(root, 'src', 'sidepanel.css'), join(outdir, 'sidepanel.css'));
   await cp(join(root, 'src', 'preview.html'), join(outdir, 'preview.html'));
   await cp(join(root, 'src', 'preview.css'), join(outdir, 'preview.css'));
   if (target === 'chrome') await cp(join(root, 'src', 'offscreen.html'), join(outdir, 'offscreen.html'));

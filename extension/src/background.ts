@@ -27,6 +27,29 @@ let status: AgentStatus = {
   previewDataUrl: null,
 };
 
+type SidePanelCapableExtension = typeof ext & {
+  sidePanel?: {
+    setPanelBehavior?: (options: { openPanelOnActionClick: boolean }) => Promise<void>;
+  };
+  sidebarAction?: { open?: () => Promise<void> };
+  browserAction?: { onClicked?: { addListener: (listener: () => void) => void } };
+};
+
+async function configurePersistentAgentSurface(): Promise<void> {
+  const api = ext as SidePanelCapableExtension;
+  // Chromium: the toolbar action opens the persistent side panel instead of
+  // creating a short-lived popup window.
+  await api.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => undefined);
+  // Firefox: sidebar_action is exposed separately from browserAction.
+  if (api.sidebarAction?.open && api.browserAction?.onClicked?.addListener) {
+    api.browserAction.onClicked.addListener(() => { void api.sidebarAction?.open?.(); });
+  }
+}
+
+void configurePersistentAgentSurface();
+ext.runtime.onInstalled?.addListener(() => { void configurePersistentAgentSurface(); });
+ext.runtime.onStartup?.addListener(() => { void configurePersistentAgentSurface(); });
+
 type CapturedContext = {
   tab: TabContext;
   dom: RawDomSnapshot;

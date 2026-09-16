@@ -1,0 +1,102 @@
+:root {
+  color-scheme: dark;
+  --side-bg: #08111f;
+  --side-surface: #101d31;
+  --side-surface-raised: #142640;
+  --side-line: rgba(157, 190, 233, .22);
+  --side-ink: #f3f7ff;
+  --side-muted: #9fb2ce;
+  --side-blue: #5b8cff;
+  --side-cyan: #58e2d0;
+}
+
+html, body {
+  min-width: 320px;
+  min-height: 100%;
+  color: var(--side-ink);
+  background:
+    radial-gradient(circle at 90% -5%, rgba(91, 140, 255, .25), transparent 32%),
+    radial-gradient(circle at -10% 30%, rgba(88, 226, 208, .11), transparent 27%),
+    var(--side-bg);
+}
+
+body.sidepanel { overflow-y: auto; }
+body.sidepanel main { width: 100%; max-width: 480px; margin: 0 auto; padding: 18px 16px 22px; }
+.sidepanel .topbar { position: sticky; z-index: 3; top: 0; margin: -18px -16px 14px; padding: 18px 16px 14px; background: rgba(8, 17, 31, .9); border-bottom: 1px solid var(--side-line); backdrop-filter: blur(16px); }
+.sidepanel .brand-mark { border: 0; color: #08111f; background: linear-gradient(145deg, #fff, #8caeff); box-shadow: 0 7px 22px rgba(91, 140, 255, .3); }
+.sidepanel .eyebrow { color: #8da9d6; }
+.sidepanel h1, .sidepanel h2, .sidepanel label, .sidepanel figcaption { color: var(--side-ink); }
+.sidepanel .subtitle, .sidepanel .section-heading p, .sidepanel .grade-summary, .sidepanel .field-hint, .sidepanel .footnote { color: var(--side-muted); }
+.sidepanel .badge { border-color: var(--side-line); color: var(--side-ink); background: rgba(20, 38, 64, .85); }
+.sidepanel .badge::before { background: var(--side-cyan); }
+.sidepanel .badge[data-phase="blocked"]::before, .sidepanel .badge[data-phase="error"]::before { background: #ff7d9c; box-shadow: 0 0 0 3px rgba(255, 125, 156, .16); }
+
+.chat-intro {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 13px;
+  padding: 13px;
+  border: 1px solid var(--side-line);
+  border-radius: 15px;
+  background: linear-gradient(135deg, rgba(20, 38, 64, .92), rgba(13, 28, 48, .82));
+}
+.chat-avatar { display: grid; flex: 0 0 29px; width: 29px; height: 29px; place-items: center; border-radius: 10px; color: #07101e; background: linear-gradient(145deg, #fff, #70d9ff); font-size: 13px; box-shadow: 0 5px 18px rgba(88, 226, 208, .2); }
+.chat-intro strong { display: block; margin-top: 1px; font-size: 12px; }
+.chat-intro p { margin: 4px 0 0; color: var(--side-muted); font-size: 10px; line-height: 1.5; }
+
+.sidepanel .panel, .sidepanel .status, .activity-card {
+  border-color: var(--side-line);
+  border-radius: 15px;
+  background: rgba(16, 29, 49, .88);
+  box-shadow: 0 12px 25px rgba(0, 0, 0, .18);
+}
+.sidepanel .task-panel { border-color: rgba(91, 140, 255, .58); box-shadow: 0 12px 28px rgba(31, 75, 151, .22); }
+.sidepanel .section-index { border: 0; color: #08111f; background: linear-gradient(145deg, #fff, #8caeff); }
+.sidepanel input, .sidepanel textarea, .sidepanel select {
+  border-color: var(--side-line);
+  color: var(--side-ink);
+  background: #0b1729;
+}
+.sidepanel input:hover, .sidepanel textarea:hover, .sidepanel select:hover { border-color: rgba(157, 190, 233, .52); background: #0d1b30; }
+.sidepanel input:focus, .sidepanel textarea:focus, .sidepanel select:focus { border-color: var(--side-blue); box-shadow: 0 0 0 3px rgba(91, 140, 255, .18); }
+.sidepanel ::placeholder { color: #7185a2; }
+.sidepanel .advanced summary { color: var(--side-ink); }
+.sidepanel .summary-icon { border: 1px solid var(--side-line); color: var(--side-ink); background: var(--side-surface-raised); }
+.sidepanel .grade-guide { border-left-color: var(--side-blue); }
+.sidepanel .grade-guide p { color: var(--side-muted); }
+.sidepanel .grade-guide strong { color: var(--side-ink); }
+.sidepanel .check { color: var(--side-muted); }
+.sidepanel .check input { accent-color: var(--side-blue); }
+.sidepanel button { border: 0; border-radius: 10px; color: #08111f; background: linear-gradient(135deg, #76a2ff, #4d76ed); box-shadow: 0 8px 16px rgba(53, 101, 213, .26); }
+.sidepanel button:hover:not(:disabled) { background: linear-gradient(135deg, #8bb2ff, #6188ff); box-shadow: 0 10px 20px rgba(53, 101, 213, .34); }
+.sidepanel button.secondary { color: var(--side-ink); background: #1a3152; box-shadow: none; }
+.sidepanel button.secondary:hover:not(:disabled) { background: #24436e; }
+.sidepanel button.danger { color: #ffd7e2; background: #55253f; box-shadow: none; }
+.sidepanel .status { color: var(--side-ink); background: linear-gradient(135deg, #0c1a2d, #0b1524); }
+.sidepanel .status-label, .sidepanel dt { color: #7695bf; }
+.sidepanel .local-pill { color: var(--side-cyan); }
+.sidepanel .local-pill span { background: var(--side-cyan); box-shadow: 0 0 10px rgba(88, 226, 208, .75); }
+.sidepanel dl div { border-left-color: var(--side-line); }
+.sidepanel dd { color: var(--side-ink); }
+
+.activity-card { margin-top: 12px; padding: 13px; }
+.activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--side-ink); font-size: 11px; font-weight: 800; }
+.activity-live { display: inline-flex; align-items: center; gap: 5px; color: var(--side-cyan); font-size: 9px; font-weight: 600; }
+.activity-live i { width: 5px; height: 5px; border-radius: 50%; background: var(--side-cyan); box-shadow: 0 0 9px var(--side-cyan); }
+.activity-log { display: grid; gap: 8px; max-height: 176px; overflow: auto; margin: 11px 0 0; padding: 0 2px; list-style: none; }
+.activity-log li { display: flex; align-items: flex-start; gap: 8px; color: var(--side-muted); font-size: 10px; line-height: 1.4; }
+.activity-dot { flex: 0 0 6px; width: 6px; height: 6px; margin-top: 4px; border-radius: 50%; background: #7197d9; }
+.activity-log li:first-child .activity-dot { background: var(--side-cyan); box-shadow: 0 0 8px rgba(88, 226, 208, .55); }
+
+.sidepanel figure { margin-top: 14px; }
+.sidepanel .preview-frame { border-color: var(--side-line); background: #091322; box-shadow: none; }
+.sidepanel .preview-expand { border: 1px solid var(--side-line); color: var(--side-ink); background: #142640; }
+.sidepanel .footnote { line-height: 1.45; }
+
+@media (max-width: 360px) {
+  body.sidepanel main { padding-right: 11px; padding-left: 11px; }
+  .sidepanel .topbar { margin-right: -11px; margin-left: -11px; padding-right: 11px; padding-left: 11px; }
+  .sidepanel .actions { grid-template-columns: 1fr 1fr; }
+  .sidepanel .actions #stop { grid-column: 1 / -1; }
+}

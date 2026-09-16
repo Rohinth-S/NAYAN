@@ -53,6 +53,15 @@
         <div class="card-heading"><div><p class="section-kicker">02 / Confirmation</p><h2 id="enrollment-heading">Confirm enrollment</h2></div><span class="step-badge">1 min</span></div>
         <p class="card-intro">Check the details above, then confirm your selection.</p>
         <form id="enrollment" autocomplete="off">
+          <div class="demo-form-callout"><span aria-hidden="true">✦</span><span><strong>Try form filling</strong><br><small>Ask the private agent to fill these synthetic public fields from your task.</small></span></div>
+          <div class="form-grid">
+            <div class="demo-field"><label for="preferred-name">Preferred name <span class="label-hint">Public demo field</span></label><input class="form-control" id="preferred-name" name="preferredName" type="text" placeholder="e.g. Kavya Menon" autocomplete="name" data-public-field="true"></div>
+            <div class="demo-field"><label for="work-email">Work email <span class="label-hint">Public demo field</span></label><input class="form-control" id="work-email" name="workEmail" type="email" placeholder="e.g. kavya@example.test" autocomplete="email" data-public-field="true"></div>
+            <div class="demo-field"><label for="phone-number">Phone number <span class="label-hint">Public demo field</span></label><input class="form-control" id="phone-number" name="phoneNumber" type="tel" placeholder="+91 90000 00000" autocomplete="tel" data-public-field="true"></div>
+            <div class="demo-field"><label for="city">City <span class="label-hint">Public demo field</span></label><input class="form-control" id="city" name="city" type="text" placeholder="e.g. Bengaluru" autocomplete="address-level2" data-public-field="true"></div>
+            <div class="demo-field"><label for="benefit-plan">Benefit plan <span class="label-hint">Choose one</span></label><select class="form-control" id="benefit-plan" name="benefitPlan"><option value="">Choose a plan</option><option value="orbital-health">Orbital Health Plus</option><option value="family-care">Family Care Standard</option><option value="wellness">Wellness Essentials</option></select></div>
+            <div class="demo-field"><label for="start-date">Coverage start date <span class="label-hint">Public demo field</span></label><input class="form-control" id="start-date" name="startDate" type="date" data-public-field="true"></div>
+          </div>
           <label for="employee-code">Employee code <span class="label-hint">Read only</span></label>
           <div class="input-wrap"><span class="input-prefix" aria-hidden="true">ID</span><input id="employee-code" name="employeeCode" value="ORB-2048" readonly></div>
           <label for="account-password">Portal password <span class="label-hint">Protected field</span></label>

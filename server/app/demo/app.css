@@ -93,6 +93,17 @@ body::before {
 #enrollment { display: grid; gap: 10px; }
 .enrollment-card label { display: flex; justify-content: space-between; margin-top: 3px; color: #d3d3d7; font-size: .73rem; font-weight: 650; }
 .label-hint { color: #85858c; font-size: .63rem; font-weight: 500; }
+.demo-form-callout { display: flex; align-items: flex-start; gap: 9px; margin: 0 0 3px; padding: 11px 12px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 11px; color: #a7a7ad; background: rgba(255, 255, 255, .045); font-size: .68rem; line-height: 1.4; }
+.demo-form-callout > span:first-child { color: #fff; font-size: 1rem; }
+.demo-form-callout strong { color: #f0f0f2; }
+.demo-form-callout small { color: #85858a; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.demo-field { min-width: 0; }
+.demo-field label { margin-top: 0; }
+.form-control { width: 100%; min-width: 0; padding: 12px 10px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 10px; outline: 0; color: #e9e9ec; background: #090909; font: inherit; font-size: .76rem; transition: border-color .2s, box-shadow .2s; }
+.form-control::placeholder { color: #73737a; }
+.form-control:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, .12); }
+select.form-control { appearance: auto; }
 .input-wrap { display: flex; align-items: center; overflow: hidden; border: 1px solid rgba(255, 255, 255, .2); border-radius: 10px; background: #090909; transition: border-color .2s, box-shadow .2s; }
 .input-wrap:focus-within { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, .12); }
 .input-prefix { width: 42px; color: #8d8d94; font-size: .61rem; font-weight: 800; letter-spacing: .05em; text-align: center; }
@@ -136,6 +147,7 @@ body::before {
   .hero-orbit { width: 230px; height: 205px; margin: 10px auto -16px; transform: scale(.78); transform-origin: center; }
   .card { padding: 21px; }
   .profile-grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
   .footer { flex-wrap: wrap; }
   .footer-ref { width: 100%; }
   .progress-wrap { margin-right: 4px; margin-left: 4px; }

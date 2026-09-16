@@ -89,5 +89,10 @@ $arguments = @(
     '--no-proxy-headers'
 )
 Write-Host "Starting server..."
-& $serverExecutable $arguments
+Set-Location $serverDirectory
+try {
+    & $serverExecutable $arguments
+} finally {
+    Set-Location $projectRoot
+}
 
