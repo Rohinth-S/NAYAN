@@ -50,8 +50,10 @@ jobs:
         run: python -m ruff check .
       - name: Verify governance and generated policy
         run: python scripts/verify-governance.py
+      - name: Install evaluation test dependencies
+        run: python -m pip install hypothesis
       - name: Run evaluation tests
-        run: PYTHONPATH=evaluation python -m pytest evaluation/tests -q
+        run: PYTHONPATH=server:evaluation python -m pytest evaluation/tests -q
       - name: Run repository security scan
         run: python scripts/security-scan.py
       - name: Generate aggregate SBOM
