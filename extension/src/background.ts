@@ -194,6 +194,8 @@ async function captureAndSanitize(
     detectorBackend: raster.detectorBackend,
     redactionCount: raster.redactions.length,
     previewDataUrl: raster.previewDataUrl,
+    categoryCounts: raster.categoryCounts,
+    maskedAreaPercentage: raster.maskedAreaPercentage,
     message: `Sanitized locally (${raster.redactions.length} masks)`,
   });
   return {

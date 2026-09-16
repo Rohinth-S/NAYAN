@@ -342,6 +342,11 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
       if (target instanceof HTMLAnchorElement && !target.href.startsWith(`${location.origin}/`) && target.origin !== location.origin) {
         throw new Error('Cross-origin navigation is blocked');
       }
+      const label = labelOf(target).toLowerCase();
+      const isDestructive = ['delete', 'remove', 'submit', 'pay', 'checkout', 'buy', 'confirm'].some(term => label.includes(term)) || (target as any).type === 'submit';
+      if (isDestructive && !window.confirm(`SIH Privacy Agent wants to click "${labelOf(target)}".\n\nAllow this potentially irreversible action?`)) {
+        throw new Error('User rejected irreversible action');
+      }
       target.focus();
       target.click();
       return 'Clicked element';

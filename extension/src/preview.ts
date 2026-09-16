@@ -11,9 +11,25 @@ async function load(): Promise<void> {
     message.textContent = 'No local preview is available. Run Privacy preview from the extension first.';
     return;
   }
+  const container = document.getElementById('preview-container') as HTMLDivElement;
+  const areaStat = document.getElementById('masked-area-stat') as HTMLSpanElement;
+  const countsContainer = document.getElementById('category-counts-container') as HTMLDivElement;
+  
   image.src = status.previewDataUrl;
-  image.hidden = false;
+  container.hidden = false;
   message.hidden = true;
+  
+  if (status.maskedAreaPercentage !== undefined) {
+    areaStat.textContent = status.maskedAreaPercentage.toString();
+  }
+  
+  if (status.categoryCounts) {
+    countsContainer.innerHTML = '<h4>Masked Categories:</h4><ul>' + 
+      Object.entries(status.categoryCounts)
+        .map(([kind, count]) => `<li><strong>${kind}:</strong> ${count}</li>`)
+        .join('') + 
+      '</ul>';
+  }
 }
 
 close.addEventListener('click', () => window.close());

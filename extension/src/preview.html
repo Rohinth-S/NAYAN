@@ -18,7 +18,17 @@
       </header>
       <section class="stage" aria-live="polite">
         <p id="message">Loading local preview…</p>
-        <img id="preview" alt="Sanitized page preview" hidden />
+        <div id="preview-container" class="preview-container" hidden>
+          <div class="metrics-panel">
+            <h3>Privacy Metrics</h3>
+            <p><strong>Masked Area:</strong> <span id="masked-area-stat">0</span>%</p>
+            <div id="category-counts-container"></div>
+            <p class="why-hidden-tooltip" title="Categories are detected locally using ONNX/WASM or regex. No data leaves the device until verified.">ℹ️ Why is this hidden?</p>
+          </div>
+          <div class="image-panel">
+            <img id="preview" alt="Sanitized page preview" />
+          </div>
+        </div>
       </section>
       <footer><span>Nothing on this page is sent to the reasoning server.</span><button id="close" type="button">Close tab</button></footer>
     </main>

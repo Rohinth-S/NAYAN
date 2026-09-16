@@ -19,6 +19,8 @@ const apiKey = byId<HTMLInputElement>('apiKey');
 const canaries = byId<HTMLTextAreaElement>('canaries');
 const fallback = byId<HTMLInputElement>('fallback');
 const start = byId<HTMLButtonElement>('start');
+
+
 const preview = byId<HTMLButtonElement>('preview');
 const stop = byId<HTMLButtonElement>('stop');
 const state = byId<HTMLSpanElement>('state');
@@ -26,6 +28,7 @@ const message = byId<HTMLParagraphElement>('message');
 const step = byId<HTMLElement>('step');
 const detector = byId<HTMLElement>('detector');
 const redactions = byId<HTMLElement>('redactions');
+const maskedArea = byId<HTMLElement>('masked-area');
 const latency = byId<HTMLElement>('latency');
 const previewPane = byId<HTMLElement>('previewPane');
 const previewFrame = byId<HTMLDivElement>('previewFrame');
@@ -150,6 +153,7 @@ function render(current: AgentStatus): void {
   const hasRun = current.phase !== 'idle' || current.step > 0 || current.redactionCount > 0 || current.previewDataUrl !== null;
   detector.textContent = hasRun ? current.detectorBackend : 'not run';
   redactions.textContent = String(current.redactionCount);
+  maskedArea.textContent = current.maskedAreaPercentage !== undefined ? `${current.maskedAreaPercentage}%` : '—';
   latency.textContent = current.lastLatencyMs === null ? '—' : `${current.lastLatencyMs} ms`;
   start.disabled = current.running;
   preview.disabled = current.running;

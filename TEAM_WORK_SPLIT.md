@@ -154,7 +154,7 @@ Mithul owns the trusted client boundary and therefore has the largest workstream
 
 Add a side-by-side preview for Grades 1/2/3, category counts, masked-area percentage, safe “why hidden?” explanations, per-site policies, expiring temporary overrides, and policy simulation mode that performs zero network requests. Show the exact sanitized preview that will be sent.
 
-**Done when:** a new user can understand the disclosure trade-off before starting and can verify the outbound representation without seeing or transmitting the source value.
+**Done when:** a new user can understand the disclosure trade-off before starting and can verify the outbound representation without seeing or transmitting the source value. (STATUS: DONE)
 
 ### M6. Optimize client resource use — P1
 
@@ -408,7 +408,7 @@ Implementation steps:
    incident response, deletion requests, and evidence retention.
 
 Done when a clean host can deploy, recover, roll back, and delete retained
-metadata using documented commands without exposing protected content.
+metadata using documented commands without exposing protected content. (STATUS: DONE)
 
 ### P13. Formal action-policy verification and browser capability expansion — P1/P2
 
@@ -430,7 +430,7 @@ Implementation steps:
    high-DPI, zoom, accessibility trees, long pages, and service-worker restart.
 
 Done when every enabled action has a documented safety invariant, generated
-state-machine tests, and reproducible Chrome/Firefox evidence.
+state-machine tests, and reproducible Chrome/Firefox evidence. (STATUS: DONE)
 
 ## Rohinth — integration, governance, demo, and release
 

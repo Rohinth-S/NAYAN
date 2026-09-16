@@ -192,6 +192,9 @@ export type AgentStatus = Readonly<{
   redactionCount: number;
   lastLatencyMs: number | null;
   previewDataUrl: string | null;
+  /** Approach B: Privacy UX metrics for M5 */
+  categoryCounts?: Record<string, number>;
+  maskedAreaPercentage?: number;
   /** Approach B: scroll-drift guard state for mid-flight race prevention. */
   scrollDrift?: ScrollDriftState;
   /** Approach B: dual-metric latency tracking. */

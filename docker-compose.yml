@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: sih-privacy-server:latest
+    restart: always
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    environment:
+      - PRIVACY_AGENT_REQUIRE_API_KEY=true
+      - PRIVACY_AGENT_REDIS_URL=redis://redis:6379/0
+      # Ollama configuration for external provider/host
+      - PRIVACY_AGENT_OLLAMA_BASE_URL=http://host.docker.internal:11434
+    networks:
+      - model-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    read_only: true
+    cap_drop:
+      - ALL
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - model-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  proxy:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "8765:80"  # Expose proxy on 8765 to match client settings, mapping to Nginx 80
+    volumes:
+      - ./server/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - model-net
+
+volumes:
+  redis_data:
+
+networks:
+  model-net:
+    internal: false
