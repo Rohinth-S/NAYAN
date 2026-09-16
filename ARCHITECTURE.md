@@ -12,7 +12,7 @@ The browser and extension runtime are trusted for this prototype. A malicious we
 2. The content script collects visible actionable elements, local bounding boxes, safe labels, form sensitivity signals, text findings, frames, and visually uninspectable regions. It creates random element IDs and retains the ID-to-node map locally.
 3. A local policy engine applies the selected cumulative privacy grade. It classifies findings into always-protected, Grade 2, or Grade 3 categories; it never declassifies a high-impact finding. Grade 3 is the fail-safe default. The complete matrix is in [PRIVACY_LEVELS.md](PRIVACY_LEVELS.md).
 4. The background captures the visible tab and checks that the active tab did not change.
-5. A unified vision detector (YOLOv8n/v10n multi-class) runs locally with WebGPU first and single-threaded WASM as fallback. The detector taxonomy covers faces and Indian document IDs (Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures). Face/biometric and document-ID boxes remain protected at every grade.
+5. The local visual detector is asset-gated: the unified YOLOv8n/v10n multi-class path runs with WebGPU first and WASM fallback when `yolo-privacy-v1.onnx` is packaged; otherwise the checked-in UltraFace adapter provides the fallback face path. The default repository build therefore does not claim document-ID model coverage.
 6. Canvas-app elements (Google Docs, Figma) are handled by a 3-tier privacy strategy: standard visual redaction, opt-in DBNet detection-only blind text masking, or manual escalation. Canvas-rendered text is not visible to DOM-based detection.
 7. DOM/text and vision-detector boxes are scaled into screenshot pixels. Every policy-approved rectangle is expanded to integer pixel coverage and replaced on a new canvas with a neutral card and an italic category-only marker such as `[REDACTED:EMAIL]`.
 7. The canvas is freshly encoded as PNG, discarding source metadata. Labels, title, and task use the same grade-aware sanitizer. The real page origin becomes a keyed, session-scoped `.invalid` alias.
@@ -45,7 +45,7 @@ The following controls were added during the Approach A → B migration to resol
 
 ### Unified vision detector
 
-Approach A used separate inference paths (UltraFace + separate document detectors). Approach B introduces a unified YOLOv8n/v10n multi-class detector interface that runs face, aadhaar_card, pan_card, voter_id, driving_license, passport, and signature detection in a single forward pass. The current implementation uses this unified detector natively, while maintaining an UltraFace adapter for backward compatibility.
+Approach A used separate inference paths (UltraFace + separate document detectors). Approach B introduces a unified YOLOv8n/v10n multi-class detector interface that runs face, aadhaar_card, pan_card, voter_id, driving_license, passport, and signature detection in a single forward pass. The implementation is present and selected automatically when its ONNX asset is packaged; the checked-in default build uses the UltraFace adapter until that asset is supplied.
 
 ### Step 0 Abort Gate (scroll-drift guard)
 

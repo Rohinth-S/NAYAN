@@ -42,24 +42,25 @@ The synthetic demo at `http://127.0.0.1:8765/demo` exercises this flow with Indi
 
 ```mermaid
 flowchart LR
-    U[User gesture] --> T[Visible browser tab]
-    T --> D[Content script<br/>DOM and safe structure]
-    T --> S[Background<br/>visible screenshot]
-    D --> C[Local text and field classifiers]
-    S --> F[Local visual detector<br/>Unified YOLO when packaged<br/>UltraFace fallback]
-    S --> CV[Canvas privacy<br/>3-tier mitigation]
-    C --> G[Grade 1 / 2 / 3 policy]
-    F --> G
-    CV --> G
-    G --> R[Fresh semantic redaction<br/>or opaque full mask]
-    R --> SDG[Scroll-drift guard<br/>Step 0 Abort Gate]
-    SDG --> V[Serialized request<br/>leak and schema checks]
-    D --> V
-    V -->|one sanitized POST| B[FastAPI privacy boundary]
-    B --> O[Local Ollama<br/>Qwen3-VL]
-    O --> A[Strict action JSON]
-    A --> X[Snapshot, origin, revision<br/>and target checks]
-    X --> T
+    U[User task] --> BG[Background controller]
+    BG -->|capture DOM| CS[Content script<br/>safe structure + opaque IDs]
+    BG -->|capture visible tab| OS[Offscreen / local runtime]
+    CS --> DOM[DOM heuristics<br/>field + text classification]
+    OS --> DET[Local visual detector<br/>YOLO when asset exists<br/>UltraFace fallback]
+    OS --> CAN[Canvas tier<br/>visual / DBNet asset / manual]
+    DOM --> POL[Grade 1 / 2 / 3 policy]
+    DET --> POL
+    CAN --> POL
+    POL --> RED[Fresh sanitized PNG<br/>semantic cards or opaque mask]
+    RED --> VAL[Validate bytes, schema,<br/>canaries, bounds, revision]
+    CS -->|activate guard| SDG[Page-owned Step 0<br/>scroll-drift guard]
+    SDG --> VAL
+    VAL -->|sanitized packet only| API[FastAPI boundary]
+    API --> JOB[Bounded job + Ollama<br/>Qwen3-VL]
+    JOB --> ACT[Strict action JSON]
+    ACT -->|snapshot/origin/target checks| BG
+    BG -->|verified click/input/scroll/wait| CS
+    CS --> T[Live webpage]
 ```
 
 ### Detailed trust-boundary architecture
@@ -77,7 +78,7 @@ flowchart LR
     DET[Local detectors<br/>unified vision detector, DOM heuristics,<br/>regex, known values, canvas privacy]
     POL[Versioned privacy policy<br/>grade filter + invariant floor]
     COMP[Fresh local compositor<br/>semantic cards or opaque full mask]
-    SDG[Scroll-drift guard<br/>Step 0 Abort Gate]
+    SDG[Content-script scroll guard<br/>Step 0 Abort Gate]
     VAL[Outbound validator<br/>schema, PNG, bounds, canary, byte checks]
     EG[Single egress owner<br/>one sanitized POST + opaque polling]
     ACT[Action guard<br/>snapshot, origin, target, editability, idempotency]
@@ -122,14 +123,16 @@ sequenceDiagram
     participant DOM as "Webpage DOM (Untrusted)"
     participant CS as "Content Script"
     participant SW as "Service Worker Orchestrator"
-    participant OS as "Offscreen Sandbox WebGPU"
-    participant VLM as "Remote Backend VLM"
+    participant OS as "Offscreen/local sanitizer"
+    participant API as "FastAPI boundary"
+    participant VLM as "Ollama structured model"
 
     Note over DOM,CS: User invokes Command Palette, task submitted
-    CS->>SW: TRIGGER_STEP stepId cause
-    SW->>OS: ACQUIRE_STREAM viewport dpr
-    Note over OS: Settlement gate waits for DOM stability
-    OS->>OS: Capture viewport to raw ImageBitmap
+    CS->>SW: Start step / capture DOM
+    SW->>CS: SET_SCROLL_GUARD active
+    SW->>OS: Capture visible tab and sanitize locally
+    Note over CS,OS: Page geometry settles before revision-bound capture
+    OS->>OS: Decode raw screenshot in local runtime
     alt Fast DOM Path - standard page, target sub 5ms
         OS->>OS: DOM attribute and regex scan sanitizes inputs and text nodes
         OS->>OS: Scene gate finds no unstructured visual PII, Vision Channel skipped
@@ -138,13 +141,15 @@ sequenceDiagram
         OS->>OS: Destructive redaction overwrite in RAM canvas
     end
     OS->>OS: Raw bitmap dereferenced and closed
-    OS->>SW: SANITIZED_FRAME_READY packet only
-    SW->>VLM: POST sanitized frame and SoM registry
-    VLM->>SW: Structured JSON action click type scroll wait finish
-    SW->>CS: ACTION_EXECUTE
-    CS->>DOM: Native synthetic event dispatch
-    CS->>SW: ACTION_RESULT verify via fresh frame request
-    Note over SW,OS: Loop repeats until FINISH or HITL halt
+    OS->>SW: Sanitized raster + detector metadata only
+    SW->>API: One sanitized POST
+    API->>VLM: Validated sanitized context
+    VLM->>API: Strict action JSON
+    API->>SW: Action or bounded job result
+    SW->>CS: Clear guard and execute verified action
+    CS->>DOM: Native event dispatch
+    CS->>SW: Action result / revision
+    Note over SW,OS: Drift discards the action and starts a fresh step
 ```
 
 ### What is local and what can leave the device
@@ -166,25 +171,26 @@ flowchart TD
   J -- All checks pass --> K[Send sanitized PNG and safe structure]
 ```
 
-### Agent Orchestration (LangGraph State Machine)
+### Agent Orchestration (bounded Approach B control loop)
 
-The orchestrator models the turn-cycle logic as a StateGraph with explicit interrupt/resume hooks for Human-in-the-Loop (HITL) scenarios and scroll-drift detection (Step 0 Abort Gate).
+The prototype uses a bounded TypeScript loop in the extension and bounded jobs in the FastAPI service. `agent-graph.ts` documents the Approach B state topology and HITL transitions; a LangGraph.js server implementation remains a future adapter.
 
 ```mermaid
 flowchart TD
-    Start(["Task submitted"]) --> Observe["observe_and_redact node - awaits SanitizedPacket from client"]
-    Observe --> Plan["vlm_plan node - calls VLM, validates JSON action"]
-    Plan --> Gate{"hitl_gate node - risk classification"}
-    Gate -- "Low risk" --> Dispatch["dispatch_action node - native event synthesis"]
-    Gate -- "High risk" --> Interrupt["interrupt call - thread suspended, awaiting trusted resume"]
-    Interrupt -- "resume on confirmed human click" --> Dispatch
-    Dispatch --> Verify["verify_settlement node - diffs pre and post action frames"]
-    Verify -- "Confirmed success" --> Observe
-    Verify -- "Target not found or no change" --> Retry{"Attempt count below three"}
-    Retry -- "Yes" --> Plan
-    Retry -- "No" --> Clarify["request_clarification terminal node - loop broken"]
-    Clarify --> Observe
-    Verify -- "finish action" --> End(["Task complete"])
+    Start(["Task submitted"]) --> Capture["Capture DOM + visible screenshot"]
+    Capture --> Sanitize["Local policy, detector, redaction, validation"]
+    Sanitize --> Reason["FastAPI job → Ollama structured action"]
+    Reason --> Drift{"Page scroll/resize drifted?"}
+    Drift -- "Yes" --> Recapture["Discard action; recapture after settle"]
+    Recapture --> Capture
+    Drift -- "No" --> Risk{"Action requires confirmation?"}
+    Risk -- "Yes" --> HITL["Pause for explicit user confirmation"]
+    HITL -- "Approved" --> Execute["Content script executes verified action"]
+    Risk -- "No" --> Execute
+    Execute --> Verify["Check live revision and result"]
+    Verify -- "Done" --> End(["Task complete"])
+    Verify -- "Continue" --> Capture
+    Verify -- "Blocked/ambiguous" --> Stop(["Stop and report"])
 ```
 
 The client includes an opt-in local perception bundle: quantized multilingual NER, English/Hindi Tesseract OCR, QR/barcode decoding, and a small visual-model asset with immutable source revisions. Build it with `npm run package:perception`; if an asset is missing, corrupt, low-confidence, or over budget, the request is blocked and the existing opaque media mask remains in force. The checked-in deterministic baseline remains the default build until the team records held-out accuracy and resource results.

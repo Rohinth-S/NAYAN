@@ -34,24 +34,25 @@ Generated state is also excluded: `.runtime/` contains API keys, browser profile
 
 ```mermaid
 flowchart LR
-    U[User gesture] --> T[Visible browser tab]
-    T --> D[Content script<br/>DOM and safe structure]
-    T --> S[Background<br/>visible screenshot]
-    D --> C[Local text and field classifiers]
-    S --> F[Unified vision detector<br/>YOLOv8n/v10n multi-class<br/>WebGPU then WASM]
-    S --> CV[Canvas privacy<br/>3-tier mitigation]
-    C --> G[Grade 1 / 2 / 3 policy]
-    F --> G
-    CV --> G
-    G --> R[Fresh semantic redaction<br/>or opaque full mask]
-    R --> SDG[Scroll-drift guard<br/>Step 0 Abort Gate]
-    SDG --> V[Serialized request<br/>leak and schema checks]
-    D --> V
-    V -->|one sanitized POST| B[FastAPI privacy boundary]
-    B --> O[Local Ollama<br/>Qwen3-VL]
+    U[User task] --> BG[Background controller]
+    BG --> CS[Content script<br/>DOM + opaque IDs]
+    BG --> OS[Offscreen/local runtime<br/>capture + redaction]
+    CS --> DOM[DOM and field heuristics]
+    OS --> DET[YOLO asset if present<br/>UltraFace fallback]
+    OS --> CV[Canvas privacy tiers]
+    DOM --> POL[Grade policy]
+    DET --> POL
+    CV --> POL
+    POL --> RED[Fresh sanitized PNG]
+    CS --> SDG[Page-owned Step 0<br/>scroll-drift guard]
+    RED --> VAL[Serialized-body + revision checks]
+    SDG --> VAL
+    VAL -->|sanitized packet only| API[FastAPI boundary]
+    API --> O[Bounded jobs + Ollama]
     O --> A[Strict action JSON]
-    A --> X[Snapshot, origin, revision<br/>and target checks]
-    X --> T
+    A --> X[Snapshot/origin/target guard]
+    X --> CS
+    CS --> T[Live webpage]
 ```
 
 The extension is the trusted privacy boundary for this prototype. The service is treated as an untrusted recipient: it must be able to reason using only a sanitized PNG, coarse element metadata, typed placeholders, an opaque site alias, and an opaque snapshot revision. The following remain local and are never part of the reasoning payload:
@@ -112,11 +113,11 @@ Current detectors are intentionally narrower than the policy: high-confidence re
 5. **Canvas & WebGL Mitigations:** A 3-tier privacy wall explicitly addresses uninspectable `<canvas>` elements. Safe tracking (Tier 1), dynamic heuristics via `canvas-privacy.ts` (Tier 2), and opaque full-masking (Tier 3) ensure complex applications don't leak embedded PII.
 
 ### Vision & NLP Intelligence
-6. **Unified YOLO Vision (YOLOv8n/v10n):** Instead of just detecting faces, the client uses a unified, multi-class WebGPU model (`yolo-detector.ts`) to instantly detect Faces, Official Documents (Aadhaar, PAN, Passports), and other visual signatures natively.
+6. **Asset-gated visual detection:** The client selects the unified multi-class YOLO model when `yolo-privacy-v1.onnx` is packaged; the checked-in default build uses the UltraFace adapter and does not claim document-ID model coverage.
 7. **On-Device OCR & NLP:** Client-side Tesseract.js combined with a bundled spaCy Multilingual NER model runs directly in the extension to extract strings from images and detect named entities natively without server assistance.
 
 ### Server & Reasoning Capabilities
-8. **LangGraph Agentic Orchestration:** The core reasoning loop leverages a robust state-machine (`langgraph_orchestrator.py`) to handle multi-step planning, memory, reflection, and state transitions, making the agent autonomous rather than purely reactive.
+8. **Bounded agent orchestration:** The live reasoning loop is implemented by the extension's bounded TypeScript controller and the FastAPI bounded job queue. `agent-graph.ts` records the Approach B topology; LangGraph.js remains a future server adapter.
 9. **Circuit Breaker Pattern:** Model inferences are wrapped in an asynchronous state machine (`circuit_breaker.py`) managing Closed, Open, and Half-Open states to gracefully fail and prevent hanging resources when the local LLM is stressed.
 10. **Structural Planner (VLM-less Fallback):** For unambiguous, schema-valid UI actions (e.g., standard clicks, forms), the system bypasses heavy VLMs and resolves intents deterministically in milliseconds using `structural_planner.py`.
 11. **Policy Compiler:** A unified `detector-registry.json` is compiled into static Python and TypeScript modules at build time, ensuring the frontend and backend share an identical cryptographic definition of what constitutes "sensitive" data.
