@@ -182,7 +182,9 @@ The extension is the trusted privacy boundary in this prototype.
 - `extension/src/privacy.ts` applies deterministic DOM, field, regex, and known-private-value detection.
 - `extension/src/privacy-policy.ts` maps detector categories to the selected cumulative grade. A detector or model cannot downgrade an always-protected category.
 - `extension/src/face-detector.ts` runs the bundled UltraFace ONNX model locally, preferring WebGPU and falling back to single-threaded WASM when WebGPU initialization is unavailable. An inference failure fails closed (or requires the explicit full-mask fallback).
-- `extension/src/vision-detector.ts` provides the Approach B unified detection interface. Currently wraps UltraFace; designed for drop-in replacement with a YOLOv8n/v10n multi-class model that detects faces, Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures in a single forward pass.
+- `extension/src/yolo-detector.ts` provides the unified YOLOv8n/v10n multi-class model implementation that detects faces, Aadhaar cards, PAN cards, voter IDs, driving licenses, passports, and signatures in a single forward pass.
+- `extension/src/dbnet-detector.ts` implements the Tier 2 DBNet canvas text detection-only blind masking (no OCR).
+- `extension/src/agent-graph.ts` implements a LangGraph.js-style state-graph orchestrator to manage the agent loop, HITL interrupt/resume, and Step 0 Abort Gate (scroll-drift) re-capture.
 - `extension/src/canvas-privacy.ts` implements 3-tier canvas-app PII mitigation: visual-object redaction (default), opt-in DBNet detection-only blind masking, and manual escalation for canvas-rendered applications.
 - `extension/src/scroll-drift-guard.ts` implements the Approach B Step 0 Abort Gate: a passive debounced scroll listener that invalidates the SoM registry when the viewport changes during a VLM network call, preventing mid-flight race conditions.
 - `extension/src/image-redactor.ts` maps DOM and face boxes into screenshot pixels, merges overlaps, and draws neutral category cards onto a new canvas. The original screenshot is never the outbound image.

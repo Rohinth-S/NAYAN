@@ -18,7 +18,7 @@ The server returns one schema-validated action. The extension checks the revisio
 
 | Component | Responsibility |
 | --- | --- |
-| `extension/` | Cross-browser capture, grade-aware DOM heuristics, local text classification, unified vision detection (UltraFace adapter, migrating to YOLOv8n/v10n multi-class) with WebGPU/WASM fallback, canvas-app privacy mitigation, scroll-drift guard (Step 0 Abort Gate), policy-gated pixel masking, preview, final outbound validation, agent loop, and action execution. |
+| `extension/` | Cross-browser capture, grade-aware DOM heuristics, local text classification, unified vision detection (YOLOv8n/v10n multi-class) with WebGPU/WASM fallback, canvas-app privacy mitigation (DBNet blind mask), scroll-drift guard (Step 0 Abort Gate), LangGraph.js state-graph orchestration, policy-gated pixel masking, preview, final outbound validation, agent loop, and action execution. |
 | `server/` | Strict FastAPI request/response schemas (extended for Approach B detection classes), size/auth/origin controls, payload-safe logging, Ollama structured reasoning, health/model checks, synthetic portal, and leak-capture test mode. |
 | `browser-use/` | Optional guarded Python baseline for comparison; it is kept outside the primary repository because it is a nested upstream checkout. |
 | `PRIVACY_LEVELS.md` | Versioned category matrix, grade semantics, always-protected invariants, detector coverage and known gaps. |
@@ -28,10 +28,10 @@ The server returns one schema-validated action. The extension checks the revisio
 
 1. Freeze versioned request/action schemas and security invariants.
 2. Freeze the cumulative privacy-grade matrix and unit-test local DOM/text classification and opaque element mapping.
-3. Integrate unified vision detector interface (UltraFace adapter, prepared for YOLOv8n/v10n multi-class model).
+3. Integrate unified vision detector interface and YOLOv8n/v10n multi-class model implementation.
 4. Implement canvas-app privacy mitigation (3-tier: visual redaction, DBNet blind mask, manual escalation).
 5. Implement scroll-drift guard (Step 0 Abort Gate) for mid-flight race prevention.
-6. Implement the extension popup, background egress gateway, and revision-bound executor.
+6. Implement the extension popup, LangGraph.js state-graph orchestrator, background egress gateway, and revision-bound executor.
 7. Implement the Ollama reasoning service and synthetic portal.
 8. Test the exact serialized receiver payload with synthetic canaries in text, inputs, attributes, URLs, and pixels.
 9. Build Chrome and Firefox artifacts and run a real Chrome end-to-end workflow.

@@ -1,5 +1,5 @@
 /**
- * Approach B: 3-tier canvas-app PII mitigation.
+ * Approach B: 3-tier canvas-app PII mitigation — with full DBNet integration.
  *
  * Addresses the canvas-app privacy gap identified in the RFC — dense text
  * PII in Google Docs, Figma, and similar canvas-rendered applications was
@@ -7,16 +7,14 @@
  *
  * Tiers:
  *   1. Visual-object redaction (default) — standard redaction pipeline
- *   2. DBNet detection-only blind masking — opt-in text region detection
- *      that masks all detected text regions as [REDACTED:CANVAS_TEXT]
- *      without OCR (no text content leaves the device)
+ *   2. DBNet detection-only blind masking — text region detection that
+ *      masks all detected text regions as [REDACTED:CANVAS_TEXT]
+ *      WITHOUT performing OCR (no text content leaves the device)
  *   3. Manual escalation — user-initiated full-canvas mask when automated
  *      detection is insufficient
- *
- * The DBNet model is loaded on-demand and feature-flagged. When the model
- * is not available, Tier 2 requests fall through to Tier 3.
  */
 
+import { DbnetTextDetector, type TextRegionDetection } from './dbnet-detector';
 import type { Bounds, CanvasPrivacyTier, RedactionKind } from './types';
 
 export type CanvasTextRegion = Readonly<{
@@ -31,6 +29,9 @@ export type CanvasPrivacyResult = Readonly<{
   dbnetAvailable: boolean;
 }>;
 
+/** Shared DBNet detector instance — initialized on first use. */
+const dbnetDetector = new DbnetTextDetector();
+
 /** Feature flag for DBNet canvas text detection. */
 let dbnetEnabled = false;
 
@@ -40,23 +41,9 @@ let dbnetEnabled = false;
  * making them invisible to DOM-based PII detection.
  */
 export function isCanvasApp(element: Element): boolean {
-  // Google Docs, Sheets, Slides use canvas rendering
   if (element instanceof HTMLCanvasElement) return true;
-
-  // Check for known canvas-app container patterns
   const tag = element.tagName.toLowerCase();
   if (tag === 'canvas') return true;
-
-  // Check for WebGL/WebGPU contexts (Figma, etc.)
-  if (element instanceof HTMLCanvasElement) {
-    try {
-      const ctx = element.getContext('2d') || element.getContext('webgl2') || element.getContext('webgl');
-      return ctx !== null;
-    } catch {
-      return false;
-    }
-  }
-
   return false;
 }
 
@@ -70,37 +57,54 @@ export function resolveCanvasTier(
 ): CanvasPrivacyTier {
   if (requested === 'visual-redaction') return 'visual-redaction';
   if (requested === 'dbnet-blind-mask') {
-    // Fall through to manual escalation if DBNet is not available.
-    return dbnetEnabled ? 'dbnet-blind-mask' : 'manual-escalation';
+    return (dbnetEnabled && dbnetDetector.state !== 'missing') ? 'dbnet-blind-mask' : 'manual-escalation';
   }
   return 'manual-escalation';
 }
 
 /**
  * Apply canvas privacy at the resolved tier.
- * Returns redaction regions for the canvas element.
+ * For Tier 2, runs DBNet inference on the canvas bitmap to find text regions.
  */
-export function applyCanvasPrivacy(
+export async function applyCanvasPrivacy(
   tier: CanvasPrivacyTier,
   canvasBounds: Bounds,
-): CanvasPrivacyResult {
+  bitmap?: ImageBitmap,
+): Promise<CanvasPrivacyResult> {
   switch (tier) {
     case 'visual-redaction':
-      // Tier 1: standard pipeline handles this via uninspectable-media coverage.
-      return { tier, regions: [], dbnetAvailable: dbnetEnabled };
+      return { tier, regions: [], dbnetAvailable: dbnetDetector.available };
 
-    case 'dbnet-blind-mask':
-      // Tier 2: DBNet text detection would run here.
-      // When the DBNet model is integrated, this returns detected text regions.
-      // For now, falls through to manual escalation at the caller level.
-      return { tier, regions: [], dbnetAvailable: dbnetEnabled };
+    case 'dbnet-blind-mask': {
+      if (!bitmap || !dbnetDetector.available) {
+        // Fall through to manual escalation
+        return {
+          tier: 'manual-escalation',
+          regions: [{ bounds: canvasBounds, confidence: 1.0 }],
+          dbnetAvailable: dbnetDetector.available,
+        };
+      }
+      const result = await dbnetDetector.detect(bitmap);
+      const regions: CanvasTextRegion[] = result.regions.map((r: TextRegionDetection) => ({
+        bounds: r.bounds,
+        confidence: r.confidence,
+      }));
+      // If DBNet found no text regions, don't silently leave canvas unprotected
+      if (regions.length === 0) {
+        return {
+          tier: 'manual-escalation',
+          regions: [{ bounds: canvasBounds, confidence: 1.0 }],
+          dbnetAvailable: true,
+        };
+      }
+      return { tier, regions, dbnetAvailable: true };
+    }
 
     case 'manual-escalation':
-      // Tier 3: full canvas mask — the entire canvas bounds become one redaction.
       return {
         tier,
         regions: [{ bounds: canvasBounds, confidence: 1.0 }],
-        dbnetAvailable: dbnetEnabled,
+        dbnetAvailable: dbnetDetector.available,
       };
   }
 }
@@ -110,7 +114,7 @@ export function applyCanvasPrivacy(
  */
 export function canvasRegionsToRedactions(
   result: CanvasPrivacyResult,
-): Array<{ kind: RedactionKind; source: 'dbnet' | 'fallback'; bounds: Bounds }> {
+): Array<{ kind: RedactionKind; source: 'dbnet' | 'fallback'; bounds: Bounds; confidence?: number }> {
   if (result.tier === 'visual-redaction') return [];
 
   const source = result.tier === 'dbnet-blind-mask' ? 'dbnet' as const : 'fallback' as const;
@@ -120,6 +124,7 @@ export function canvasRegionsToRedactions(
     kind,
     source,
     bounds: region.bounds,
+    confidence: region.confidence,
   }));
 }
 
@@ -133,4 +138,19 @@ export function setDbnetEnabled(enabled: boolean): void {
 
 export function isDbnetEnabled(): boolean {
   return dbnetEnabled;
+}
+
+/** Expose detector state for diagnostics. */
+export function getDbnetState(): {
+  enabled: boolean;
+  available: boolean;
+  backend: string;
+  diagnostic: string;
+} {
+  return {
+    enabled: dbnetEnabled,
+    available: dbnetDetector.available,
+    backend: dbnetDetector.state,
+    diagnostic: dbnetDetector.diagnostic,
+  };
 }
