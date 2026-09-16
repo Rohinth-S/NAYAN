@@ -3,6 +3,8 @@ param(
     [string]$ModelsPath = ''
 )
 $ErrorActionPreference = 'Stop'
+$scriptDir = $PSScriptRoot
+if ([string]::IsNullOrEmpty($scriptDir)) { $scriptDir = $PWD.Path }
 
 try {
     Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/version' -TimeoutSec 2 | Out-Null
@@ -18,19 +20,18 @@ if ([string]::IsNullOrWhiteSpace($RuntimePath)) {
         $candidates = @(
             (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'),
             (Join-Path $env:ProgramFiles 'Ollama\ollama.exe'),
-            (Join-Path $PSScriptRoot '.runtime\ollama\ollama.exe')
+            (Join-Path $scriptDir '.runtime\ollama\ollama.exe')
         )
         $RuntimePath = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-    }
 }
-if (-not (Test-Path -LiteralPath $RuntimePath -PathType Leaf)) {
+if ([string]::IsNullOrWhiteSpace($RuntimePath) -or -not (Test-Path -LiteralPath $RuntimePath -PathType Leaf)) {
     throw 'Ollama executable was not found. Install Ollama, add it to PATH, or supply -RuntimePath.'
 }
 if ([string]::IsNullOrWhiteSpace($ModelsPath)) {
     if (-not [string]::IsNullOrWhiteSpace($env:OLLAMA_MODELS)) {
         $ModelsPath = $env:OLLAMA_MODELS
     } else {
-        $ModelsPath = Join-Path $PSScriptRoot '.runtime\ollama-models'
+        $ModelsPath = Join-Path $scriptDir '.runtime\ollama-models'
     }
 }
 
@@ -44,9 +45,9 @@ $env:ANONYMIZED_TELEMETRY = 'false'
 $env:BROWSER_USE_VERSION_CHECK = 'false'
 $env:BROWSER_USE_CALCULATE_COST = 'false'
 $env:BROWSER_USE_SETUP_LOGGING = 'false'
-$env:BROWSER_USE_CONFIG_DIR = Join-Path $PSScriptRoot '.runtime\browseruse'
+$env:BROWSER_USE_CONFIG_DIR = Join-Path $scriptDir '.runtime\browseruse'
 
-$logPath = Join-Path $PSScriptRoot '.runtime\logs'
+$logPath = Join-Path $scriptDir '.runtime\logs'
 New-Item -ItemType Directory -Force -Path $ModelsPath, $logPath | Out-Null
 $server = Start-Process -FilePath $RuntimePath -ArgumentList 'serve' -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (Join-Path $logPath 'ollama-out.log') `

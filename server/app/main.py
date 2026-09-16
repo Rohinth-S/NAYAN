@@ -314,9 +314,9 @@ def create_app(
     async def demo_stylesheet() -> FileResponse:
         return FileResponse(DEMO_DIR / "app.css", media_type="text/css")
 
-    @app.get("/demo/assets/face.svg", include_in_schema=False)
+    @app.get("/demo/assets/face.jpg", include_in_schema=False)
     async def demo_face() -> FileResponse:
-        return FileResponse(DEMO_DIR / "face.svg", media_type="image/svg+xml")
+        return FileResponse(DEMO_DIR / "face.jpg", media_type="image/jpeg")
 
     @app.post("/demo/api/reset", response_model=DemoState)
     async def demo_reset() -> DemoState:

@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
+if ([string]::IsNullOrEmpty($projectRoot)) { $projectRoot = $PWD.Path }
 $runtimeDirectory = Join-Path $projectRoot '.runtime'
 $serverDirectory = Join-Path $projectRoot 'server'
 $serverExecutable = Join-Path $serverDirectory '.venv\Scripts\uvicorn.exe'
@@ -87,29 +88,6 @@ $arguments = @(
     '--no-access-log',
     '--no-proxy-headers'
 )
-$process = Start-Process -FilePath $serverExecutable -ArgumentList $arguments -WorkingDirectory $serverDirectory `
-    -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
-@{
-    pid = $process.Id
-    port = $Port
-    executable = $serverExecutable
-    startedAtUtc = [DateTime]::UtcNow.ToString('o')
-} | ConvertTo-Json | Set-Content -LiteralPath $pidFile -Encoding utf8
+Write-Host "Starting server..."
+& $serverExecutable $arguments
 
-for ($attempt = 0; $attempt -lt 45; $attempt++) {
-    Start-Sleep -Seconds 1
-    if ($process.HasExited) {
-        throw "Privacy server exited during startup. See $stderrLog"
-    }
-    try {
-        $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health/ready" -TimeoutSec 2
-        if ($health.status -eq 'ready') {
-            Write-Host "Prototype ready: http://127.0.0.1:$Port/demo"
-            Write-Host "Reasoning endpoint: http://127.0.0.1:$Port/v1/reason"
-            Write-Host "Session key: $keyFile"
-            return
-        }
-    } catch {}
-}
-
-throw "The HTTP server started, but Ollama model '$Model' was not ready. See $stderrLog"
