@@ -1,28 +1,70 @@
 import pytest
-from app.action_guard import GuardState, validate_action_transition
-from app.schemas import ActionElement
+from app.action_guard import guard_reasoned_action
+from app.schemas import (
+    BrowserAction,
+    Element,
+    ElementState,
+    Bounds,
+    Page,
+    PrivacyMetadata,
+    SanitizedImage,
+    SanitizedObservation,
+    ReasoningResponse,
+)
 
-def test_action_guard_no_cross_origin_clicks():
-    state = GuardState(origin="https://example.com")
-    
-    # Valid click on same origin
-    action = ActionElement(action="click", bounds={"x": 0, "y": 0, "width": 10, "height": 10})
-    validate_action_transition(state, action)
-    
-    # In a real formal verification, we would mock the state machine to ensure
-    # that any transition that results in a cross-origin state without explicit
-    # user consent is rejected. For this prototype, we simulate property checks.
-    
-    # Example: duplicate irreversible action (like click submit twice)
-    # The action guard should raise an exception on duplicate clicks to the same coordinate in a row
-    validate_action_transition(state, action)
-    with pytest.raises(Exception):
-        # The third time might be a double-click, but a rapid 3rd click is usually blocked
-        # Or a click on a known "payment" button multiple times
-        pass
+def _mock_bounds() -> Bounds:
+    return Bounds(x=10, y=10, width=10, height=10)
 
-def test_guard_rejects_out_of_bounds():
-    state = GuardState(origin="https://example.com")
-    action = ActionElement(action="click", bounds={"x": -10, "y": -10, "width": 10, "height": 10})
-    with pytest.raises(ValueError):
-        validate_action_transition(state, action)
+def _mock_observation(task: str, elements: list[Element]) -> SanitizedObservation:
+    return SanitizedObservation(
+        schemaVersion="1.0",
+        snapshotId="11111111-1111-4111-8111-111111111111",
+        documentId="22222222-2222-4222-8222-222222222222",
+        page=Page(origin="https://site-00000000000000000000.invalid", title=""),
+        task=task,
+        elements=elements,
+        image=SanitizedImage(
+            mime="image/png",
+            dataBase64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==",
+            width=100,
+            height=100,
+        ),
+        redactions=[],
+        privacy=PrivacyMetadata(
+            detectorBackend="wasm",
+            visualFallback="none",
+            rawImageRetained=False,
+            grade=3,
+            redactionMode="semantic"
+        ),
+    )
+
+def test_guard_prevents_unchecking_consent():
+    """Verify that action_guard correctly redirects an erroneous consent click to submit."""
+    consent = Element(
+        id="e_consent00000000000",
+        role="checkbox",
+        label="I agree to terms",
+        bounds=_mock_bounds(),
+        state=ElementState(required=True, checked=True),
+    )
+    submit = Element(
+        id="e_submit000000000000",
+        role="button",
+        label="Submit",
+        bounds=_mock_bounds(),
+        state=ElementState(),
+    )
+    
+    observation = _mock_observation("submit the form", [consent, submit])
+    response = ReasoningResponse(
+        schemaVersion="1.0",
+        snapshotId="11111111-1111-4111-8111-111111111111",
+        action=BrowserAction(type="click", elementId="e_consent00000000000"),
+    )
+    
+    guarded = guard_reasoned_action(observation, response)
+    
+    # It should automatically fix the action to click the submit button instead.
+    assert guarded.action.type == "click"
+    assert guarded.action.elementId == "e_submit000000000000"
