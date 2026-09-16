@@ -25,6 +25,33 @@ This document is the shared starting point for the team. It records what is impl
 | `CONTRIBUTING.md` | Team setup, change discipline, test commands, and review checklist. |
 | `TEAM_WORK_SPLIT.md` | Named ownership for Rohinth, Mithul, and Prajjwal with detailed task packages and acceptance criteria. |
 
+# Team handoff: Privacy Focused Browser Agent
+
+**Repository purpose:** SIH26171, *On-device Visual Perception for Light-weight Browser Agents*.
+
+**Status:** working hackathon prototype, ready for team development and a controlled synthetic demo.
+
+**Primary path:** a cross-browser extension plus a strict reasoning service. The project does not require a custom browser fork. A browser fork would add a Chromium maintenance and distribution burden without improving the privacy boundary that the problem statement evaluates.
+
+This document is the shared starting point for the team. It records what is implemented, what has evidence behind it, what the repository deliberately does not claim, and the order in which production hardening should happen.
+
+## 1. What is in this repository
+
+| Path | Current role |
+| --- | --- |
+| `extension/` | TypeScript source compiled into Chrome MV3 and Firefox-compatible packages. Captures the active tab after a user gesture, builds a safe DOM capsule, runs local face inference, applies the selected privacy grade, composes a fresh redacted PNG, validates the serialized request, polls the reasoning job, and executes revision-bound actions. |
+| `server/` | FastAPI receiver and synthetic demo portal. It authenticates and bounds requests, validates the strict protocol and PNG, performs defense-in-depth checks, invokes local Ollama, validates model actions, and exposes a bounded asynchronous job queue. |
+| `evaluation/` | Synthetic Indian-PII corpus, schema files, precision/recall and pixel-area scorer, exact receiver-body verifier, and security test plan. |
+| `PRIVACY_LEVELS.md` | The versioned Grade 1/2/3 policy and category matrix. This is the policy contract to use when adding detectors. |
+| `PROTOCOL.md` | The frozen v1.0 wire contract. Keep this synchronized with `extension/src/types.ts` and `server/app/schemas.py`. |
+| `ARCHITECTURE.md` | Detailed trust boundary, data flow, fail-closed decisions, and browser-fork decision. |
+| `ARCHITECTURE_REVIEW.md` | Review of per-step sanitized capture versus continuous/external screen sharing. |
+| `EDGE_CASE_MATRIX.md` | Required behavior for capture, redaction, model, browser, network, and action failures. |
+| `IMPLEMENTATION_PLAN.md` | Original SIH scope and acceptance criteria. |
+| `README.md` | Quick start and demo instructions. |
+| `CONTRIBUTING.md` | Team setup, change discipline, test commands, and review checklist. |
+| `TEAM_WORK_SPLIT.md` | Named ownership for Rohinth, Mithul, and Prajjwal with detailed task packages and acceptance criteria. |
+
 The local `browser-use/` checkout is an experimental comparison baseline and `BrowserOS-reference/` is an upstream design reference. They are intentionally excluded from this repository because they contain nested Git history and large development environments; the primary implementation above is self-contained. If needed, clone [browser-use](https://github.com/browser-use/browser-use) and [BrowserOS](https://github.com/browseros-ai/BrowserOS) separately and preserve their original licenses.
 
 Generated state is also excluded: `.runtime/` contains API keys, browser profiles, logs, temporary extension copies, and model/runtime caches; `.tools/` contains downloaded tools; `artifacts/` contains locally generated packages, screenshots, and run results. Never force-add any of those directories.
@@ -33,20 +60,23 @@ Generated state is also excluded: `.runtime/` contains API keys, browser profile
 
 ```mermaid
 flowchart LR
-    U[User gesture] --> T[Active browser tab]
-    T --> D[Content script: DOM and accessibility-safe structure]
-    T --> S[Background capture: visible screenshot]
+    U[User gesture] --> T[Visible browser tab]
+    T --> D[Content script<br/>DOM and safe structure]
+    T --> S[Background<br/>visible screenshot]
     D --> C[Local text and field classifiers]
-    S --> F[Local UltraFace ONNX<br/>WebGPU then WASM]
-    C --> G[Grade 1/2/3 policy engine]
+    S --> F[Unified vision detector<br/>YOLOv8n/v10n multi-class<br/>WebGPU then WASM]
+    S --> CV[Canvas privacy<br/>3-tier mitigation]
+    C --> G[Grade 1 / 2 / 3 policy]
     F --> G
-    G --> R[Fresh semantic or opaque redacted canvas]
-    R --> V[Exact serialized-body validator]
+    CV --> G
+    G --> R[Fresh semantic redaction<br/>or opaque full mask]
+    R --> SDG[Scroll-drift guard<br/>Step 0 Abort Gate]
+    SDG --> V[Serialized request<br/>leak and schema checks]
     D --> V
     V -->|one sanitized POST| B[FastAPI privacy boundary]
-    B --> O[Local Ollama / open-weight VLM]
+    B --> O[Local Ollama<br/>Qwen3-VL]
     O --> A[Strict action JSON]
-    A --> X[Revision, target, and origin checks]
+    A --> X[Snapshot, origin, revision<br/>and target checks]
     X --> T
 ```
 
@@ -61,11 +91,13 @@ The loop is deliberately step based: capture → local detection → grade polic
 
 ### Client modules
 
-- `extension/src/content.ts` collects visible interactive structure, text findings, field metadata, frame/media coverage, document revision, and local element IDs. Values are used transiently for classification and are not placed in the element list.
+- `extension/src/content.ts` collects visible interactive structure, text findings, field metadata, frame/media coverage, document revision, and local element IDs. Values are used transiently for classification and are not placed in the element list. Also implements irreversible action interception and `window.confirm()` user verification.
 - `extension/src/privacy.ts` contains deterministic high-confidence patterns, field classification, grade-aware text replacement, known-private matching, and conservative bounds handling.
 - `extension/src/privacy-policy.ts` is the cumulative policy table. A finding's category threshold is compared with the selected grade; unknown categories fail closed at Grade 3.
-- `extension/src/face-detector.ts` runs the bundled UltraFace model locally, preferring WebGPU and falling back to single-threaded WASM.
-- `extension/src/image-redactor.ts` maps DOM/face boxes into screenshot pixels and draws category-only placeholders onto a new canvas. The original image is never the outbound image.
+- `extension/src/yolo-detector.ts` provides the primary unified YOLOv8n/v10n multi-class model implementation that detects faces and official documents.
+- `extension/src/scroll-drift-guard.ts` implements the Step 0 Abort Gate, invalidating stale SoM registry on viewport drift.
+- `extension/src/canvas-privacy.ts` implements 3-tier canvas-app PII mitigation.
+- `extension/src/image-redactor.ts` maps DOM/face boxes into screenshot pixels, draws category-only placeholders onto a new canvas, and computes privacy UX metrics (mask area % and category counts). The original image is never the outbound image.
 - `extension/src/sanitizer-offscreen.ts` keeps Chrome decoding, inference, composition, and PNG encoding out of the service worker. Firefox uses the direct local runtime path.
 - `extension/src/egress.ts` is the only reasoning endpoint caller. It checks the final serialized bytes, sends one sanitized POST, and polls with only an opaque UUID job ID.
 - `extension/src/background.ts` pins the tab/window/origin and document generations, bounds the operation time, validates the response, and executes only the allowlisted action types.
@@ -75,9 +107,12 @@ The loop is deliberately step based: capture → local detection → grade polic
 - `server/app/boundary.py` applies request-size, content-type, authentication, origin, security-header, and safe-access-log controls.
 - `server/app/schemas.py` rejects unknown fields and invalid protocol values.
 - `server/app/validation.py` checks IDs, bounds, limits, PNG structure, metadata, semantic placeholder pixels, opaque fallback pixels, canary-sensitive text, and the selected grade.
+- `server/app/policy_compiler.py` guarantees the frontend and backend share an identical definition of sensitive fields by compiling the `detector-registry.json` into typed modules and enforcing a digest checksum during reasoning.
+- `server/app/structural_planner.py` provides a blazing-fast VLM-less fallback to deterministically resolve unambiguous schema-valid clicks and forms when the VLM is down.
+- `server/app/circuit_breaker.py` wraps model calls in an asynchronous Closed/Open/Half-Open state machine to prevent hanging operations.
 - `server/app/ollama.py` sends only validated sanitized context to the configured local model and parses strict structured output.
 - `server/app/action_guard.py` applies a narrow structural guard for high-confidence consent/submit prerequisites without seeing raw values.
-- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue. The default is 16 retained jobs and two concurrent model calls; synchronous compatibility requests share the same bounded admission gate. A replicated deployment needs a shared protected job store or sticky routing.
+- `server/app/jobs.py` turns slow model work into a bounded asynchronous queue. For production deployment, it utilizes a highly available `RedisJobLedger` running in a hardened Docker container, complemented by an automated data-minimization cron job (`retention-cron.sh`).
 
 ## 3. Privacy grade contract
 
@@ -98,19 +133,18 @@ Current detectors are intentionally narrower than the policy: high-confidence re
 ### Demonstrable behavior
 
 1. The popup lets the user select Grade 1, 2, or 3 and shows the disclosure meaning. The setting is local and Grade 3 is the default.
-2. **Privacy preview** runs capture, local detection, and composition without calling the reasoning service.
-3. The extension produces Chrome and Firefox packages from one source tree and includes the pinned UltraFace ONNX asset with attribution and checksum.
+2. **Privacy preview** runs capture, local detection, and composition without calling the reasoning service. Features a dynamic split-pane UI showing exact masked area percentages and explicit category counts.
+3. The extension produces Chrome and Firefox packages from one source tree and includes the pinned Unified YOLO model asset with attribution and checksum.
 4. Semantic redaction uses neutral cards and category-only markers such as `[REDACTED:EMAIL]`, `[REDACTED:PASSWORD]`, and `[REDACTED:FACE]`. If local visual inference fails, transmission stops unless the user explicitly enables the full-image opaque fallback.
 5. The request contains no raw-content keys, no real hostname, no ID-to-node map, and no sensitive value. The server rejects malformed, oversized, metadata-bearing, or visually unmasked payloads independently.
 6. Reasoning uses local Ollama (`qwen3-vl:2b-instruct` by default), bounded async jobs, bodyless UUID polls, and a strict action schema (`click`, `input`, `scroll`, `wait`, `done`).
-7. Actions are bound to the same snapshot, document revision, tab, window, origin, and opaque element ID, so a stale or cross-page action is rejected.
+7. Actions are bound to the same snapshot, document revision, tab, window, origin, and opaque element ID, so a stale or cross-page action is rejected. Irreversible actions automatically pause execution and await user `window.confirm()` authorization.
 8. The synthetic demo portal exercises password, Indian PII, DOM attributes, links, a face image, a required consent checkbox, and terminal submission.
+9. **Deployment Safety & Supply Chain Resilience:** Orchestrated via a hardened, ultra-secure `docker-compose.yml` that drops all Linux capabilities, forces a read-only root file system via `tmpfs`, and proxies traffic through Nginx. Includes a durable `RedisJobLedger`, a Lua-backed atomic sliding window rate limiter, and an automated data-minimization `retention-cron.sh` script to continually purge expired jobs.
 
 ### Evidence already recorded
 
 The latest local validation snapshot is in `VALIDATION_REPORT.md`. The source suites currently report 73 extension tests, 126 server tests, and 28 evaluation tests, with Ruff clean. Recorded synthetic browser evidence uses the WASM fallback and shows three sanitized reasoning requests, absent canaries, nine redactions per request, and successful enrollment. A fresh authenticated local-Ollama HTTP smoke test has also returned a valid structured action.
-
-Generated evidence is intentionally kept out of Git history because it is machine-specific and can contain local paths or runtime metadata. Re-run the commands in `VALIDATION_REPORT.md` after cloning and attach a new run record to a release or SIH submission when hardware/model details are fixed.
 
 ## 5. Runbook for teammates
 
