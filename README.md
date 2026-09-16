@@ -522,6 +522,20 @@ Stop the API with:
 
 The local `browser-use/` and `BrowserOS-reference/` directories are optional upstream references and are intentionally excluded from this Git repository because they contain separate Git history and development environments. Clone them separately when comparing designs, and preserve their original licenses.
 
+## Current Implementation Status
+
+**What has been implemented:**
+- **Perception:** Unified YOLOv8n/v10n multi-class vision detector, dual-channel Fast DOM path vs WebGPU Fallback, and a 3-tier canvas privacy mitigation strategy.
+- **Orchestration:** LangGraph.js StateMachine integration with explicit HITL (Human-in-the-Loop) interrupt hooks and a Step 0 Abort Gate to prevent scroll-drift races.
+- **Privacy Enforcement:** Grade 1/2/3 local filtering policy, semantic category redaction, and a zero-leak single-egress validator.
+- **Platform:** Asynchronous job queuing for egress tasks, FastAPI strict-boundary schema validation, and end-to-end synthetic tests proving the reasoning loops.
+
+**What is yet to be implemented (Production Roadmap):**
+- **Enhanced Local Perception (P0):** Integration of quantized local OCR (for un-parseable canvas/images) and local NER (for unlabelled free-text PII).
+- **Deployment Safety (P0-P1):** Multi-instance durable failover (Redis/Postgres) replacing the current SQLite/in-memory job store, plus formal rate limiting and authenticated quotas.
+- **Security Assurance (P0-P1):** Independent red-teaming, adversarial JSON/PNG fuzzing, and strict provenance (SBOM/signed releases).
+- **Extensibility (P2):** Pluggable model gateways with circuit breakers and formal action-policy state machine verification for more complex browser capabilities (e.g., downloads/uploads).
+
 ## Roadmap to production
 
 The prototype demonstrates the boundary and the end-to-end interaction. The following work is required before handling real sensitive data.
