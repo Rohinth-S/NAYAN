@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pytest
 
 from app.job_ledger import SQLiteJobLedger
 from app.schemas import BrowserAction, ReasoningResponse
@@ -14,15 +15,16 @@ def _response(snapshot: str) -> ReasoningResponse:
     )
 
 
-def test_ledger_marks_inflight_jobs_failed_after_restart(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_ledger_marks_inflight_jobs_failed_after_restart(tmp_path: Path) -> None:
     path = tmp_path / "jobs.sqlite3"
     first = SQLiteJobLedger(str(path))
-    first.pending("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222")
-    first.close()
+    await first.pending("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222")
+    await first.close()
 
     second = SQLiteJobLedger(str(path))
-    record = second.get("11111111-1111-4111-8111-111111111111")
-    second.close()
+    record = await second.get("11111111-1111-4111-8111-111111111111")
+    await second.close()
     assert record is not None
     assert record[0] == "22222222-2222-4222-8222-222222222222"
     assert record[1] == "failed"
@@ -30,14 +32,15 @@ def test_ledger_marks_inflight_jobs_failed_after_restart(tmp_path: Path) -> None
     assert record[4] == "server_restarted"
 
 
-def test_ledger_persists_only_validated_action_result(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_ledger_persists_only_validated_action_result(tmp_path: Path) -> None:
     ledger = SQLiteJobLedger(str(tmp_path / "jobs.sqlite3"))
     job = "33333333-3333-4333-8333-333333333333"
     snapshot = "44444444-4444-4444-8444-444444444444"
-    ledger.pending(job, snapshot)
-    ledger.success(job, _response(snapshot))
-    record = ledger.get(job)
-    ledger.close()
+    await ledger.pending(job, snapshot)
+    await ledger.success(job, _response(snapshot))
+    record = await ledger.get(job)
+    await ledger.close()
     assert record is not None
     assert record[1] == "succeeded"
     assert record[2] is not None
