@@ -22,7 +22,7 @@ from app.jobs import (
     ReasoningQueueFull,
 )
 from app.observability import PrivacyMetrics
-from app.ollama import (
+from app.gateways.ollama import (
     OllamaReasoner,
     Reasoner,
     ReasonerContextLimit,

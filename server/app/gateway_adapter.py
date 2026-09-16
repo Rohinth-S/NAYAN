@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.model_adapter import ModelManifest, validate_adapter_response
-from app.ollama import MODEL_PROMPT_VERSION, ReasonerInvalidResponse, ReasonerUnavailable
+from app.gateways.ollama import MODEL_PROMPT_VERSION, ReasonerInvalidResponse, ReasonerUnavailable
 from app.schemas import ReasoningResponse, SanitizedObservation
 from app.settings import Settings
 from app.validation import validate_observation

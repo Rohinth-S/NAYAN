@@ -7,7 +7,7 @@ import httpx
 import pytest
 from conftest import SNAPSHOT_ID, SUBMIT_ID, observation_payload
 
-from app.ollama import OllamaReasoner, ReasonerInvalidResponse, build_ollama_request
+from app.gateways.ollama import OllamaReasoner, ReasonerInvalidResponse, build_ollama_request
 from app.schemas import SanitizedObservation
 
 

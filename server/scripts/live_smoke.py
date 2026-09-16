@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.ollama import build_ollama_request
+from app.gateways.ollama import build_ollama_request
 from app.schemas import ReasoningJobStatus, ReasoningResponse, SanitizedObservation
 
 
