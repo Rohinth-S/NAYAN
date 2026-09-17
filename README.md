@@ -783,7 +783,7 @@ xychart-beta
     title "Automated test suites in the latest release gate"
     x-axis ["Extension", "Server", "Evaluation"]
     y-axis "Passing tests" 0 --> 220
-    bar [115, 165, 34]
+    bar [142, 165, 34]
 ```
 
 The bar chart shows test volume, not a privacy score. Accuracy, recall, redaction IoU, excess area, resource use, and live browser coverage require separate evidence.
