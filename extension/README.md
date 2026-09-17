@@ -186,6 +186,13 @@ The extension applies the selected cumulative grade before encoding a new PNG:
   IP/network and detected customer/account identifiers;
 - Grade 3 additionally protects names, usernames, employee identifiers and
   unknown populated editable fields;
+- names, including cardholder names, use Grade 3 in both DOM and document OCR;
+  dates of birth use Grades 2–3 in both paths. Repeated identity values learned
+  from labelled fields retain their category, including supported date-format
+  variants. These values remain local to the capture;
+- changing the grade hides the old panel preview until a fresh **Privacy
+  preview** is generated. An already-open expanded preview tab remains a
+  snapshot of its original capture;
 - the same grade-aware sanitizer processes the task, title, element labels,
   field values and raster, so lowering the grade never bypasses the invariant
   protection floor;

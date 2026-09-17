@@ -1,69 +1,35 @@
-import { describe, expect, it } from 'vitest';
-import { graphInternals, type AgentGraphState } from '../src/agent-graph';
-
-describe('AgentStateGraph', () => {
-  it('builds and executes the agent graph', async () => {
-    const nodes = {
-      observe_and_redact: async (state: AgentGraphState) => {
-        return { phase: 'reasoning' as const };
-      },
-      vlm_plan: async (state: AgentGraphState) => {
-        return { action: { type: 'done' as const, summary: 'done' } };
-      },
-      hitl_gate: async (state: AgentGraphState) => {
-        return { hitlApproved: true };
-      },
-      dispatch_action: async (state: AgentGraphState) => {
-        return { phase: 'executing' as const };
-      },
-      verify_settlement: async (state: AgentGraphState) => {
-        return { phase: 'idle' as const };
-      },
-    };
-
-    const graph = graphInternals.buildAgentGraph(nodes);
-    const initialState = graphInternals.createInitialState({ maxSteps: 5 } as any);
-    initialState.scrollDrift = { ...initialState.scrollDrift, drifted: false };
-
-    let finalState: AgentGraphState | undefined;
-    for await (const state of graph.stream(initialState)) {
-      finalState = state;
-    }
-
-    expect(finalState).toBeDefined();
-    expect(finalState?.phase).toBe('idle');
-    expect(finalState?.action?.type).toBe('done');
+import { describe, expect, it, vi } from 'vitest';
+import { runAgentGraph, type WorkflowHooks } from '../src/agent-graph';
+const hooks = (): WorkflowHooks => ({ observe: vi.fn(async () => {}), reason: vi.fn(async (): Promise<'continue' | 'drift'> => 'continue'),
+  verify: vi.fn(async () => {}), dispatch: vi.fn(async () => true), settle: vi.fn(async () => {}) });
+const options = () => ({ maxSteps: 5, signal: new AbortController().signal });
+describe('private bounded LangGraph workflow', () => {
+  it('runs all stages and stores counters only', async () => {
+    const h = hooks(); const result = await runAgentGraph(h, options());
+    expect(h.observe).toHaveBeenCalledBefore(h.reason as ReturnType<typeof vi.fn>);
+    expect(h.verify).toHaveBeenCalledBefore(h.dispatch as ReturnType<typeof vi.fn>);
+    expect(Object.keys(result).sort()).toEqual(['actions', 'attempts', 'driftCount', 'route']);
+    expect(result.route).toBe('done');
   });
-
-  it('handles scroll drift by re-capturing', async () => {
-    let observeCalls = 0;
-    const nodes = {
-      observe_and_redact: async (state: AgentGraphState) => {
-        observeCalls++;
-        // Reset scroll drift on re-capture
-        return { scrollDrift: { ...state.scrollDrift, drifted: false } };
-      },
-      vlm_plan: async (state: AgentGraphState) => {
-        // First time: simulate scroll drift
-        if (observeCalls === 1) {
-          return { scrollDrift: { ...state.scrollDrift, drifted: true } };
-        }
-        return { action: { type: 'done' as const, summary: 'done' } };
-      },
-      hitl_gate: async () => ({}),
-      dispatch_action: async () => ({}),
-      verify_settlement: async () => ({}),
-    };
-
-    const graph = graphInternals.buildAgentGraph(nodes);
-    const initialState = graphInternals.createInitialState({ maxSteps: 5 } as any);
-
-    let finalState: AgentGraphState | undefined;
-    for await (const state of graph.stream(initialState)) {
-      finalState = state;
-    }
-
-    expect(observeCalls).toBe(2);
-    expect(finalState?.action?.type).toBe('done');
+  it('bounds stale recaptures without dispatch', async () => {
+    const h = hooks(); h.reason = vi.fn(async (): Promise<'continue' | 'drift'> => 'drift');
+    await expect(runAgentGraph(h, options())).rejects.toThrow('Page keeps changing');
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+  it('never replays an uncertain side effect', async () => {
+    const h = hooks(); h.dispatch = vi.fn(async () => { throw new Error('uncertain action result'); });
+    await expect(runAgentGraph(h, options())).rejects.toThrow('uncertain');
+    expect(h.dispatch).toHaveBeenCalledTimes(1);
+  });
+  it('stops at the step limit', async () => {
+    const h = hooks(); h.dispatch = vi.fn(async () => false);
+    await expect(runAgentGraph(h, { ...options(), maxSteps: 2 })).rejects.toThrow('Maximum step');
+    expect(h.dispatch).toHaveBeenCalledTimes(2);
+  });
+  it('blocks dispatch after cancellation during planning', async () => {
+    const h = hooks(); const controller = new AbortController();
+    h.reason = async () => { controller.abort(); return 'continue'; };
+    await expect(runAgentGraph(h, { ...options(), signal: controller.signal })).rejects.toThrow();
+    expect(h.dispatch).not.toHaveBeenCalled();
   });
 });

@@ -47,7 +47,7 @@ This gives the project a stronger privacy story than a provider setting or a pro
 | High-assurance mode | User-selectable structure-only transmission: sanitized DOM plus a fully opaque black PNG | Browser/device coverage and independent review |
 | Outbound privacy receipt | Local aggregate receipt with grade, detector, redaction categories, masked area, sanitized-image hash, request count, and egress state | Long-term receipt export and independent review |
 | Reasoning | Local Ollama, normally `qwen3-vl:2b-instruct` | Provider-neutral hosted or air-gapped sanitized adapter |
-| Agent controller | Bounded TypeScript loop plus bounded FastAPI jobs | LangGraph.js is documented as a future adapter, not the current runtime |
+| Agent controller | LangGraph.js StateGraph with bounded callbacks plus bounded FastAPI jobs | Durable checkpointer-backed resume and distributed graph execution remain future work |
 | Browser actions | `click`, `input`, `scroll`, `wait`, `done`, `hover`, `focus`, `doubleClick`, `check`, `uncheck`, `select` | Privileged navigation/download/upload/keyboard/cookie actions remain outside the safe broker |
 | Queue | Development in-memory jobs; optional metadata-only SQLite | Production Redis ledger and shared rate limiter |
 | Evidence | Synthetic demo, automated release gate, local Ollama smoke/e2e summaries | Independent security review, signed artifacts, live browser matrix, trained-model metrics |
@@ -371,6 +371,8 @@ The shared detector registry defines the minimum grade at which a category is hi
 - **Grade 3 — Strict:** additionally protect identity labels and unknown populated fields.
 
 Missing or invalid settings normalize to Grade 3. A newly added detector category defaults to `unknown-populated-field`, which fails closed at Grade 3 until policy governance assigns it explicitly.
+
+**Names and dates of birth follow the same policy across form fields, labelled profile text, repeated known identity values, and supported document OCR.** Names (including cardholder names) are hidden at Grade 3; dates of birth are hidden at Grades 2 and 3. The document type does not change those thresholds. Values learned from labelled fields remain capture-local. OCR must locate every field required by the selected grade before replacing a full document mask with selective boxes. Changing the grade hides the old panel preview; click **Privacy preview** to generate a fresh capture under the new policy. Existing expanded preview tabs are snapshots of their original capture.
 
 The invariant floor applies at every grade:
 

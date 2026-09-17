@@ -84,6 +84,10 @@ Chrome's offscreen document is used only for local screenshot decoding, ONNX inf
 
 An external product such as Copilot Vision cannot be silently redirected to this mirror through a browser-extension API. Supporting that use case requires an explicit sanitized surface or virtual-camera/display integration and is a separate product boundary, not part of the SIH prototype claim.
 
+## Agent workflow orchestration
+
+The live controller uses a LangGraph.js `StateGraph` with explicit `observe → reason → verify → dispatch → settle` nodes. Only counters and route decisions are graph state; the sanitized observation, private capture, model response, and opaque DOM map stay in local callback closures. Scroll drift routes back to a bounded fresh observation, deadline and cancellation guards surround every callback, and an ambiguous browser side effect is never automatically replayed. The graph intentionally runs without a checkpointer in this release; durable resume is a future deployment gate.
+
 ## Approach B architectural additions
 
 The following controls were added during the Approach A → B migration to resolve measured bottlenecks:

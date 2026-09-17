@@ -46,7 +46,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 - High-assurance structure-only mode sends sanitized DOM structure plus a newly generated opaque black PNG. It skips visual interpretation and is exposed in both panel UIs.
 - Each capture produces a local privacy receipt containing only aggregate categories, detector backend, transmission mode, masked-area percentage, request count, and a SHA-256 hash of the sanitized image. Raw values are never shown in the receipt.
 - A final local DLP gate scans serialized task text, labels, metadata, and canaries immediately before the sole network egress. A finding blocks the request.
-- `agent-graph.ts` documents the Approach B state topology and human-in-the-loop transitions. The live controller is the bounded TypeScript loop in `background.ts`; LangGraph.js is not the current runtime.
+- `agent-graph.ts` implements the LangGraph.js StateGraph orchestration. The graph stores counters and routing only; captures, keys, observations, and actions stay in private callbacks. The graph has no checkpointer, so durable resume remains a gated future capability.
 - The synthetic evidence is not universal PII recall/precision evidence. It does not certify production use with real personal data.
 - A built Firefox package is not the same as a live Firefox browser-matrix run. A live Firefox run remains separate evidence.
 

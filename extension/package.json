@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",
+    "@langchain/core": "1.2.11",
+    "@langchain/langgraph": "1.4.15",
     "@zxing/library": "0.21.3",
     "onnxruntime-web": "1.22.0",
     "tesseract.js": "6.0.1"

@@ -1,3 +1,4 @@
+import { runAgentGraph } from './agent-graph';
 import { CaptureRateGate } from './capture-rate-gate';
 import { sameTabContext, type TabContext } from './context-guard';
 import { sendSanitizedObservation, type ReasoningRequestOptions } from './egress';
@@ -387,15 +388,17 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     // switch must stop the run instead of silently moving the agent and its
     // privacy state onto another page.
     const pinnedTab = await activeTab();
-    for (let step = 1; step <= settings.maxSteps; step += 1) {
-      if (stopRequested || runId !== activeRun) {
-        update({ running: false, phase: 'idle', message: 'Stopped by user' });
-        return;
-      }
-      update({ step });
-      const requestCount = reasoningRequestCount + 1;
-      const context = await captureAndSanitize(settings, pinnedTab, {}, requestCount);
-      if (stopRequested || runId !== activeRun) return;
+    let context: CapturedContext;
+    let plannedAction: AgentAction | null = null;
+    let requestCount = 0;
+    await runAgentGraph({
+      async observe(step) {
+        plannedAction = null;
+        update({ step });
+        requestCount = reasoningRequestCount + 1;
+        context = await captureAndSanitize(settings, pinnedTab, {}, requestCount);
+      },
+      async reason() {
       // Approach B: activate the guard inside the page content script before
       // the VLM call. The service worker cannot observe webpage scroll events.
       const guardState = await setScrollGuard(context.tab.id, true);
@@ -406,7 +409,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       const progressOptions: ReasoningRequestOptions = {
         signal: reasoningController.signal,
         onProgress: (stage) => {
-          if (runId !== activeRun || stopRequested) return;
+          if (reasoningController.signal.aborted) return;
           if (stage === 'accepted') accepted = true;
           if (stage === 'accepted') {
             reasoningRequestCount = requestCount;
@@ -424,7 +427,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         },
       };
       progressTimer = setInterval(() => {
-        if (runId !== activeRun || stopRequested) return;
+        if (reasoningController.signal.aborted) return;
         const elapsed = Math.max(0, Math.round((performance.now() - started) / 1_000));
         update({
           phase: 'reasoning',
@@ -447,7 +450,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
           debounceMs: 350,
         }));
       }
-      if (runId !== activeRun || stopRequested) return;
+      reasoningController.signal.throwIfAborted();
       // Discard actions resolved against a viewport that moved during the
       // network call. The content script owns this observation.
       if (driftState.drifted) {
@@ -456,23 +459,29 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
           message: 'Viewport changed during reasoning — re-capturing…',
           scrollDrift: driftState,
         });
-        continue; // Re-enter the step loop with a fresh capture.
+        return 'drift' as const;
       }
       update({ lastLatencyMs: Math.round(performance.now() - started), scrollDrift: driftState });
-      if (stopRequested || runId !== activeRun) {
-        update({ running: false, phase: 'idle', message: 'Stopped by user' });
-        return;
-      }
-      update({ phase: 'executing', message: `Executing ${response.action.type}…` });
-      const result = await execute(context, response.action);
-      if (response.action.type === 'done') {
-        update({ running: false, phase: 'done', message: result });
-        return;
-      }
-      update({ message: result });
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-    update({ running: false, phase: 'blocked', message: 'Maximum step count reached' });
+      plannedAction = response.action;
+      return 'continue' as const;
+      },
+      async verify() {
+        if (!plannedAction) throw new Error('Action is missing');
+        if (runId !== activeRun || stopRequested) throw new Error('Run cancelled');
+        // execute() and the page broker repeat snapshot/origin/revision checks
+        // immediately before dispatch. There is no durable action replay.
+      },
+      async dispatch() {
+        if (!plannedAction) throw new Error('Action is missing');
+        update({ phase: 'executing', message: `Executing ${plannedAction.type}…` });
+        const result = await execute(context, plannedAction);
+        const done = plannedAction.type === 'done';
+        update({ message: result, ...(done ? { running: false, phase: 'done' as const } : {}) });
+        return done;
+      },
+      async settle() { await new Promise(resolve => setTimeout(resolve, 300)); },
+    }, { maxSteps: settings.maxSteps, signal: reasoningController.signal });
+
   } catch (error) {
     if (runId !== activeRun || stopRequested || reasoningController.signal.aborted) return;
     reportBlockedOperation('agent run', error);

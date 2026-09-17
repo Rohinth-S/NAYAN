@@ -3,6 +3,9 @@ import { DOCUMENT_FIELD_CATEGORIES, requiredDocumentFields, shouldRedactDocument
 import { classifySensitiveTextLabel, isSensitiveField, isSensitiveTextLabel } from '../src/privacy';
 import { shouldRedactCategory, type PrivacyGrade } from '../src/privacy-policy';
 import { identityFindings, sanitizeIdentityValues } from '../src/identity-values';
+import { imageRedactorInternals } from '../src/image-redactor';
+import type { DocumentOcrResult } from '../src/document-ocr';
+import type { Redaction } from '../src/types';
 
 describe('one grade policy for forms, repeated text and document OCR', () => {
   for (const grade of [1, 2, 3] as const) {
@@ -43,5 +46,23 @@ describe('one grade policy for forms, repeated text and document OCR', () => {
     expect(identityFindings('14/08/1998 14-08-1998 1998-08-14 15/08/1998', values, 2)).toHaveLength(3);
     expect(identityFindings('Ann Leeway; ANN LEE; Ann Lee', values, 3)).toHaveLength(2);
     expect(identityFindings('14/08/1998 Ann Lee', values, 1)).toHaveLength(0);
+  });
+
+  it('does not expose a missed name or DOB by narrowing a document at a stricter grade', () => {
+    const media = { x: 0, y: 0, width: 400, height: 250 };
+    const masks: Redaction[] = [{ kind: 'uninspectable-media', source: 'dom', bounds: media }];
+    const scan: DocumentOcrResult = {
+      documents: [{ kind: 'pan-card', bounds: media, confidence: 0.95 }],
+      secrets: [{ kind: 'pan-card', secretType: 'pan', bounds: { x: 150, y: 50, width: 100, height: 20 }, mediaBounds: media, confidence: 0.95 }],
+      durationMs: 1, modelVersion: 'test',
+    };
+    expect(imageRedactorInternals.narrowVerifiedDocumentMedia(masks, scan, 1)).toEqual([]);
+    expect(imageRedactorInternals.narrowVerifiedDocumentMedia(masks, scan, 2)).toEqual(masks);
+    expect(imageRedactorInternals.narrowVerifiedDocumentMedia(masks, scan, 3)).toEqual(masks);
+    const withDob: DocumentOcrResult = { ...scan, secrets: [...scan.secrets, {
+      kind: 'pan-card', secretType: 'date-of-birth', bounds: { x: 150, y: 100, width: 100, height: 20 }, mediaBounds: media, confidence: 0.95,
+    }] };
+    expect(imageRedactorInternals.narrowVerifiedDocumentMedia(masks, withDob, 2)).toEqual([]);
+    expect(imageRedactorInternals.narrowVerifiedDocumentMedia(masks, withDob, 3)).toEqual(masks);
   });
 });
