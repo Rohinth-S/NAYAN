@@ -28,7 +28,7 @@ both browsers, and creates:
 
 The release build includes `models/version-RFB-320.onnx` when it is present.
 The reviewed model in this workspace has SHA-256
-`34CD7E60AEFF28744C657DE7A3DC64E872D506741DE66987F3426F2B79F88017`.
+`B63E0028667FD9E7E5DCC56EBD91E85281B8DF1498B4C3C5799DE9229305C0B1`.
 Its upstream project and MIT attribution are in `models/NOTICE.md` and
 `models/ULTRAFACE_LICENSE.txt`.
 

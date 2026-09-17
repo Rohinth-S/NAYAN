@@ -7,7 +7,7 @@ $serverPython = Join-Path $projectRoot 'server\.venv\Scripts\python.exe'
 $serverPytest = Join-Path $projectRoot 'server\.venv\Scripts\pytest.exe'
 $serverRuff = Join-Path $projectRoot 'server\.venv\Scripts\ruff.exe'
 $model = Join-Path $projectRoot 'extension\models\version-RFB-320.onnx'
-$expectedModelHash = '34CD7E60AEFF28744C657DE7A3DC64E872D506741DE66987F3426F2B79F88017'
+$expectedModelHash = 'B63E0028667FD9E7E5DCC56EBD91E85281B8DF1498B4C3C5799DE9229305C0B1'
 
 if (-not (Test-Path -LiteralPath $serverPython -PathType Leaf)) { throw 'Run .\Setup-Prototype.ps1 first.' }
 

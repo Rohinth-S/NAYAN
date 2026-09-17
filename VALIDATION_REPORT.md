@@ -34,7 +34,7 @@ The pipeline separates contract evidence from model-accuracy evidence. Passing t
 
 The reviewed UltraFace asset is pinned by SHA-256:
 
-`34CD7E60AEFF28744C657DE7A3DC64E872D506741DE66987F3426F2B79F88017`
+`B63E0028667FD9E7E5DCC56EBD91E85281B8DF1498B4C3C5799DE9229305C0B1`
 
 The final package hashes are recorded after the last `npm run check`:
 

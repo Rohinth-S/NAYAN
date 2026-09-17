@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $uv = Join-Path $projectRoot '.tools\uv\uv.exe'
 $model = Join-Path $projectRoot 'extension\models\version-RFB-320.onnx'
-$expectedModelHash = '34CD7E60AEFF28744C657DE7A3DC64E872D506741DE66987F3426F2B79F88017'
+$expectedModelHash = 'B63E0028667FD9E7E5DCC56EBD91E85281B8DF1498B4C3C5799DE9229305C0B1'
 
 if (-not (Test-Path -LiteralPath $uv -PathType Leaf)) { throw "Bundled uv is missing: $uv" }
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js 20 or newer is required.' }
@@ -27,4 +27,3 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
 
 Write-Host 'Dependencies installed and the local vision model checksum verified.'
 Write-Host 'Ensure qwen3-vl:2b-instruct is installed in Ollama, then run .\Start-Prototype.ps1.'
-

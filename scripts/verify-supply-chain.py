@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_PERMISSIONS = {"activeTab", "storage", "scripting", "offscreen", "sidePanel"}
+ALLOWED_PERMISSIONS = {"activeTab", "tabs", "storage", "scripting", "offscreen", "sidePanel"}
 ALLOWED_HOSTS = {"http://*/*", "https://*/*"}
 
 
@@ -53,11 +53,17 @@ def verify_manifests() -> list[str]:
         if not manifest_path.exists():
             continue
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        permissions = set(manifest.get("permissions", []))
+        # Chrome keeps site access in `host_permissions`; Firefox MV2 places
+        # the same patterns in `permissions`. Normalize both shapes before
+        # checking the least-privilege allowlist.
+        declared = set(manifest.get("permissions", []))
+        hosts = {value for value in declared if value.startswith(("http://", "https://"))}
+        hosts |= set(manifest.get("host_permissions", []))
+        hosts |= set(manifest.get("optional_host_permissions", []))
+        permissions = declared - hosts
         unexpected = permissions - ALLOWED_PERMISSIONS
         if unexpected:
             failures.append(f"{browser} unexpected permissions: {sorted(unexpected)}")
-        hosts = set(manifest.get("optional_host_permissions", [])) | set(manifest.get("optional_permissions", []))
         unexpected_hosts = {host for host in hosts if host.startswith(("http://", "https://"))} - ALLOWED_HOSTS
         if unexpected_hosts:
             failures.append(f"{browser} unexpected host permissions: {sorted(unexpected_hosts)}")
