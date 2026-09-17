@@ -40,8 +40,8 @@ The final package hashes are recorded after the last `npm run check`:
 
 | Package | SHA-256 |
 | --- | --- |
-| `sih-private-agent-chrome-0.1.0.zip` | `DA6D04C3E3F9BDB778A619E4617DA1AC48252C072E7F67FE707471D14F9B0521` (6,632,912 bytes) |
-| `sih-private-agent-firefox-0.1.0.zip` | `82F5901765E0281800257A278FC571D03EB6851307B47D07C4407C1A308420F7` (6,629,394 bytes) |
+| `sih-private-agent-chrome-0.1.0.zip` | `DF60789452E4B6DB592A0BDF5EAE6D65299F91EF67BB7D34E15DFEA2DF08DA15` (14,462,776 bytes) |
+| `sih-private-agent-firefox-0.1.0.zip` | `5AB48E150737C389F69A0EF25CB044DD49EE3C1E27DA9A6E7DB11DF6D7634BE7` (14,459,183 bytes) |
 
 The deterministic browser runs observed the WASM fallback. Chrome uses an offscreen document for local ONNX inference; Firefox uses the direct local runtime. A WebGPU-capable run should be recorded separately rather than inferred from the WASM result. The automated release gate now also validates that production configuration requires Redis, a pinned model digest, authentication, and disabled structural fallback.
 
