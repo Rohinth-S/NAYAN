@@ -783,7 +783,7 @@ xychart-beta
     title "Automated test suites in the latest release gate"
     x-axis ["Extension", "Server", "Evaluation"]
     y-axis "Passing tests" 0 --> 220
-    bar [148, 165, 34]
+    bar [148, 174, 34]
 ```
 
 The bar chart shows test volume, not a privacy score. Accuracy, recall, redaction IoU, excess area, resource use, and live browser coverage require separate evidence.
@@ -850,6 +850,18 @@ ollama pull qwen3-vl:2b-instruct
 ```
 
 The setup script installs extension dependencies, creates `server\.venv`, installs server test dependencies, and verifies the checked-in UltraFace checksum. Dependencies, models, API keys, and runtime files stay in ignored directories.
+
+To verify the full browser wiring with a synthetic page, run:
+
+```powershell
+node scripts/workflow-smoke.mjs
+```
+
+This isolated smoke loads the packaged Chrome extension, captures and sanitizes
+the demo locally, sends only the sanitized observation to a local development
+server, executes the real LangGraph controller, accepts the native submit
+confirmation, and writes aggregate results to `artifacts/workflow-smoke.json`.
+It exercises wiring and action safety; it is not model-accuracy evidence.
 
 ### Start and stop
 

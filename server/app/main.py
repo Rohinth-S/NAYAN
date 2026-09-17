@@ -145,7 +145,7 @@ def create_app(
         finally:
             await jobs.close()
             if ledger is not None:
-                ledger.close()
+                await ledger.close()
             if owned_reasoner:
                 await reasoner.close()
             if redis_client is not None:
@@ -231,7 +231,9 @@ def create_app(
             # VLM cannot strand the required demonstration. Ambiguous pages
             # still use the model, or the structural planner if it is down.
             fast_action = (
-                deterministic_form_action(observation) if isinstance(reasoner, OllamaReasoner) else None
+                deterministic_form_action(observation)
+                if settings.structural_fallback and isinstance(reasoner, OllamaReasoner)
+                else None
             )
             if fast_action is not None:
                 response = ReasoningResponse(

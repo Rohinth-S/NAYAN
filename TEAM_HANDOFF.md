@@ -36,7 +36,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 - A provider-neutral sanitized gateway adapter is implemented for a hosted or air-gapped reasoning service.
 - A deterministic structural planner is available only as a development fallback for unambiguous schema-valid tasks. Production configuration forces it off.
 - The synthetic portal includes Indian-style PII, a face, sensitive fields, privacy-grade labels, synthetic credit-card, PAN-card, and Aadhaar-style document fixtures, a person-image/object media lab, a confirmation checkbox, and a submit action.
-- The release gate currently reports 148 extension, 165 server, and 34 evaluation tests in `evidence/latest-release.json`, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
+- The release gate currently reports 148 extension, 174 server, and 34 evaluation tests in `evidence/latest-release.json`, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
 
 ### What is deliberately not claimed as default
 
@@ -112,6 +112,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 | `evidence/` | Aggregate synthetic E2E, Ollama, perception, release, and SIH demo evidence. |
 | `governance/` | Detector-registry schema, protocol manifest/migrations, and security review records. |
 | `scripts/` | Release gate, governance check, security scan, SBOM generation, disk budget, demo preflight, retention cleanup, local preview, and signing helpers. |
+| `scripts/workflow-smoke.mjs` | Isolated Chrome end-to-end smoke: sanitized extension capture, local server, real graph execution, native submit confirmation, and aggregate evidence. |
 | `README.md`, `ARCHITECTURE.md`, `ARCHITECTURE_REVIEW.md`, `INTEGRATION_REVIEW.md` | Product, trust-boundary, architecture decision, and integration documentation. |
 | `PRIVACY_LEVELS.md`, `PROTOCOL.md`, `EDGE_CASE_MATRIX.md`, `THREAT_MODEL.md` | Policy, wire contract, failure behavior, and threat model. |
 | `TEAM_WORK_SPLIT.md` | Detailed task ownership, completed workstream audit, remaining release gates, and acceptance criteria. |

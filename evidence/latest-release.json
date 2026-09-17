@@ -1,8 +1,8 @@
 {
   "reportVersion": "1.0",
-  "recordedAtUtc": "2026-09-17T20:30:03.182755+00:00",
-  "sourceCommit": "6e02d5b3e3a8b2ce72066109fc4d84219ecbcb75",
-  "workingTreeHasChanges": false,
+  "recordedAtUtc": "2026-09-17T20:37:11.851003+00:00",
+  "sourceCommit": "48a35707d4adabc9408add0c2cd81cd6d17248bb",
+  "workingTreeHasChanges": true,
   "protocolVersion": "1.0",
   "policyVersion": "1.0",
   "scope": "automated-contract-and-package-checks",
@@ -29,11 +29,11 @@
       "passed": 148
     },
     "server": {
-      "total": 165,
+      "total": 174,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "passed": 165
+      "passed": 174
     },
     "evaluation": {
       "total": 34,

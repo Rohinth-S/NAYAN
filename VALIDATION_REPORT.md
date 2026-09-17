@@ -24,11 +24,11 @@ The pipeline separates contract evidence from model-accuracy evidence. Passing t
 | Area | Observed result | Evidence and interpretation |
 | --- | --- | --- |
 | Extension source and package checks | **148 tests passed** | `extension/npm run check` covers the cumulative policy, Grade 1/2/3 behavior, custom-value protection, semantic placeholder composition, PNG composition, ONNX post-processing and WebGPU-to-WASM recovery, pinned-tab freshness, asynchronous job tickets, bodyless polling, total timeout, duplicate-action protection, clipping-boundary detection, detector fallback handling, side-panel task presets, and the single egress boundary. Chrome and Firefox packages were rebuilt. |
-| Server contract and boundary checks | **165 tests passed; Ruff clean** | Covers strict grade parsing/defaulting, Redis production-profile requirements, grade-aware defense-in-depth checks (including SSN and IFSC), authentication, limits, keyed aliases, PNG metadata/animation rejection, semantic placeholder backgrounds, opaque fallback masks, bounded jobs/long polls, shared sync/async model admission with timeout, Ollama output handling, prompt-injection containment, stale actions, safe logs, and receiver-body validation. |
+| Server contract and boundary checks | **174 tests passed; Ruff clean** | Covers strict grade parsing/defaulting, Redis production-profile requirements, grade-aware defense-in-depth checks (including SSN and IFSC), authentication, limits, keyed aliases, PNG metadata/animation rejection, semantic placeholder backgrounds, opaque fallback masks, bounded jobs/long polls, shared sync/async model admission with timeout, Ollama output handling, prompt-injection containment, stale actions, safe logs, and receiver-body validation. |
 | Evaluation harness | **34 tests passed** | The scorer and receiver verifier now understand `minimumPrivacyGrade`, fail-safe legacy Grade 3, semantic pixels, opaque fallback pixels, grade-aware canaries, and privacy-grade reporting. |
 | Grade policy behavior | **Passed** | Grade 1 intentionally permits names/contact context; Grade 2 rejects contact/location identifiers; Grade 3 rejects labeled names/usernames/employee identifiers and unknown populated fields; every grade rejects credentials, government/financial identifiers, faces, custom values and uninspectable content. |
 | Semantic local preview | Passed | A locally generated semantic preview (`artifacts/sanitized-preview-semantic.png`) shows category-only placeholders, preserved public labels and checkbox state, WASM local inference, and no reasoning request. The screenshot is intentionally excluded from Git history because it is machine-specific; reproduce it locally with the documented preview command. |
-| Core deterministic Chrome baseline | Passed | [Synthetic E2E summary](evidence/extension-e2e-summary.json) records three sanitized requests, WASM inference, nine redactions per request, no serialized canaries, accepted payloads, and `Enrollment submitted successfully.` in 3,406 ms. This is retained as the core boundary baseline; grade-specific behavior is covered by the current 148/165/34 test suites. |
+| Core deterministic Chrome baseline | Passed | [Synthetic E2E summary](evidence/extension-e2e-summary.json) records three sanitized requests, WASM inference, nine redactions per request, no serialized canaries, accepted payloads, and `Enrollment submitted successfully.` in 3,406 ms. This is retained as the core boundary baseline; grade-specific behavior is covered by the current 148/174/34 test suites. |
 | Live Ollama HTTP smoke | Passed | Fresh authenticated requests to the running local `qwen3-vl:2b-instruct` service returned HTTP 200 with valid structured actions in 19,115 ms while warm; earlier runs ranged from 8,046 ms warm to 78,261 ms after a model unload. Keep the model resident for the demo and report this hardware variance against the latency rubric. |
 | Previously recorded full live browser task | Passed | [Recorded live summary](evidence/live-ollama-summary.json) contains three authenticated sanitized POSTs, bodyless polls, WASM local detection, no serialized canaries, and successful synthetic enrollment. It is retained as core live evidence; the current privacy-grade selector is validated separately by the focused suites. |
 
@@ -52,14 +52,14 @@ xychart-beta
     title "Passing automated tests"
     x-axis ["Extension", "Server", "Evaluation"]
     y-axis "Tests" 0 --> 170
-    bar [148, 165, 34]
+    bar [148, 174, 34]
 ```
 
 ### Evidence versus claim boundary
 
 ```mermaid
 flowchart TD
-    TESTS[148 + 165 + 34 automated tests] --> CONTRACTS[Protocol, privacy, action,<br/>PNG, queue, and source invariants]
+    TESTS[148 + 174 + 34 automated tests] --> CONTRACTS[Protocol, privacy, action,<br/>PNG, queue, and source invariants]
     E2E[Synthetic deterministic +<br/>local Ollama runs] --> DEMO[Controlled demo works]
     PERCEPTION[Small local OCR/NER corpus] --> EXPERIMENT[Development measurements]
     CONTRACTS -->|supports| CLAIM1[Implementation contracts pass]

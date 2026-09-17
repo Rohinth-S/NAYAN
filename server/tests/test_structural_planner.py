@@ -5,12 +5,37 @@ import pytest
 from conftest import CONSENT_ID, SUBMIT_ID, FakeReasoner, observation_payload
 
 from app.circuit_breaker import CircuitBreaker
-from app.gateways.ollama import ReasonerUnavailable
+from app.gateways.ollama import OllamaReasoner, ReasonerUnavailable
 from app.generated_policy import REGISTRY_DIGEST
 from app.main import create_app
 from app.schemas import ReasoningResponse, SanitizedObservation
 from app.settings import Settings
 from app.structural_planner import plan_structural_action, plan_structural_response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ready', [False, True])
+async def test_ollama_fast_planner_respects_disabled_fallback(settings: Settings, ready: bool) -> None:
+    class ControlledOllama(OllamaReasoner):
+        calls = 0
+
+        async def ready(self) -> bool:
+            return ready
+
+        async def reason(self, observation: SanitizedObservation) -> ReasoningResponse:
+            self.calls += 1
+            return plan_structural_response(observation)
+
+    reasoner = ControlledOllama('http://127.0.0.1:11434', 'test', 2)
+    app = create_app(settings.model_copy(update={'structural_fallback': False}), reasoner)
+    try:
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            response = await client.post('/v1/reason', json=_form_payload())
+        assert response.status_code == (200 if ready else 503)
+        assert reasoner.calls == (1 if ready else 0)
+    finally:
+        await reasoner.close()
 
 SECOND_SUBMIT_ID = "e_submit_second_1234567"
 
