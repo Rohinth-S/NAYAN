@@ -4,8 +4,9 @@ import { sendSanitizedObservation, type ReasoningRequestOptions } from './egress
 import { localSanitizer } from '#local-sanitizer';
 import { isOffscreenMessage } from './offscreen-protocol';
 import { pseudonymizeOrigin, sanitizeText } from './privacy';
+import { createPrivacyReceipt, markPrivacyReceiptSent } from './privacy-receipt';
 import { isPrivacyGrade, REGISTRY_DIGEST } from './privacy-policy';
-import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedObservation, type ScrollDriftState } from './types';
+import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedDomPreview, type SanitizedObservation, type ScrollDriftState } from './types';
 import { validateObservation, type ObservationValidationOptions } from './validation';
 import { ext } from './webext';
 
@@ -14,6 +15,7 @@ const captureRateGate = new CaptureRateGate();
 let stopRequested = false;
 let activeRun = 0;
 let activeReasoningController: AbortController | null = null;
+let reasoningRequestCount = 0;
 const tabUpdateGeneration = new Map<number, number>();
 const windowActivationGeneration = new Map<number, number>();
 let status: AgentStatus = {
@@ -25,6 +27,8 @@ let status: AgentStatus = {
   redactionCount: 0,
   lastLatencyMs: null,
   previewDataUrl: null,
+  sanitizedDomPreview: null,
+  privacyReceipt: null,
 };
 
 type SidePanelCapableExtension = typeof ext & {
@@ -64,6 +68,27 @@ function update(patch: Partial<AgentStatus>): void {
   status = { ...status, ...patch };
 }
 
+function createSanitizedDomPreview(observation: SanitizedObservation): SanitizedDomPreview {
+  const redactionKinds: Record<string, number> = {};
+  for (const redaction of observation.redactions) {
+    redactionKinds[redaction.kind] = (redactionKinds[redaction.kind] ?? 0) + 1;
+  }
+  return {
+    snapshotId: observation.snapshotId,
+    documentId: observation.documentId,
+    originAlias: observation.page.origin,
+    title: observation.page.title,
+    task: observation.task,
+    grade: observation.privacy.grade,
+    detectorBackend: observation.privacy.detectorBackend,
+    redactionCount: observation.redactions.length,
+    elementCount: observation.elements.length,
+    elements: observation.elements,
+    redactionKinds,
+    ...(observation.privacy.registryDigest ? { registryDigest: observation.privacy.registryDigest } : {}),
+  };
+}
+
 function safeMessage(error: unknown): string {
   if (!(error instanceof Error)) return 'Operation failed safely';
   const allowed = [
@@ -100,15 +125,32 @@ function validateSettings(settings: ExtensionSettings, requireTask = true): void
   if (!Number.isInteger(settings.maxSteps) || settings.maxSteps < 1 || settings.maxSteps > 30) throw new Error('Step count is invalid');
   if (settings.apiKey.length > 1_000) throw new Error('API key is invalid');
   if (!isPrivacyGrade(settings.privacyGrade)) throw new Error('Privacy grade is invalid');
+  if (typeof settings.highAssuranceMode !== 'boolean') throw new Error('High-assurance mode is invalid');
   if (settings.canaries.length > 100 || settings.canaries.some((item) => item.length > 500)) throw new Error('Canary list is invalid');
 }
 
 async function activeTab(): Promise<TabContext> {
-  const tabs = await ext.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab?.id || tab.windowId === undefined || !tab.url) throw new Error('Active tab is unavailable');
-  const url = new URL(tab.url);
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP(S) pages are supported');
+  // A persistent side panel can have a different extension window context
+  // from the browser window that owns the active page. Prefer the last
+  // focused browser window, then fall back to the current-window query used
+  // by popup and Firefox sidebar surfaces.
+  const lastFocused = await ext.tabs.query({ active: true, lastFocusedWindow: true });
+  const currentWindow = await ext.tabs.query({ active: true, currentWindow: true });
+  const candidates = [...lastFocused, ...currentWindow];
+  const tab = candidates.find((candidate) => {
+    if (!candidate?.id || !candidate.url) return false;
+    try {
+      return ['http:', 'https:'].includes(new URL(candidate.url).protocol);
+    } catch {
+      return false;
+    }
+  });
+  if (!tab?.id || tab.windowId === undefined) {
+    const candidate = candidates.find((item) => item?.id);
+    if (!candidate?.url) throw new Error('No active browser tab. Open an HTTP(S) page and retry');
+    throw new Error('Only HTTP(S) pages are supported. Open the demo or another website and retry');
+  }
+  const url = new URL(tab.url as string);
   return { id: tab.id, windowId: tab.windowId, origin: url.origin };
 }
 
@@ -123,15 +165,38 @@ async function ensureContent(tabId: number): Promise<void> {
     scripting?: { executeScript(options: { target: { tabId: number }; files: string[] }): Promise<unknown> };
     tabs: typeof ext.tabs & { executeScript?: (tabId: number, details: { file: string }) => Promise<unknown> };
   };
-  if (api.scripting?.executeScript) await api.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-  else if (api.tabs.executeScript) await api.tabs.executeScript(tabId, { file: 'content.js' });
-  else throw new Error('Content injection is unavailable');
+  try {
+    if (api.scripting?.executeScript) await api.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    else if (api.tabs.executeScript) await api.tabs.executeScript(tabId, { file: 'content.js' });
+    else throw new Error('Content injection is unavailable');
+  } catch {
+    throw new Error('Page access is unavailable. Allow access to this page and retry');
+  }
 }
 
 async function captureVisible(windowId: number): Promise<string> {
   const delayMs = captureRateGate.reserve(performance.now());
   if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-  const dataUrl = await ext.tabs.captureVisibleTab(windowId, { format: 'png' });
+  let dataUrl: string;
+  try {
+    dataUrl = await ext.tabs.captureVisibleTab(windowId, { format: 'png' });
+  } catch (firstError) {
+    // A persistent side panel can report the owning tab's window while the
+    // browser capture API expects the last-focused window. Retry without an
+    // explicit window so the browser resolves the active page itself.
+    try {
+      const captureCurrentWindow = ext.tabs.captureVisibleTab as unknown as
+        (options: { format: 'png' }) => Promise<string>;
+      dataUrl = await captureCurrentWindow({ format: 'png' });
+    } catch (secondError) {
+      reportBlockedOperation('screenshot', secondError ?? firstError);
+      const detail = secondError instanceof Error ? secondError.message.toLowerCase() : '';
+      if (detail.includes('permission') || detail.includes('active tab') || detail.includes('activetab') || detail.includes('all_urls')) {
+        throw new Error('Screenshot capture permission is missing. Remove the old extension, load extension/dist/chrome again, accept site access, reload this page, and retry');
+      }
+      throw new Error('Screenshot capture is unavailable for this page; reload it and retry');
+    }
+  }
   if (typeof dataUrl !== 'string') throw new Error('Screenshot capture failed');
   return dataUrl;
 }
@@ -140,6 +205,7 @@ async function captureAndSanitize(
   settings: ExtensionSettings,
   pinnedTab?: TabContext,
   validationOptions: ObservationValidationOptions = {},
+  receiptRequestCount = 0,
 ): Promise<CapturedContext> {
   const visibleTab = await activeTab();
   const tab = pinnedTab ?? visibleTab;
@@ -151,9 +217,14 @@ async function captureAndSanitize(
   await ensureContent(tab.id);
   const snapshotId = crypto.randomUUID();
   update({ phase: 'capturing', message: 'Capturing locally…' });
-  const contentResponse = (await ext.tabs.sendMessage(tab.id, {
-    type: 'CAPTURE_DOM', snapshotId, knownValues: settings.canaries, privacyGrade: settings.privacyGrade,
-  })) as ContentResponse;
+  let contentResponse: ContentResponse;
+  try {
+    contentResponse = (await ext.tabs.sendMessage(tab.id, {
+      type: 'CAPTURE_DOM', snapshotId, knownValues: settings.canaries, privacyGrade: settings.privacyGrade,
+    })) as ContentResponse;
+  } catch {
+    throw new Error('Page capture is unavailable. Reload the page and retry');
+  }
   if (!contentResponse.ok || !contentResponse.snapshot) throw new Error(contentResponse.ok ? 'DOM capture failed' : contentResponse.error);
   const dom = contentResponse.snapshot;
   if (dom.origin !== tab.origin) throw new Error('Tab origin changed during capture');
@@ -174,6 +245,7 @@ async function captureAndSanitize(
     settings.canaries,
     settings.privacyGrade,
     settings.task,
+    settings.highAssuranceMode,
   );
   // Do not retain the raw screenshot. Only the freshly encoded sanitized PNG is kept for preview/request.
   const observation: SanitizedObservation = {
@@ -198,7 +270,12 @@ async function captureAndSanitize(
       ...(raster.detectorArch ? { detectorArch: raster.detectorArch } : {}),
     },
   };
-  const revisionResponse = (await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' })) as ContentResponse;
+  let revisionResponse: ContentResponse;
+  try {
+    revisionResponse = (await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' })) as ContentResponse;
+  } catch {
+    throw new Error('Page revision check is unavailable. Reload the page and retry');
+  }
   const revision = revisionResponse.ok ? revisionResponse.revision : undefined;
   if (
     !revision ||
@@ -213,12 +290,21 @@ async function captureAndSanitize(
     throw new Error('Document changed during capture or local sanitization');
   }
   validateObservation(observation, validationOptions);
+  const privacyReceipt = await createPrivacyReceipt(
+    observation,
+    raster.maskedAreaPercentage,
+    settings.highAssuranceMode ? 'structure-only' : 'sanitized-visual',
+    receiptRequestCount,
+    false,
+  );
   update({
     detectorBackend: raster.detectorBackend,
     redactionCount: raster.redactions.length,
     previewDataUrl: raster.previewDataUrl,
+    sanitizedDomPreview: createSanitizedDomPreview(observation),
     categoryCounts: raster.categoryCounts,
     maskedAreaPercentage: raster.maskedAreaPercentage,
+    privacyReceipt,
     message: `Sanitized locally (${raster.redactions.length} masks)`,
   });
   return {
@@ -264,9 +350,16 @@ async function preview(settings: ExtensionSettings): Promise<void> {
   // A preview is a local privacy inspection and does not need a user goal.
   // Agent execution still validates a non-empty task before any capture.
   validateSettings(settings, false);
-  update({ running: true, phase: 'capturing', step: 0, message: 'Preparing privacy preview…', previewDataUrl: null });
+  update({
+    running: true,
+    phase: 'capturing',
+    step: 0,
+    message: 'Preparing privacy preview…',
+    previewDataUrl: null,
+    sanitizedDomPreview: null,
+  });
   try {
-    await captureAndSanitize(settings, undefined, { allowEmptyTask: true });
+    await captureAndSanitize(settings, undefined, { allowEmptyTask: true }, 0);
     update({ running: false, phase: 'idle', message: 'Preview ready. No data was sent.' });
   } catch (error) {
     reportBlockedOperation('preview', error);
@@ -281,7 +374,14 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
   const reasoningController = new AbortController();
   activeReasoningController = reasoningController;
   stopRequested = false;
-  update({ running: true, phase: 'capturing', step: 0, message: 'Starting locally…', previewDataUrl: null });
+  update({
+    running: true,
+    phase: 'capturing',
+    step: 0,
+    message: 'Starting locally…',
+    previewDataUrl: null,
+    sanitizedDomPreview: null,
+  });
   try {
     // Bind the complete run to the page selected by the user gesture. A tab
     // switch must stop the run instead of silently moving the agent and its
@@ -293,7 +393,8 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         return;
       }
       update({ step });
-      const context = await captureAndSanitize(settings, pinnedTab);
+      const requestCount = reasoningRequestCount + 1;
+      const context = await captureAndSanitize(settings, pinnedTab, {}, requestCount);
       if (stopRequested || runId !== activeRun) return;
       // Approach B: activate the guard inside the page content script before
       // the VLM call. The service worker cannot observe webpage scroll events.
@@ -307,6 +408,12 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         onProgress: (stage) => {
           if (runId !== activeRun || stopRequested) return;
           if (stage === 'accepted') accepted = true;
+          if (stage === 'accepted') {
+            reasoningRequestCount = requestCount;
+            if (status.privacyReceipt?.imageSha256) {
+              update({ privacyReceipt: markPrivacyReceiptSent(status.privacyReceipt, requestCount) });
+            }
+          }
           const elapsed = Math.max(0, Math.round((performance.now() - started) / 1_000));
           update({
             phase: 'reasoning',

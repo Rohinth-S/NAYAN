@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560" role="img" aria-labelledby="title desc">
+  <title id="title">Synthetic credit card</title>
+  <desc id="desc">Synthetic evaluation card containing a card number, expiry, and security code.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#24315f"/>
+      <stop offset="0.55" stop-color="#4e2d7b"/>
+      <stop offset="1" stop-color="#a33e67"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity=".03"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".23"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".03"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="904" height="544" rx="36" fill="url(#bg)" stroke="#fff" stroke-opacity=".35" stroke-width="4"/>
+  <rect x="8" y="8" width="904" height="544" rx="36" fill="url(#shine)" opacity=".35"/>
+  <text x="62" y="82" fill="#fff" font-family="Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="4">ORBITAL BANK</text>
+  <text x="62" y="116" fill="#e7e6ff" font-family="Arial,sans-serif" font-size="15" letter-spacing="3">SYNTHETIC EVALUATION CARD</text>
+  <rect x="64" y="174" width="112" height="84" rx="12" fill="#e7c467" stroke="#fff" stroke-opacity=".65" stroke-width="3"/>
+  <path d="M72 190h96M72 211h96M72 232h96M96 174v84M128 174v84M160 174v84" stroke="#9b6b30" stroke-width="4" opacity=".7"/>
+  <circle cx="806" cy="208" r="45" fill="#fff" fill-opacity=".32"/>
+  <circle cx="850" cy="208" r="45" fill="#f9a4ca" fill-opacity=".42"/>
+  <text x="64" y="362" fill="#fff" font-family="Arial,sans-serif" font-size="42" letter-spacing="7">4111 1111 1111 1111</text>
+  <text x="68" y="418" fill="#dbd7f2" font-family="Arial,sans-serif" font-size="13" letter-spacing="2">CARDHOLDER</text>
+  <text x="68" y="452" fill="#fff" font-family="Arial,sans-serif" font-size="24" letter-spacing="2">AARAV SHARMA</text>
+  <text x="434" y="418" fill="#dbd7f2" font-family="Arial,sans-serif" font-size="13" letter-spacing="2">VALID THRU</text>
+  <text x="434" y="452" fill="#fff" font-family="Arial,sans-serif" font-size="24" letter-spacing="2">08/29</text>
+  <text x="620" y="418" fill="#dbd7f2" font-family="Arial,sans-serif" font-size="13" letter-spacing="2">SECURITY CODE</text>
+  <text x="620" y="452" fill="#fff" font-family="Arial,sans-serif" font-size="24" letter-spacing="3">482</text>
+  <text x="64" y="510" fill="#fff" fill-opacity=".78" font-family="Arial,sans-serif" font-size="14" letter-spacing="2">NOT A REAL PAYMENT INSTRUMENT</text>
+</svg>

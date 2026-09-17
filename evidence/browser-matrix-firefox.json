@@ -1,0 +1,6 @@
+{
+  "browser": "firefox",
+  "status": "skipped",
+  "reason": "Set PRIVACY_E2E_FIREFOX_EXECUTABLE to a Firefox binary to run the extension matrix.",
+  "rawDataSent": false
+}

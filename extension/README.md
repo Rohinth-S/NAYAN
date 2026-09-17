@@ -32,6 +32,17 @@ The reviewed model in this workspace has SHA-256
 Its upstream project and MIT attribution are in `models/NOTICE.md` and
 `models/ULTRAFACE_LICENSE.txt`.
 
+The release build also includes a small locked English Tesseract OCR asset at
+`models/ocr/lang-data/eng.traineddata`. It is used only on image media that
+would otherwise be masked in full, and only to narrow supported synthetic
+payment-card/PAN/Aadhaar-style fixtures to credential or PII boxes. Restore or
+verify that asset
+with:
+
+```powershell
+npm run prepare:ocr
+```
+
 ## Load the extension
 
 For Chrome, open `chrome://extensions`, enable Developer mode, choose **Load
@@ -44,11 +55,24 @@ Open an HTTP(S) test page and click the extension icon. In Chrome the icon opens
 the persistent side panel; in Firefox the build exposes a sidebar panel. Use
 **Privacy preview** first. A task is optional for this local preview; enter one
 when you are ready to run the agent. The preview never calls the reasoning
-server. Check the detector state and masked image, then choose **Start agent**.
+server. Check the detector state and masked image, then open the
+**Sanitized DOM capsule** directly below it. This judge-facing proof panel is
+generated from the same sanitized observation that would be sent to the
+reasoning endpoint: it shows the sanitized task/title, origin alias, opaque
+element IDs, roles, geometry, safe labels, state flags, redaction counts, and
+the exact sanitized DOM JSON. It also lists the raw fields intentionally
+omitted (input values, selectors, DOM references, cookies, real URL, and the
+raw DOM snapshot). Use **View the sanitized DOM payload** during a demo to
+make the client-side privacy boundary visible instead of relying on the image
+alone. The **Open full view** action includes the same DOM capsule beside the
+full-size redacted image.
 The side panel stays open while the run captures, reasons, scrolls, clicks,
-fills fields, waits, or stops. The browser will ask for access to the configured
-reasoning-server origin. Endpoint access is optional and granted per origin;
-page access uses `activeTab` after the user opens the extension.
+fills fields, waits, or stops. The Chrome build declares `<all_urls>` because
+Chrome's `captureVisibleTab` API explicitly requires either `activeTab` or that
+grant. This capability is used for local DOM/pixel capture only: runtime code
+rejects non-HTTP(S) tabs, no page data is sent by the permission itself, and
+the egress gateway still accepts only sanitized context. Firefox uses explicit
+HTTP(S) host patterns for the same local capture boundary.
 
 The default endpoint is `http://127.0.0.1:8765/v1/reason`. Non-loopback
 endpoints must use HTTPS. API keys and known private values are kept in the
@@ -67,13 +91,25 @@ each grade on a fresh page to show the redaction set expanding progressively.
 
 `Local offscreen sanitization failed; transmission blocked` is a fail-closed
 local error. It means no reasoning request was sent; an API key or Ollama
-response cannot cause that message. After rebuilding, click **Reload** for the
-extension on `chrome://extensions`, reload the HTTP(S) page, and run **Privacy
-preview**. The detector should become `wasm` or `webgpu` and the mask count
+response cannot cause that message. After rebuilding, remove any older
+unpacked copy, load `extension/dist/chrome` with **Load unpacked**, and accept
+the new all-sites permission warning. Then reload the HTTP(S) page and run
+**Privacy preview**. The detector should become `wasm` or `webgpu` and the mask count
 should be greater than zero. The extension's **Errors** panel contains a
 bounded local category if the offscreen document, ONNX runtime, or image
 decoder still fails. The optional full-mask fallback can keep a task moving,
 but it deliberately sends an opaque image and is intended for diagnostics.
+
+If the panel reports `No active browser tab`, the active tab is usually an
+extension-management page, a new-tab page, a local PDF/file, or another
+browser-restricted surface. Switch to `http://127.0.0.1:8765/demo` (or another
+ordinary HTTP(S) page), then click **Privacy preview** again. The side panel
+now checks the last-focused browser window as well as its current window so a
+normal page remains discoverable when the panel owns a separate UI context.
+If Chrome shows an updated host-access warning after rebuilding, accept it and
+reload the extension. If the extension was loaded from an older build, remove
+that unpacked copy and load `extension/dist/chrome` again so the manifest's
+`<all_urls>` capture capability is applied.
 
 ## Privacy boundary
 
@@ -156,10 +192,30 @@ The extension applies the selected cumulative grade before encoding a new PNG:
 - UltraFace face bounding boxes are detected using WebGPU, with single-threaded
   WASM fallback on setup or first-inference failure, and are marked
   `[REDACTED:FACE]` at every grade;
-- every visible iframe and embedded/media-rendered region (`img`, `picture`,
-  `canvas`, `video`, `svg`, `object`, `embed`, and CSS background images) is
-  covered at every grade because the current prototype cannot inspect its
-  pixels with local OCR.
+- every visible iframe and unsupported embedded/media-rendered region (`img`,
+  `picture`, `canvas`, `video`, `svg`, `object`, `embed`, and CSS background
+  images) is covered at every grade;
+- for supported synthetic PAN/payment-card/Aadhaar-style image fixtures, local
+  credential OCR may replace the whole-image media mask with only PAN/card
+  number/expiry/CVV or Aadhaar-style PII boxes. Payment-card captions can be
+  lost when a small image is downscaled, so a page-supplied coarse card type
+  hint may help associate a nearby three/four-digit token with the CVV; the
+  card number, expiry, and CVV are still all required before any pixels are
+  unmasked. If OCR is absent, low confidence, over budget, cannot classify the
+  image, or does not cover every required credential, the complete media
+  region remains masked. The local preview writes field-specific semantic
+  placeholders such as `[REDACTED:CARD_NUMBER]`, `[REDACTED:EXPIRY]`,
+  `[REDACTED:CVV]`, `[REDACTED:NAME]`, `[REDACTED:PHONE_NUMBER]`, and
+  `[REDACTED:AADHAAR_NUMBER]`; these
+  labels contain no source values; they are painted into the sanitized image
+  and can therefore be visible to the reasoning server along with that image.
+  OCR uses local upscaling and contrast normalization, sparse-text segmentation,
+  and a single-block retry for incomplete document crops. High-confidence
+  words can recover a line affected by decorative noise, but its original
+  bounds are retained so uncertain value characters remain covered;
+- a page can explicitly mark a known public object fixture with
+  `data-privacy-media-kind="object"`; this is the only media-preservation
+  hint, and ambiguous/unclassified media remains fail-closed.
 
 If the ONNX model is missing or inference fails, transmission stops. The user
 may explicitly enable the visual full-mask fallback; in that mode the entire
@@ -169,12 +225,19 @@ to the server.
 
 ## Known limits
 
+Preview fullscreen uses the browser Fullscreen API when available. If an
+extension panel rejects it, the extension opens the dedicated preview tab;
+that viewer also supports a viewport-sized fallback, an Exit fullscreen
+button, and Escape. After rebuilding, reload the unpacked extension and
+generate a new preview: already-open preview tabs retain their previous image.
+
 - Regex and label rules can miss unlabeled personal names, unusual identifiers,
   multilingual PII, text split across DOM nodes, closed shadow DOM, and new PII
   formats. A labeled evaluation corpus is needed before expanding claims.
-- Media and frames are deliberately over-redacted until a bundled local OCR and
-  broader visual model are evaluated. This protects privacy but removes visual
-  context and can lower task accuracy.
+- Media and frames are deliberately over-redacted except for the narrow local
+  PAN/payment-card/Aadhaar OCR path and explicit public-object fixture hint.
+  This protects privacy but can still remove visual context and lower task
+  accuracy for unsupported media.
 - UltraFace detects faces only. It is not OCR, document classification, or
   general visual understanding.
 - Only the visible viewport is captured. Navigation is not in the action

@@ -41,7 +41,16 @@ try {
   await popup.fill('#task', 'Review the enrollment details.');
   await demo.bringToFront();
   await popup.locator('#preview').evaluate((button) => button.click());
-  await new Promise((resolve) => setTimeout(resolve, 2_500));
+  // Detector initialization and the first local OCR pass are asynchronous;
+  // a fixed 2.5 s sleep reported a false failure while sanitization was still
+  // running. Poll the extension-local status until the preview is available
+  // or a real terminal error is shown.
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    const phase = (await popup.locator('#state').textContent())?.toLowerCase() ?? '';
+    const ready = await popup.locator('#previewImage').isVisible().catch(() => false);
+    if (ready || ['blocked', 'error', 'done'].some((terminal) => phase.includes(terminal))) break;
+  }
   const state = await popup.locator('#state').textContent();
   const message = await popup.locator('#message').textContent();
   const detector = await popup.locator('#detector').textContent();

@@ -24,6 +24,10 @@ KNOWN_PATHS = {
     "/demo/assets/app.js",
     "/demo/assets/app.css",
     "/demo/assets/face.svg",
+    "/demo/assets/computer.png",
+    "/demo/assets/cat.png",
+    "/demo/assets/female.png",
+    "/demo/assets/male.png",
 }
 REASONING_JOB_LOG_PATH = "/v1/reason/{jobId}"
 

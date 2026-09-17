@@ -25,10 +25,33 @@
             <div id="category-counts-container"></div>
             <p class="why-hidden-tooltip" title="Categories are detected locally using ONNX/WASM or regex. No data leaves the device until verified.">ℹ️ Why is this hidden?</p>
           </div>
-          <div class="image-panel">
-            <img id="preview" alt="Sanitized page preview" />
+          <div id="previewImagePanel" class="image-panel">
+            <div class="preview-page-toolbar" aria-label="Preview controls">
+              <span class="preview-page-toolbar-label">Image controls</span>
+              <span class="preview-page-zoom" role="group" aria-label="Preview zoom">
+                <button id="previewZoomOut" type="button" aria-label="Zoom out">−</button>
+                <output id="previewZoomValue" aria-live="polite">100%</output>
+                <button id="previewZoomIn" type="button" aria-label="Zoom in">+</button>
+                <button id="previewZoomReset" type="button">Reset</button>
+              </span>
+              <button id="previewFullscreen" type="button" aria-pressed="false">Fullscreen</button>
+            </div>
+            <div id="previewImageStage" class="preview-image-stage">
+              <img id="preview" class="preview-page-image" alt="Sanitized page preview" />
+            </div>
           </div>
         </div>
+        <section id="dom-proof-panel" class="dom-proof-panel" hidden aria-labelledby="dom-proof-title">
+          <header class="dom-proof-panel-header">
+            <div>
+              <p class="eyebrow">DOM SANITIZATION PROOF</p>
+              <h2 id="dom-proof-title">Sanitized DOM capsule</h2>
+              <p>The structured fields below are derived from the same sanitized observation as the image.</p>
+            </div>
+            <button id="toggle-dom-proof" type="button" aria-expanded="true">Hide details</button>
+          </header>
+          <div id="dom-preview-content"></div>
+        </section>
       </section>
       <footer><span>Nothing on this page is sent to the reasoning server.</span><button id="close" type="button">Close tab</button></footer>
     </main>

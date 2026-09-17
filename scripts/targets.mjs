@@ -1,0 +1,1 @@
+import {chromium} from '../.tools/playwright/node_modules/playwright/index.mjs';const c=await chromium.launchPersistentContext('.runtime/testprof',{executablePath:'.runtime/cft-chromium/chrome-win/chrome.exe',headless:true,args:['--no-sandbox']});const p=await c.newPage();const s=await c.newCDPSession(p);console.log(await s.send('Target.getTargets'));await c.close();

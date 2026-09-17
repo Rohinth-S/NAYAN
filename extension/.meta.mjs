@@ -1,0 +1,1 @@
+import sharp from 'sharp'; const m=await sharp('../tmp-cdp.png').metadata(); console.log('meta',m); await sharp('../tmp-cdp.png').extract({left:649,top:254,width:546,height:333}).grayscale().normalize().sharpen({sigma:1.2}).resize(1092,666,{kernel:'lanczos3'}).png().toFile('../tmp-card-enh.png'); console.log('done')

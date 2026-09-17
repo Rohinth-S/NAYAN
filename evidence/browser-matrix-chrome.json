@@ -1,0 +1,12 @@
+{
+  "browser": "chrome",
+  "status": "passed",
+  "rawDataSent": false,
+  "checks": {
+    "semanticPreview": true,
+    "structureOnlyPreview": true,
+    "receiptVisible": true
+  },
+  "semanticReceipt": "PRIVACY GRADE\nGrade 3\nDETECTOR\nwasm\nTRANSMISSION\nsanitized-visual\nREDACTION MODE\nsemantic\nCATEGORIES\npii-text: 4 · sensitive-field: 2 · uninspectable-media: 5\nMASKED AREA\n9%\nREQUEST COUNT\n0\nEGRESS\nlocal preview / not sent\nSANITIZED IMAGE HASH\nsha256:92ff540be51a1654bfb2be6019fc59de4a7d4b44f1273c8683bfd1b2105531d5",
+  "structureOnlyReceipt": "PRIVACY GRADE\nGrade 3\nDETECTOR\nmissing\nTRANSMISSION\nstructure-only\nREDACTION MODE\nopaque\nCATEGORIES\nvisual-fallback: 1\nMASKED AREA\n100%\nREQUEST COUNT\n0\nEGRESS\nlocal preview / not sent\nSANITIZED IMAGE HASH\nsha256:875eb8b71de73a93a0ee18a08d3c4d7594d4822ccc8582e231d056aed9eaaf39"
+}

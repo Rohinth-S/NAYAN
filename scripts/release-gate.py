@@ -64,6 +64,7 @@ def main() -> int:
     checks["metadata"] = run("metadata", [npm, "run", "release-metadata"], ROOT / "extension") if checks["packages"] else False
     checks["security"] = run("security", [executable, "scripts/security-scan.py"])
     checks["sbom"] = run("sbom", [executable, "scripts/generate-sbom.py"])
+    checks["supply_chain"] = run("supply_chain", [executable, "scripts/verify-supply-chain.py"])
     suites = {}
     for name in ("extension", "server", "evaluation"):
         path = OUTPUT / f"{name}.xml"
@@ -83,7 +84,10 @@ def main() -> int:
         "sourceCommit": commit, "workingTreeHasChanges": dirty,
         "protocolVersion": "1.0", "policyVersion": "1.0", "scope": "automated-contract-and-package-checks",
         "passed": all(checks.values()), "checks": checks, "testSuites": suites,
-        "packages": packages, "signingStatus": "unsigned", "liveBrowserMatrix": "separate-evidence-required",
+        "packages": packages,
+        "signingStatus": "production-signature-required",
+        "liveBrowserMatrix": "separate-evidence-required",
+        "supplyChainMode": "production" if os.environ.get("PRIVACY_AGENT_PRODUCTION") == "1" else "development",
     }
     REPORT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"release_gate={'passed' if report['passed'] else 'failed'} report=evidence/latest-release.json")

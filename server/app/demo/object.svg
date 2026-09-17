@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="470" viewBox="0 0 760 470" role="img" aria-labelledby="title desc">
+  <title id="title">Synthetic reusable water bottle product image</title>
+  <desc id="desc">A fictional product illustration with no personal information.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#162b3d"/>
+      <stop offset="1" stop-color="#3f6f75"/>
+    </linearGradient>
+    <linearGradient id="bottle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d5f6f2"/>
+      <stop offset=".45" stop-color="#76c8c5"/>
+      <stop offset="1" stop-color="#2c7d8e"/>
+    </linearGradient>
+  </defs>
+  <rect width="760" height="470" rx="28" fill="url(#bg)"/>
+  <circle cx="102" cy="92" r="44" fill="#fff" opacity=".08"/>
+  <circle cx="662" cy="350" r="104" fill="#fff" opacity=".06"/>
+  <g transform="translate(302 68)">
+    <rect x="44" y="0" width="74" height="44" rx="10" fill="#c9e9ea"/>
+    <rect x="25" y="32" width="112" height="285" rx="42" fill="url(#bottle)" stroke="#d7ffff" stroke-width="5"/>
+    <path d="M40 99h82M34 120h94" stroke="#fff" stroke-opacity=".45" stroke-width="5"/>
+    <rect x="42" y="172" width="78" height="68" rx="10" fill="#e8fffb" fill-opacity=".8"/>
+    <path d="M60 206h42M81 187v38" stroke="#2b7881" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <text x="36" y="404" fill="#eaffff" font-family="Arial,sans-serif" font-size="20" font-weight="700" letter-spacing="3">ORBITAL HYDRATE</text>
+  <text x="36" y="432" fill="#c7e5e8" font-family="Arial,sans-serif" font-size="13" letter-spacing="1.5">PUBLIC PRODUCT IMAGE · NO PII</text>
+</svg>

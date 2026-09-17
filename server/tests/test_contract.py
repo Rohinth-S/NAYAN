@@ -146,6 +146,15 @@ def test_contract_enums_and_limits_are_strict() -> None:
     with pytest.raises(ValueError):
         BrowserAction(type="wait", milliseconds=5_001)
 
+    ocr_redaction = observation_payload()
+    ocr_redaction["redactions"] = [{
+        "kind": "sensitive-field",
+        "source": "ocr",
+        "bounds": {"x": 26, "y": 4, "width": 30, "height": 12},
+        "confidence": 0.91,
+    }]
+    assert SanitizedObservation.model_validate(ocr_redaction).redactions[0].source == "ocr"
+
 
 def test_production_profile_requires_api_key() -> None:
     with pytest.raises(ValueError, match="API_KEY is required"):
@@ -184,6 +193,98 @@ async def test_scroll_may_target_only_a_scroll_region(
         action=BrowserAction(type="scroll", elementId=SUBMIT_ID, direction="down", amount=500),
     )
     response = await client.post("/v1/reason", json=observation_payload())
+    assert response.status_code == 502
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action", "role", "expected"),
+    [
+        (
+            BrowserAction(type="hover", elementId=SUBMIT_ID),
+            "button",
+            {"type": "hover", "elementId": SUBMIT_ID},
+        ),
+        (
+            BrowserAction(type="focus", elementId=SUBMIT_ID),
+            "button",
+            {"type": "focus", "elementId": SUBMIT_ID},
+        ),
+        (
+            BrowserAction(type="doubleClick", elementId=SUBMIT_ID),
+            "button",
+            {"type": "doubleClick", "elementId": SUBMIT_ID},
+        ),
+        (
+            BrowserAction(type="check", elementId=CONSENT_ID),
+            "checkbox",
+            {"type": "check", "elementId": CONSENT_ID},
+        ),
+        (
+            BrowserAction(type="uncheck", elementId=CONSENT_ID),
+            "checkbox",
+            {"type": "uncheck", "elementId": CONSENT_ID},
+        ),
+        (
+            BrowserAction(type="select", elementId="e_country_123456789", option="India"),
+            "combobox",
+            {"type": "select", "elementId": "e_country_123456789", "option": "India"},
+        ),
+    ],
+)
+async def test_safe_interaction_actions_are_revision_bound_and_exact(
+    client: httpx.AsyncClient,
+    fake_reasoner: FakeReasoner,
+    action: BrowserAction,
+    role: str,
+    expected: dict[str, object],
+) -> None:
+    payload = observation_payload()
+    payload["elements"] = [dict(payload["elements"][0], role=role)]
+    payload["elements"][0]["id"] = action.elementId
+    fake_reasoner.response = ReasoningResponse(schemaVersion="1.0", snapshotId=SNAPSHOT_ID, action=action)
+    response = await client.post("/v1/reason", json=payload)
+    assert response.status_code == 200
+    assert response.json()["action"] == expected
+
+
+@pytest.mark.asyncio
+async def test_safe_interactions_reject_incompatible_roles(
+    client: httpx.AsyncClient, fake_reasoner: FakeReasoner
+) -> None:
+    fake_reasoner.response = ReasoningResponse(
+        schemaVersion="1.0",
+        snapshotId=SNAPSHOT_ID,
+        action=BrowserAction(type="check", elementId=SUBMIT_ID),
+    )
+    response = await client.post("/v1/reason", json=observation_payload())
+    assert response.status_code == 502
+
+    fake_reasoner.response = ReasoningResponse(
+        schemaVersion="1.0",
+        snapshotId=SNAPSHOT_ID,
+        action=BrowserAction(type="select", elementId=SUBMIT_ID, option="India"),
+    )
+    response = await client.post("/v1/reason", json=observation_payload())
+    assert response.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_select_option_is_subject_to_the_same_pii_floor(
+    client: httpx.AsyncClient, fake_reasoner: FakeReasoner
+) -> None:
+    payload = observation_payload()
+    payload["elements"] = [dict(payload["elements"][0], id="e_country_123456789", role="combobox")]
+    fake_reasoner.response = ReasoningResponse(
+        schemaVersion="1.0",
+        snapshotId=SNAPSHOT_ID,
+        action=BrowserAction(
+            type="select",
+            elementId="e_country_123456789",
+            option="private.person@example.com",
+        ),
+    )
+    response = await client.post("/v1/reason", json=payload)
     assert response.status_code == 502
 
 

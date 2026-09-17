@@ -11,6 +11,7 @@ export type OffscreenSanitizeRequest = Readonly<{
   screenshot: string;
   dom: RawDomSnapshot;
   allowFullMaskFallback: boolean;
+  highAssuranceMode?: boolean;
   canaries: readonly string[];
   privacyGrade: PrivacyGrade;
   task?: string;
@@ -61,6 +62,7 @@ export function validateOffscreenRequest(value: unknown): asserts value is Offsc
     !validRequestId(request.requestId) ||
     typeof request.screenshot !== 'string' || !request.screenshot.startsWith('data:image/png;base64,') || request.screenshot.length > 16_000_022 ||
     typeof request.allowFullMaskFallback !== 'boolean' ||
+    (request.highAssuranceMode !== undefined && typeof request.highAssuranceMode !== 'boolean') ||
     !isPrivacyGrade(request.privacyGrade) ||
     !validCanaries(request.canaries) ||
     (request.task !== undefined && (typeof request.task !== 'string' || request.task.length > 2000)) ||

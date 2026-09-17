@@ -45,6 +45,7 @@ describe('offscreen local message boundary', () => {
       { canaries: [3] },
       { canaries: ['x'.repeat(501)] },
       { allowFullMaskFallback: 'true' },
+      { highAssuranceMode: 'true' },
       { privacyGrade: 4 },
       { dom: { ...dom, viewport: { ...dom.viewport, width: 0 } } },
       { dom: { ...dom, viewport: { ...dom.viewport, height: Infinity } } },

@@ -43,7 +43,12 @@ browser into a network proxy or control the page's own requests.
 - OS telemetry, other extensions, screenshots taken outside this extension, and
   a compromised local machine are outside the reasoning-channel claim.
 - Unrecognized visual or semantic content is conservatively masked or blocks
-  egress; the prototype does not claim universal OCR/NER coverage.
+  egress; the prototype does not claim universal OCR/NER coverage. The normal
+  package does not enable OCR/NER/barcode perception; those detectors are only
+  admitted through the checksum- and evaluation-gated perception package.
+  When an evaluated credential-OCR asset is present, it is limited to
+  credential boxes on supported PAN/payment-card media
+  and remains fail-closed for unknown documents.
 
 ## Controls
 

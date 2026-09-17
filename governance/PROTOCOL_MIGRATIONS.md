@@ -8,7 +8,10 @@ or serialized field change.
 
 - Observation and response schemas are strict and reject unknown fields.
 - The only reasoning egress is `extension/src/egress.ts`.
-- Allowed actions are `click`, `input`, `scroll`, `wait`, and `done`.
+- Allowed actions are `click`, `input`, `scroll`, `wait`, `done`, `hover`,
+  `focus`, `doubleClick`, `check`, `uncheck`, and `select`. The added actions
+  remain local, snapshot-bound, and target only the opaque element IDs supplied
+  by the current observation.
 - Privacy grades are cumulative integers 1, 2, and 3; omitted legacy grades fail
   safe to Grade 3.
 - The server receives a keyed origin alias, sanitized labels and structure, a
@@ -36,3 +39,21 @@ Any 1.x change must update `governance/protocol-manifest.json`, the three
 contract documents, client/server schemas, positive and negative tests, and the
 release evidence. A breaking change requires a new major version and a migration
 entry before implementation is merged.
+
+## Version 1.0 safe interaction actions (additive)
+
+The action vocabulary was expanded without a protocol major bump because these
+actions add no new egress, permission, or identifier source:
+
+- `hover` and `focus` operate on a current visible element;
+- `doubleClick` dispatches a local double-click event and applies the same
+  destructive-action confirmation as `click`;
+- `check` and `uncheck` explicitly set a checkbox state instead of relying on
+  toggle ambiguity;
+- `select` chooses an exact public label/value on a current native `<select>`.
+
+The server validates target roles for checkbox/select actions and rejects PII-like
+option text. The content script still performs the final connected, visible,
+enabled, same-origin, revision, and duplicate-action checks. Arbitrary script,
+selectors, URLs, keyboard injection, cookies, storage, downloads, uploads, and
+other privileged browser APIs remain outside this safe vocabulary.

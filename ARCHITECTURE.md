@@ -25,7 +25,7 @@ The critical architectural property is the direction of the arrows: the reasonin
 
 ## Client pipeline
 
-1. The popup grants one use of `activeTab` and optional access to the configured reasoning origin.
+1. The panel reads active-tab metadata and validates the HTTP(S) origin. The Chrome manifest declares `<all_urls>` because Chrome's screenshot API explicitly requires `activeTab` or that grant; Firefox declares equivalent HTTP(S) host patterns. This enables local DOM/pixel capture only and does not send data. The panel separately requests optional access to the configured reasoning origin for agent runs.
 2. The content script collects visible actionable elements, local bounding boxes, safe labels, form sensitivity signals, text findings, frames, and visually uninspectable regions. It creates random element IDs and retains the ID-to-node map locally.
 3. A local policy engine applies the selected cumulative privacy grade. It classifies findings into always-protected, Grade 2, or Grade 3 categories; it never declassifies a high-impact finding. Grade 3 is the fail-safe default. The complete matrix is in [PRIVACY_LEVELS.md](PRIVACY_LEVELS.md).
 4. The background captures the visible tab and checks that the active tab did not change.
@@ -36,7 +36,7 @@ The critical architectural property is the direction of the arrows: the reasonin
 9. A second revision check verifies document ID, DOM generation, origin, viewport size, and scroll position. Any drift discards the observation.
 10. The egress gateway enforces exact keys, types, ranges, the integer `privacy.grade`, unsafe-key exclusions, endpoint policy, payload size, and caller-supplied canaries over the final serialized bytes. It submits that body once with `Prefer: respond-async`; subsequent authenticated polls contain only the server-generated UUID job ID.
 11. Short submit/poll requests avoid Chrome MV3's long-fetch service-worker limit. Each poll waits on the server for at most 10 seconds and returns immediately on completion, reducing wakeups without approaching the browser limit. A bounded extension-API heartbeat runs only while one reasoning operation is active, and the entire operation expires after 100 seconds.
-12. The returned action must echo the current snapshot ID and match its exact action-specific schema. The content script verifies the live document again immediately before acting.
+12. The returned action must echo the current snapshot ID and match its exact action-specific schema. The content script verifies the live document again immediately before acting. The safe broker supports click, input, scroll, wait, done, hover, focus, doubleClick, explicit checkbox check/uncheck, and native select; it does not expose arbitrary JavaScript, selectors, URLs, keyboard injection, cookies, storage, downloads, or uploads.
 
 ### Client trust-boundary sequence
 
@@ -63,7 +63,7 @@ sequenceDiagram
     API-->>E: Action or opaque ticket result
     E-->>BG: Validated response
     BG->>CS: Snapshot-bound action
-    CS->>Page: Native click/input/scroll
+    CS->>Page: Safe click/input/scroll/hover/focus/select/check
 ```
 
 ## Architecture decision: direct capture and sanitization with per-step snapshots

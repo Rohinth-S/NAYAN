@@ -314,12 +314,26 @@ def validate_action_for_observation(
         raise ObservationRejected("model_targeted_non_editable_element")
     if action.type == "scroll" and target.role != "scroll-region":
         raise ObservationRejected("model_targeted_non_scroll_region")
+    if action.type in {"check", "uncheck"} and target.role != "checkbox":
+        raise ObservationRejected("model_targeted_non_checkbox_element")
+    if action.type == "select" and target.role != "combobox":
+        raise ObservationRejected("model_targeted_non_combobox_element")
     if action.type == "input" and action.text:
         for _, pattern in protected_text_patterns(observation.privacy.grade):
             if pattern.search(action.text):
                 raise ObservationRejected("model_returned_pii")
         if any(
             pattern.search(normalize_for_detection(action.text))
+            for _, minimum, pattern in PATTERNS
+            if minimum <= observation.privacy.grade
+        ):
+            raise ObservationRejected("model_returned_pii")
+    if action.type == "select" and action.option:
+        for _, pattern in protected_text_patterns(observation.privacy.grade):
+            if pattern.search(action.option):
+                raise ObservationRejected("model_returned_pii")
+        if any(
+            pattern.search(normalize_for_detection(action.option))
             for _, minimum, pattern in PATTERNS
             if minimum <= observation.privacy.grade
         ):

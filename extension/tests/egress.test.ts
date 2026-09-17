@@ -171,6 +171,15 @@ describe('single outbound gateway', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('blocks a high-grade PII leak even when it was not in the canary list', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const leaked = { ...cleanObservation, task: 'Send the report to analyst@example.test' };
+    await expect(sendSanitizedObservation('https://agent.example/v1/reason', '', leaked, []))
+      .rejects.toThrow('Final local DLP gate');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects a response that tries to reintroduce a private canary', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       schemaVersion: SCHEMA_VERSION,

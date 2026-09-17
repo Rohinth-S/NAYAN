@@ -90,11 +90,52 @@ async def test_demo_reset_state_and_submit_are_deterministic(settings: Settings)
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         page = await client.get("/demo")
+        credit_card = await client.get("/demo/assets/credit-card.svg")
+        pan_card = await client.get("/demo/assets/pan-card.svg")
+        aadhaar_card = await client.get("/demo/assets/aadhaar-card.svg")
+        cat_image = await client.get("/demo/assets/cat.png")
+        female_image = await client.get("/demo/assets/female.png")
+        male_image = await client.get("/demo/assets/male.png")
+        object_image = await client.get("/demo/assets/object.svg")
+        computer_image = await client.get("/demo/assets/computer.png")
         initial = await client.post("/demo/api/reset")
         state = await client.get("/demo/api/state")
         submitted = await client.post("/demo/api/submit", json={"consent": True})
     assert page.status_code == 200
     assert "aarav.sharma@example.test" in page.text
+    assert credit_card.status_code == 200
+    assert credit_card.headers["content-type"].startswith("image/svg+xml")
+    assert "4111 1111 1111 1111" in credit_card.text
+    assert pan_card.status_code == 200
+    assert pan_card.headers["content-type"].startswith("image/svg+xml")
+    assert "ABCDE1234F" in pan_card.text
+    assert "<image" not in pan_card.text
+    assert aadhaar_card.status_code == 200
+    assert aadhaar_card.headers["content-type"].startswith("image/svg+xml")
+    assert "9876 5432 1098" in aadhaar_card.text
+    assert "<image" not in aadhaar_card.text
+    # Portraits are explicit DOM overlays rather than nested SVG resources so
+    # Chromium and Firefox paint them consistently when the cards are embedded
+    # as <img> elements.  The media hints keep them in the local person policy.
+    assert 'class="document-portrait-overlay document-portrait-female"' in page.text
+    assert 'class="document-portrait-overlay document-portrait-male"' in page.text
+    assert 'src="/demo/assets/female.png"' in page.text
+    assert 'src="/demo/assets/male.png"' in page.text
+    assert cat_image.status_code == 200
+    assert cat_image.headers["content-type"].startswith("image/png")
+    assert cat_image.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert female_image.status_code == 200
+    assert female_image.headers["content-type"].startswith("image/png")
+    assert female_image.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert male_image.status_code == 200
+    assert male_image.headers["content-type"].startswith("image/png")
+    assert male_image.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert object_image.status_code == 200
+    assert object_image.headers["content-type"].startswith("image/svg+xml")
+    assert "NO PII" in object_image.text
+    assert computer_image.status_code == 200
+    assert computer_image.headers["content-type"].startswith("image/png")
+    assert computer_image.content.startswith(b"\x89PNG\r\n\x1a\n")
     assert initial.json() == state.json()
     assert state.json()["submitted"] is False
     assert submitted.json()["submitted"] is True

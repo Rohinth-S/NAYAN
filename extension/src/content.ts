@@ -1,5 +1,7 @@
-import { findingsForGrade, inputValueNeedsMask, isSensitiveField, isSensitiveTextLabel, mergeBounds, pseudoContentNeedsMask } from './privacy';
-import { isPrivacyGrade, type PrivacyGrade } from './privacy-policy';
+import { identityFindings, sanitizeIdentityValues, type IdentityValue } from './identity-values';
+import { classifySensitiveField, classifySensitiveTextLabel, findingsForGrade, inputValueNeedsMask, isSensitiveField, isSensitiveTextLabel, mergeBounds, pseudoContentNeedsMask } from './privacy';
+import { classifyDocumentType, classifyMediaElement, type DocumentMediaType, type MediaKind } from './media-policy';
+import { categoryForFinding, isPrivacyGrade, type PrivacyCategory, type PrivacyGrade } from './privacy-policy';
 import { ScrollDriftGuard } from './scroll-drift-guard';
 import type {
   AgentAction,
@@ -118,21 +120,99 @@ function interactiveElements(): Element[] {
   return Array.from(document.querySelectorAll(selectors.join(','))).filter(visible).slice(0, 500);
 }
 
-type LocalRedaction = { kind: RedactionKind; source: 'dom' | 'regex'; bounds: Bounds };
+type LocalRedaction = {
+  kind: RedactionKind;
+  source: 'dom' | 'regex';
+  bounds: Bounds;
+  fieldLabel?: string;
+};
+
+type LocalMediaHint = {
+  bounds: Bounds;
+  kind: MediaKind;
+  documentType?: DocumentMediaType;
+};
+
+/** Map a privacy category to a human-readable field label for [REDACTED:*] placeholders. */
+function categoryToFieldLabel(category: PrivacyCategory): string {
+  switch (category) {
+    case 'credential': return 'PASSWORD';
+    case 'government-id': return 'GOVERNMENT_ID';
+    case 'financial': return 'FINANCIAL';
+    case 'biometric': return 'BIOMETRIC';
+    case 'contact': return 'CONTACT';
+    case 'location': return 'ADDRESS';
+    case 'date-of-birth': return 'DATE_OF_BIRTH';
+    case 'network': return 'NETWORK';
+    case 'account-id': return 'ACCOUNT_ID';
+    case 'name': return 'NAME';
+    case 'username': return 'USERNAME';
+    case 'professional-id': return 'EMPLOYEE_ID';
+    default: return 'PII';
+  }
+}
+
+/** Return only a canonical category name. Raw labels and values never leave this function. */
+function semanticFieldLabel(label: string, category: PrivacyCategory): string {
+  const normalized = label.replace(/[_-]+/gu, ' ').replace(/\s+/gu, ' ').trim().toLowerCase();
+  if (/\b(?:aadhaar|aadhar)\b/u.test(normalized)) return 'AADHAAR_NUMBER';
+  if (/\bpan\b/u.test(normalized)) return 'PAN';
+  if (/\bpassport\b/u.test(normalized)) return 'PASSPORT_NUMBER';
+  if (/\b(?:e-?mail)\b/u.test(normalized)) return 'EMAIL';
+  if (/\b(?:phone|mobile|telephone|contact number)\b/u.test(normalized)) return 'PHONE_NUMBER';
+  if (/\b(?:card number|credit card|debit card)\b/u.test(normalized)) return 'CARD_NUMBER';
+  if (/\b(?:bank account|account number)\b/u.test(normalized)) return 'BANK_ACCOUNT';
+  if (/\b(?:cvv|cvc|security code)\b/u.test(normalized)) return 'CVV';
+  return categoryToFieldLabel(category);
+}
+
+function findingFieldLabel(kind: string): string {
+  const explicit: Readonly<Record<string, string>> = {
+    SECRET: 'PASSWORD',
+    AADHAAR: 'AADHAAR_NUMBER',
+    PAN: 'PAN',
+    PASSPORT: 'PASSPORT_NUMBER',
+    CARD: 'CARD_NUMBER',
+    BANK_ACCOUNT: 'BANK_ACCOUNT',
+    EMAIL: 'EMAIL',
+    PHONE: 'PHONE_NUMBER',
+    ADDRESS: 'ADDRESS',
+    DOB: 'DATE_OF_BIRTH',
+    NAME: 'NAME',
+    USERNAME: 'USERNAME',
+    EMPLOYEE_ID: 'EMPLOYEE_ID',
+    ACCOUNT_ID: 'ACCOUNT_ID',
+  };
+  return explicit[kind] ?? categoryToFieldLabel(categoryForFinding(kind));
+}
+
+function valueOnlyFindingRange(text: string, finding: { start: number; end: number; kind: string }): { start: number; end: number } {
+  const labelledKinds = new Set(['SECRET', 'BANK_ACCOUNT', 'UPI', 'DOB', 'PASSPORT', 'NAME', 'USERNAME', 'EMPLOYEE_ID', 'ACCOUNT_ID', 'ADDRESS']);
+  if (!labelledKinds.has(finding.kind)) return { start: finding.start, end: finding.end };
+  const matched = text.slice(finding.start, finding.end);
+  const delimiter = matched.search(/[:=]/u);
+  if (delimiter < 0) return { start: finding.start, end: finding.end };
+  const suffix = matched.slice(delimiter + 1);
+  const leadingWhitespace = suffix.length - suffix.trimStart().length;
+  const valueStart = finding.start + delimiter + 1 + leadingWhitespace;
+  return valueStart < finding.end ? { start: valueStart, end: finding.end } : { start: finding.start, end: finding.end };
+}
 
 function collectFieldRedactions(knownValues: readonly string[], privacyGrade: PrivacyGrade): LocalRedaction[] {
   const redactions: LocalRedaction[] = [];
   for (const element of document.querySelectorAll('input, textarea, select, [contenteditable="true"]')) {
     if (!visible(element)) continue;
     const field = element as HTMLInputElement;
-    const kind = isSensitiveField({
+    const fieldMetadata = {
       type: field.type,
       autocomplete: field.autocomplete,
       name: field.getAttribute('name') ?? undefined,
       id: field.id || undefined,
       placeholder: field.getAttribute('placeholder') ?? undefined,
       ariaLabel: field.getAttribute('aria-label') ?? undefined,
-    }, privacyGrade);
+    };
+    const kind = isSensitiveField(fieldMetadata, privacyGrade);
+    const category = classifySensitiveField(fieldMetadata);
     const hasVisibleValue =
       (element instanceof HTMLInputElement && inputValueNeedsMask(element.type, element.value, knownValues, privacyGrade)) ||
       (element instanceof HTMLTextAreaElement && inputValueNeedsMask('textarea', element.value, knownValues, privacyGrade)) ||
@@ -150,12 +230,33 @@ function collectFieldRedactions(knownValues: readonly string[], privacyGrade: Pr
       ));
     if (!kind && !hasVisibleValue) continue;
     const bounds = clippedBounds(element.getBoundingClientRect());
-    if (bounds) redactions.push({ kind: kind ?? 'sensitive-field', source: 'dom', bounds });
+    if (bounds) {
+      const fieldLabel = category ? semanticFieldLabel(labelOf(element), category) : undefined;
+      redactions.push({ kind: kind ?? 'sensitive-field', source: 'dom', bounds, ...(fieldLabel ? { fieldLabel } : {}) });
+    }
   }
   return redactions;
 }
 
-function collectTextRedactions(knownValues: readonly string[], privacyGrade: PrivacyGrade): LocalRedaction[] {
+function collectIdentityValues(): IdentityValue[] {
+  const values: IdentityValue[] = [];
+  const add = (category: PrivacyCategory | null, value: string) => {
+    if ((category !== 'name' && category !== 'date-of-birth') || value.trim().length < 3 || value.length > 200) return;
+    if (values.length < 256 && !values.some(item => item.category === category && item.value === value)) values.push({ category, value });
+  };
+  for (const term of document.querySelectorAll('dt')) {
+    const value = term.nextElementSibling;
+    if (value?.tagName === 'DD') add(classifySensitiveTextLabel(term.textContent ?? ''), value.textContent ?? '');
+  }
+  for (const field of document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
+    if (['password', 'hidden'].includes(field.type)) continue;
+    add(classifySensitiveField({ type: field.type, autocomplete: field.autocomplete, name: field.name, id: field.id })
+      ?? classifySensitiveTextLabel(labelOf(field)), field.value);
+  }
+  return values;
+}
+
+function collectTextRedactions(knownValues: readonly string[], privacyGrade: PrivacyGrade, identityValues: readonly IdentityValue[]): LocalRedaction[] {
   const redactions: LocalRedaction[] = [];
   // Definition lists commonly display profile values outside form controls.
   // Keep the public label but replace the associated sensitive value.
@@ -163,7 +264,11 @@ function collectTextRedactions(knownValues: readonly string[], privacyGrade: Pri
     const value = term.nextElementSibling;
     if (!value || value.tagName !== 'DD' || !visible(value) || !isSensitiveTextLabel(term.textContent ?? '', privacyGrade)) continue;
     const bounds = clippedBounds(value.getBoundingClientRect());
-    if (bounds) redactions.push({ kind: 'pii-text', source: 'dom', bounds });
+    // Derive a field-specific label from the <dt> text so the image renderer
+    // can show [REDACTED:NAME] instead of generic [REDACTED:PII].
+    const category = classifySensitiveTextLabel(term.textContent ?? '');
+    const fieldLabel = category ? semanticFieldLabel(term.textContent ?? '', category) : undefined;
+    if (bounds) redactions.push({ kind: 'pii-text', source: 'dom', bounds, ...(fieldLabel ? { fieldLabel } : {}) });
   }
   const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -181,13 +286,19 @@ function collectTextRedactions(knownValues: readonly string[], privacyGrade: Pri
       break;
     }
     const text = node.textContent ?? '';
-    for (const finding of findingsForGrade(text, knownValues, privacyGrade)) {
+    for (const finding of [...findingsForGrade(text, knownValues, privacyGrade), ...identityFindings(text, identityValues, privacyGrade)]) {
+      const valueRange = valueOnlyFindingRange(text, finding);
       const range = document.createRange();
-      range.setStart(node, finding.start);
-      range.setEnd(node, finding.end);
+      range.setStart(node, valueRange.start);
+      range.setEnd(node, valueRange.end);
       for (const rect of Array.from(range.getClientRects())) {
         const bounds = clippedBounds(rect);
-        if (bounds) redactions.push({ kind: 'pii-text', source: 'regex', bounds });
+        if (bounds) redactions.push({
+          kind: 'pii-text',
+          source: 'regex',
+          bounds,
+          fieldLabel: findingFieldLabel(finding.kind),
+        });
       }
       range.detach();
     }
@@ -207,75 +318,130 @@ function collectFrameRedactions(): LocalRedaction[] {
   return redactions;
 }
 
-function collectMediaRedactions(): LocalRedaction[] {
+/**
+ * Returns true when an element is a text container — it has at least one
+ * direct child that is a text node or a standard text element. Such elements
+ * should not be treated as uninspectable media even when they carry decorative
+ * CSS-generated content (badges, counters, labels) via ::before/::after.
+ */
+function isTextContainer(element: Element): boolean {
+  for (const child of Array.from(element.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE && (child.textContent?.trim().length ?? 0) > 2) return true;
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const tag = (child as Element).tagName;
+      if (['DT', 'DD', 'SPAN', 'P', 'LABEL', 'STRONG', 'EM', 'SMALL', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) return true;
+    }
+  }
+  return false;
+}
+
+function collectMediaRedactions(): { redactions: LocalRedaction[]; hints: LocalMediaHint[] } {
   const candidates = new Set<Element>();
   for (const element of document.querySelectorAll('img, picture, canvas, video, svg, object, embed, input[type="image"]')) candidates.add(element);
   const allBodyElements = Array.from(document.querySelectorAll('body *'));
-  // Root backgrounds are page chrome, not inspectable media. Treating a
-  // gradient or wallpaper on <body> as media would redact the entire viewport
-  // (and produce an apparently blank preview). Actual media descendants are
-  // still covered below, including CSS backgrounds on cards and components.
   const styled = allBodyElements.slice(0, 2_000);
   for (const element of styled) {
     const htmlElement = element as Element;
     const tag = htmlElement.tagName.toLowerCase();
-    // CSS gradients are page chrome, not an uninspectable media payload. The
-    // previous `backgroundImage !== 'none'` check classified every gradient
-    // backdrop (including `body`) as media and merged it into a full-viewport
-    // redaction. Keep true image URLs protected while allowing the sanitized
-    // preview to retain the page's visual structure.
     const hasBackground = /url\(/iu.test(getComputedStyle(htmlElement).backgroundImage);
     const before = getComputedStyle(htmlElement, '::before');
     const after = getComputedStyle(htmlElement, '::after');
     const hasPseudoBackground = /url\(/iu.test(before.backgroundImage) || /url\(/iu.test(after.backgroundImage);
-    if (hasBackground || hasPseudoBackground || pseudoContentNeedsMask(before.content, after.content) || tag.includes('-') || htmlElement.shadowRoot) {
+    const hasPseudoContent = pseudoContentNeedsMask(before.content, after.content);
+    // Elements that carry only decorative CSS-generated text (badges, labels,
+    // counters) but are otherwise normal text containers should NOT be treated
+    // as uninspectable media. They are already covered by collectTextRedactions
+    // and collectFieldRedactions, which redact only the sensitive values while
+    // preserving the field labels. Treating them as media would produce a
+    // full-box [REDACTED:MEDIA] overlay hiding both labels and values.
+    const isOnlyPseudoContent = hasPseudoContent && !hasBackground && !hasPseudoBackground && !tag.includes('-') && !htmlElement.shadowRoot;
+    if (isOnlyPseudoContent && isTextContainer(htmlElement)) continue;
+    if (hasBackground || hasPseudoBackground || hasPseudoContent || tag.includes('-') || htmlElement.shadowRoot) {
       candidates.add(htmlElement);
     }
   }
   const redactions: LocalRedaction[] = [];
+  const hints: LocalMediaHint[] = [];
   for (const element of candidates) {
     if (!visible(element)) continue;
     const bounds = clippedBounds(element.getBoundingClientRect());
-    if (bounds) redactions.push({ kind: 'uninspectable-media', source: 'dom', bounds });
+    if (!bounds) continue;
+    const kind = classifyMediaElement(element);
+    // Public object pixels are preserved only after an explicit page opt-in.
+    // classifyMediaElement never infers this state from an ordinary alt string.
+    if (kind === 'object') continue;
+    redactions.push({ kind: 'uninspectable-media', source: 'dom', bounds });
+    if (kind === 'document') {
+      hints.push({ bounds, kind, documentType: classifyDocumentType(element) });
+    } else if (kind === 'person') {
+      hints.push({ bounds, kind });
+    }
   }
   if (allBodyElements.length > 2_000) {
     redactions.push({ kind: 'uninspectable-media', source: 'dom', bounds: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight } });
   }
-  return redactions;
+  return { redactions, hints };
 }
 
 function captureDom(snapshotId: string, knownValues: readonly string[], privacyGrade: PrivacyGrade): RawDomSnapshot {
   currentSnapshotId = snapshotId;
   lastExecutedActionKey = '';
   currentElements = new Map();
+  const identityValues = collectIdentityValues();
   const elements: RawElement[] = [];
   for (const element of interactiveElements()) {
     const bounds = clippedBounds(element.getBoundingClientRect());
     if (!bounds) continue;
     const id = opaqueElementId();
     currentElements.set(id, element);
-    elements.push({ id, role: roleOf(element), label: labelOf(element), bounds, state: stateOf(element) });
+    elements.push({ id, role: roleOf(element), label: sanitizeIdentityValues(labelOf(element), identityValues, privacyGrade), bounds, state: stateOf(element) });
   }
+  const media = collectMediaRedactions();
   const redactions = [
     ...collectFieldRedactions(knownValues, privacyGrade),
-    ...collectTextRedactions(knownValues, privacyGrade),
+    ...collectTextRedactions(knownValues, privacyGrade, identityValues),
     ...collectFrameRedactions(),
-    ...collectMediaRedactions(),
+    ...media.redactions,
   ];
   const merged: LocalRedaction[] = [];
-  for (const group of ['password', 'sensitive-field', 'pii-text', 'uninspectable-frame', 'uninspectable-media'] as const) {
+  for (const group of ['password', 'sensitive-field', 'pii-text', 'uninspectable-frame'] as const) {
     const matching = redactions.filter((item) => item.kind === group);
-    const source = matching.some((item) => item.source === 'regex') ? 'regex' : 'dom';
-    for (const bounds of mergeBounds(matching.map((item) => item.bounds))) merged.push({ kind: group, source, bounds });
+    const buckets = new Map<string, LocalRedaction[]>();
+    for (const item of matching) {
+      const key = `${item.source}:${item.fieldLabel ?? ''}`;
+      const bucket = buckets.get(key) ?? [];
+      bucket.push(item);
+      buckets.set(key, bucket);
+    }
+    for (const bucket of buckets.values()) {
+      const source = bucket.some((item) => item.source === 'regex') ? 'regex' : 'dom';
+      const fieldLabel = bucket[0]?.fieldLabel;
+      for (const bounds of mergeBounds(bucket.map((item) => item.bounds))) {
+        merged.push({ kind: group, source, bounds, ...(fieldLabel ? { fieldLabel } : {}) });
+      }
+    }
+  }
+  // Keep media regions independent. Merging an identity document with its
+  // portrait overlay turns a small face into a whole-card MEDIA mask and also
+  // destroys the exact geometry needed by local document OCR.
+  for (const item of redactions.filter((candidate) => candidate.kind === 'uninspectable-media')) {
+    if (!merged.some(existing => existing.kind === item.kind
+      && Math.abs(existing.bounds.x - item.bounds.x) < 0.5
+      && Math.abs(existing.bounds.y - item.bounds.y) < 0.5
+      && Math.abs(existing.bounds.width - item.bounds.width) < 0.5
+      && Math.abs(existing.bounds.height - item.bounds.height) < 0.5)) {
+      merged.push(item);
+    }
   }
   return {
     documentId,
     documentRevision,
     origin: location.origin,
-    title: document.title,
+    title: sanitizeIdentityValues(document.title, identityValues, privacyGrade),
     viewport: { width: window.innerWidth, height: window.innerHeight, scrollX: window.scrollX, scrollY: window.scrollY },
     elements,
     ...((typeof __PERCEPTION_ENABLED__ !== 'undefined' && __PERCEPTION_ENABLED__) ? { textRegions: collectPerceptionText() } : {}),
+    ...(media.hints.length ? { mediaHints: media.hints } : {}),
     redactions: merged,
   };
 }

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0",
+  "corpusId": "sih26171-adversarial-privacy-v1",
+  "synthetic": true,
+  "description": "Held-out, synthetic privacy fixtures for regression testing surfaces that ordinary DOM fixtures miss. This file is a test design and coverage contract; it contains no real personal data and no claimed detector scores.",
+  "axes": [
+    "misspelled-names",
+    "hindi-and-multilingual-text",
+    "unusual-spacing",
+    "image-embedded-identifiers",
+    "canvas-text",
+    "qr-code",
+    "css-background",
+    "shadow-dom",
+    "overlapping-elements"
+  ],
+  "cases": [
+    {
+      "caseId": "misspelled-name",
+      "axis": "misspelled-names",
+      "surface": "dom-text",
+      "syntheticValues": ["Ananyaa Demoo"],
+      "description": "A misspelled synthetic name in visible text and an aria label; the fixture must not depend on an exact name dictionary.",
+      "mustProtectAt": [3]
+    },
+    {
+      "caseId": "hindi-name-and-address",
+      "axis": "hindi-and-multilingual-text",
+      "surface": "dom-text",
+      "syntheticValues": ["अनन्या डेमो", "१२, परीक्षण मार्ग"],
+      "description": "Devanagari name and address rendered in a multilingual page.",
+      "mustProtectAt": [2, 3]
+    },
+    {
+      "caseId": "unusual-spacing-identifiers",
+      "axis": "unusual-spacing",
+      "surface": "dom-text",
+      "syntheticValues": ["9 8 7 6 5  4 3 2 1 0", "A B C D E 1 2 3 4 F"],
+      "description": "Synthetic identifiers with repeated spaces and character spacing.",
+      "mustProtectAt": [1]
+    },
+    {
+      "caseId": "image-embedded-id",
+      "axis": "image-embedded-identifiers",
+      "surface": "img",
+      "syntheticValues": ["SYN-ID-2048"],
+      "description": "A synthetic identifier exists only in an image region with no useful DOM text.",
+      "mustProtectAt": [1]
+    },
+    {
+      "caseId": "canvas-rendered-pii",
+      "axis": "canvas-text",
+      "surface": "canvas",
+      "syntheticValues": ["Canvas Demo User", "SYN-PAN-1234"],
+      "description": "Synthetic name and identifier painted into a canvas; DOM inspection alone is insufficient.",
+      "mustProtectAt": [1, 3]
+    },
+    {
+      "caseId": "qr-encoded-identifier",
+      "axis": "qr-code",
+      "surface": "canvas",
+      "syntheticValues": ["https://example.test/ticket/SYN-QR-2048"],
+      "description": "A QR code encodes a synthetic ticket URL; decoding must remain local and only geometry/category may leave.",
+      "mustProtectAt": [1]
+    },
+    {
+      "caseId": "css-background-secret",
+      "axis": "css-background",
+      "surface": "css-background",
+      "syntheticValues": ["SYN-CSS-SECRET"],
+      "description": "Synthetic text is present in a CSS background image rather than a normal DOM text node.",
+      "mustProtectAt": [1]
+    },
+    {
+      "caseId": "shadow-dom-private-field",
+      "axis": "shadow-dom",
+      "surface": "shadow-dom",
+      "syntheticValues": ["shadow.user@example.test"],
+      "description": "Synthetic contact data is rendered inside an open shadow root and must be captured or conservatively masked.",
+      "mustProtectAt": [2]
+    },
+    {
+      "caseId": "overlapping-media-and-face",
+      "axis": "overlapping-elements",
+      "surface": "img",
+      "syntheticValues": ["SYNTHETIC_FACE"],
+      "description": "A synthetic face box overlaps an uninspectable media box; the compositor and area metric must count the union once.",
+      "mustProtectAt": [1]
+    }
+  ],
+  "metrics": {
+    "required": ["precision", "recall", "iou", "excessMaskedArea", "latencyMs", "peakMemoryMb"],
+    "definitions": {
+      "precision": "Predicted sensitive boxes that intersect a labeled sensitive region at IoU >= 0.5.",
+      "recall": "Labeled sensitive regions with a qualifying predicted box or conservative mask.",
+      "iou": "Intersection over union for each matched box.",
+      "excessMaskedArea": "Redacted union area outside labeled sensitive regions divided by image area.",
+      "latencyMs": "Capture, local detection, redaction, encoding, and end-to-end timings in milliseconds.",
+      "peakMemoryMb": "Peak extension process memory observed during the browser run."
+    },
+    "results": null
+  }
+}

@@ -66,6 +66,7 @@ describe('user-selectable privacy grades', () => {
       maxSteps: 10,
       privacyGrade: 2,
       allowFullMaskFallback: false,
+      highAssuranceMode: false,
       canaries: ['private value'],
     });
     expect(persisted).toEqual({
@@ -73,6 +74,7 @@ describe('user-selectable privacy grades', () => {
       maxSteps: 10,
       privacyGrade: 2,
       allowFullMaskFallback: false,
+      highAssuranceMode: false,
     });
     expect(JSON.stringify(persisted)).not.toContain('do-not-store');
     expect(JSON.stringify(persisted)).not.toContain('private value');

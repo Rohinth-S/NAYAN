@@ -68,7 +68,7 @@ export type LatencyBudget = Readonly<{
 
 export type Redaction = Readonly<{
   kind: RedactionKind;
-  source: 'dom' | 'regex' | 'onnx' | 'unified-detector' | 'dbnet' | 'fallback';
+  source: 'dom' | 'regex' | 'onnx' | 'unified-detector' | 'dbnet' | 'ocr' | 'fallback';
   bounds: Bounds;
   /** Approach B: confidence from unified detector, absent for rule-based sources. */
   confidence?: number;
@@ -131,10 +131,45 @@ export type SanitizedObservation = Readonly<{
   }>;
 }>;
 
+/**
+ * Extension-local proof view of the DOM fields that accompany the outbound
+ * SanitizedObservation. This deliberately contains no selectors, DOM
+ * references, input values, cookies, or raw URL. Labels and task/title text
+ * have already passed through the selected privacy policy.
+ */
+export type SanitizedDomPreview = Readonly<{
+  snapshotId: string;
+  documentId: string;
+  originAlias: string;
+  title: string;
+  task: string;
+  grade: PrivacyGrade;
+  detectorBackend: SanitizedObservation['privacy']['detectorBackend'];
+  redactionCount: number;
+  elementCount: number;
+  elements: readonly SanitizedElement[];
+  redactionKinds: Readonly<Record<string, number>>;
+  registryDigest?: string;
+}>;
+
 export type AgentAction = Readonly<{
-  type: 'click' | 'input' | 'scroll' | 'wait' | 'done';
+  /** All browser mutations stay inside the local, revision-bound action broker. */
+  type:
+    | 'click'
+    | 'input'
+    | 'scroll'
+    | 'wait'
+    | 'done'
+    | 'hover'
+    | 'focus'
+    | 'doubleClick'
+    | 'check'
+    | 'uncheck'
+    | 'select';
   elementId?: string;
   text?: string;
+  /** Public option label/value for the native `select` action. */
+  option?: string;
   direction?: 'up' | 'down';
   amount?: number;
   milliseconds?: number;
@@ -166,10 +201,18 @@ export type RawDomSnapshot = Readonly<{
   elements: readonly RawElement[];
   /** Extension-local only: never included in SanitizedObservation. */
   textRegions?: readonly Readonly<{ text: string; bounds: CssBounds }>[];
+  /** Extension-local only: coarse media hints used to guide local OCR. */
+  mediaHints?: readonly Readonly<{
+    bounds: CssBounds;
+    kind: 'document' | 'person' | 'object' | 'unknown';
+    documentType?: 'aadhaar-card' | 'pan-card' | 'credit-card' | 'unknown';
+  }>[];
   redactions: readonly Readonly<{
     kind: RedactionKind;
     source: 'dom' | 'regex';
     bounds: CssBounds;
+    /** Optional field-specific label for semantic placeholders (e.g. 'NAME', 'PHONE'). */
+    fieldLabel?: string;
   }>[];
 }>;
 
@@ -180,7 +223,25 @@ export type ExtensionSettings = Readonly<{
   maxSteps: number;
   privacyGrade: PrivacyGrade;
   allowFullMaskFallback: boolean;
+  /**
+   * High-assurance mode deliberately discards all screenshot semantics. The
+   * server receives an opaque black PNG plus the already-sanitized DOM
+   * structure, which is the strongest browser-compatible privacy posture.
+   */
+  highAssuranceMode: boolean;
   canaries: readonly string[];
+}>;
+
+export type PrivacyReceipt = Readonly<{
+  requestCount: number;
+  privacyGrade: PrivacyGrade;
+  detectorBackend: SanitizedObservation['privacy']['detectorBackend'];
+  redactionCategories: Readonly<Record<string, number>>;
+  maskedAreaPercentage: number;
+  imageSha256: string;
+  redactionMode: 'semantic' | 'opaque';
+  transmissionMode: 'sanitized-visual' | 'structure-only';
+  sent: boolean;
 }>;
 
 export type AgentStatus = Readonly<{
@@ -192,6 +253,8 @@ export type AgentStatus = Readonly<{
   redactionCount: number;
   lastLatencyMs: number | null;
   previewDataUrl: string | null;
+  /** Local proof view derived from the exact sanitized observation. */
+  sanitizedDomPreview: SanitizedDomPreview | null;
   /** Approach B: Privacy UX metrics for M5 */
   categoryCounts?: Record<string, number>;
   maskedAreaPercentage?: number;
@@ -199,6 +262,8 @@ export type AgentStatus = Readonly<{
   scrollDrift?: ScrollDriftState;
   /** Approach B: dual-metric latency tracking. */
   latencyBudget?: LatencyBudget;
+  /** Local-only receipt for the latest eligible or transmitted observation. */
+  privacyReceipt: PrivacyReceipt | null;
 }>;
 
 export type PopupCommand =

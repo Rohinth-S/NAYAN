@@ -82,7 +82,7 @@ const report = {
   ocr: { samples: corpus.cases.length, exactMatches: ocrExact, exactMatchRate: ocrExact/corpus.cases.length, exactMatch95: wilson(ocrExact,corpus.cases.length), initMs: ocrInitMs, p50Ms: percentile(ocrTimes,.5), p95Ms: percentile(ocrTimes,.95) },
   visual: { initMs: visualInitMs, inferenceMs: visualInferenceMs, decision: 'Not admitted to the privacy decision path: image classification has no verified PII boxes or page-semantic accuracy.' },
   resource: { sampledProcessPeakRssBytes: rssPeak, gpuMemoryBytes: null, browserMainThreadMs: null },
-  limitations: ['Small synthetic corpus; independent review pending', 'No GPU or browser measurements in this report', 'Redaction IoU and excess area require pixel fixtures; not inferred from category predictions', 'Media remains fully masked at every grade'],
+  limitations: ['Small synthetic corpus; independent review pending', 'No GPU or browser measurements in this report', 'Redaction IoU and excess area require pixel fixtures; not inferred from category predictions', 'Only the narrow local document OCR path can selectively preserve supported document artwork; other media remains fail-closed'],
 };
 await writeFile(resolve(root, 'evidence/local-perception.json'), JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({samples:corpus.cases.length, ocrExact, nerP95Ms:report.ner.p95Ms, ocrP95Ms:report.ocr.p95Ms, output:'evidence/local-perception.json'}));

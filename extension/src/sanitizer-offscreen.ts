@@ -47,11 +47,12 @@ export class OffscreenSanitizer {
     canaries: readonly string[],
     privacyGrade: PrivacyGrade,
     task = '',
+    highAssuranceMode = false,
   ): Promise<SanitizedRaster> {
     await ensureOffscreenDocument(this.api);
     const request: OffscreenRequest = {
       target: OFFSCREEN_TARGET, type: 'SANITIZE_CAPTURE', requestId: crypto.randomUUID(),
-      screenshot, dom, allowFullMaskFallback, canaries, privacyGrade, task,
+      screenshot, dom, allowFullMaskFallback, highAssuranceMode, canaries, privacyGrade, task,
     };
     // runtime.sendMessage is extension-local IPC, not a server request. This
     // module has no network client; raw captures never enter egress.ts.

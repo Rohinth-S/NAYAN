@@ -39,18 +39,18 @@
         <div class="card-heading"><div><p class="section-kicker">01 / Identity</p><h2 id="profile-heading">Employee profile</h2></div><span class="status-pill"><span></span> Verified</span></div>
         <p class="card-intro">This information is provided for this synthetic evaluation only.</p>
         <dl class="profile-grid">
-          <div class="profile-field"><dt>Full name</dt><dd>Aarav Sharma</dd></div>
-          <div class="profile-field"><dt>Email address</dt><dd>aarav.sharma@example.test</dd></div>
-          <div class="profile-field"><dt>Phone number</dt><dd>+91 98765 43210</dd></div>
-          <div class="profile-field"><dt>PAN</dt><dd>ABCDE1234F</dd></div>
-          <div class="profile-field"><dt>Aadhaar</dt><dd>2345 6789 1234</dd></div>
-          <div class="profile-field"><dt>Employee code</dt><dd>ORB-2048</dd></div>
-          <div class="profile-field"><dt>Date of birth</dt><dd>14/08/1998</dd></div>
-          <div class="profile-field"><dt>Home address</dt><dd>42 Orbit Avenue, Bengaluru</dd></div>
-          <div class="profile-field"><dt>Username</dt><dd>aarav.sharma</dd></div>
-          <div class="profile-field"><dt>Customer ID</dt><dd>CUST-8841-2048</dd></div>
-          <div class="profile-field"><dt>IP address</dt><dd>192.0.2.44</dd></div>
-          <div class="profile-field"><dt>Bank account</dt><dd>Account: 001234567890</dd></div>
+          <div class="profile-field" data-privacy-grade="3"><dt>Full name</dt><dd>Aarav Sharma</dd></div>
+          <div class="profile-field" data-privacy-grade="2"><dt>Email address</dt><dd>aarav.sharma@example.test</dd></div>
+          <div class="profile-field" data-privacy-grade="2"><dt>Phone number</dt><dd>+91 98765 43210</dd></div>
+          <div class="profile-field" data-privacy-grade="1"><dt>PAN</dt><dd>ABCDE1234F</dd></div>
+          <div class="profile-field" data-privacy-grade="1"><dt>Aadhaar</dt><dd>2345 6789 1234</dd></div>
+          <div class="profile-field" data-privacy-grade="3"><dt>Employee code</dt><dd>ORB-2048</dd></div>
+          <div class="profile-field" data-privacy-grade="2"><dt>Date of birth</dt><dd>14/08/1998</dd></div>
+          <div class="profile-field" data-privacy-grade="2"><dt>Home address</dt><dd>42 Orbit Avenue, Bengaluru</dd></div>
+          <div class="profile-field" data-privacy-grade="3"><dt>Username</dt><dd>aarav.sharma</dd></div>
+          <div class="profile-field" data-privacy-grade="2"><dt>Customer ID</dt><dd>CUST-8841-2048</dd></div>
+          <div class="profile-field" data-privacy-grade="2"><dt>IP address</dt><dd>192.0.2.44</dd></div>
+          <div class="profile-field" data-privacy-grade="1"><dt>Bank account</dt><dd>Account: 001234567890</dd></div>
         </dl>
         <div class="privacy-note"><span class="note-icon" aria-hidden="true">✦</span><span><strong>Privacy-aware by design</strong><br><small>Only the minimum page structure needed for assistance is shared.</small></span></div>
         <div class="privacy-spectrum" aria-label="Privacy grade coverage">
@@ -61,6 +61,30 @@
             <div class="spectrum-item"><span class="spectrum-level level-three">G3</span><span><strong>Identity</strong><small>names · usernames · employee IDs</small></span></div>
           </div>
         </div>
+        <section class="visual-fixtures" aria-labelledby="visual-fixtures-heading">
+          <div class="spectrum-heading">
+            <span id="visual-fixtures-heading">Visual PII edge cases</span>
+            <small>synthetic image fixtures · should be masked locally</small>
+          </div>
+          <div class="fixture-grid">
+            <figure class="fixture-card">
+              <div class="fixture-image-wrap">
+                <img src="/demo/assets/credit-card.svg" alt="Synthetic credit card with a card number, expiry date, and security code" data-privacy-media-kind="document" data-privacy-document-type="credit-card">
+                <span class="fixture-badge">FINANCIAL · G1</span>
+              </div>
+              <figcaption><strong>Credit card image</strong><span>spaced digits · expiry · CVV</span></figcaption>
+            </figure>
+            <figure class="fixture-card">
+              <div class="fixture-image-wrap document-pan-wrap">
+                <img src="/demo/assets/pan-card.svg" alt="Synthetic PAN card with PAN identifier, name, and date of birth" data-privacy-media-kind="document" data-privacy-document-type="pan-card">
+                <img class="document-portrait-overlay document-portrait-male" src="/demo/assets/male.png" alt="Synthetic male portrait used in the PAN document fixture" data-privacy-media-kind="person" aria-hidden="true">
+                <span class="fixture-badge">GOVERNMENT ID · G1</span>
+              </div>
+              <figcaption><strong>PAN card image</strong><span>PAN · name · date of birth</span></figcaption>
+            </figure>
+          </div>
+          <p class="fixture-note">These are intentionally rendered as image media. Local credential OCR keeps the card artwork visible while masking only PAN/payment secrets; unknown or low-confidence image media still falls back to a complete local mask.</p>
+        </section>
       </section>
 
       <section class="card enrollment-card" aria-labelledby="enrollment-heading">
@@ -89,6 +113,45 @@
           <button id="submit-enrollment" class="primary-action" type="submit"><span>Submit enrollment</span><span class="arrow" aria-hidden="true">↗</span></button>
           <p id="status" role="status" aria-live="polite">Waiting for confirmation.</p>
         </form>
+        <section class="media-lab" aria-labelledby="media-lab-heading">
+          <div class="spectrum-heading">
+            <span id="media-lab-heading">Local media policy lab</span>
+            <small>document · person · public object</small>
+          </div>
+          <figure class="media-lab-document">
+            <div class="fixture-image-wrap document-aadhaar-wrap">
+              <img
+                src="/demo/assets/aadhaar-card.svg"
+                alt="Synthetic Aadhaar-style identity document with name, date of birth, address, mobile number, and Aadhaar number"
+                data-privacy-media-kind="document"
+                data-privacy-document-type="aadhaar-card"
+              >
+              <img class="document-portrait-overlay document-portrait-female" src="/demo/assets/female.png" alt="Synthetic female portrait used in the identity document fixture" data-privacy-media-kind="person" aria-hidden="true">
+              <span class="fixture-badge">DOCUMENT · SELECTIVE PII</span>
+            </div>
+            <figcaption>
+              <strong>Identity document</strong>
+              <span>Keep the card layout; redact only the labeled PII lines.</span>
+            </figcaption>
+          </figure>
+          <div class="media-lab-grid">
+            <figure class="fixture-card">
+              <div class="fixture-image-wrap">
+                <img src="/demo/assets/cat.png" alt="Realistic synthetic cat photograph with no personal information" data-privacy-media-kind="object">
+                <span class="fixture-badge">CAT · PRESERVE</span>
+              </div>
+              <figcaption><strong>Cat image</strong><span>Keep non-person media visible.</span></figcaption>
+            </figure>
+            <figure class="fixture-card">
+              <div class="fixture-image-wrap">
+                <img src="/demo/assets/computer.png" alt="Synthetic computer illustration with no personal information" data-privacy-media-kind="object">
+                <span class="fixture-badge">COMPUTER · PRESERVE</span>
+              </div>
+              <figcaption><strong>Computer image</strong><span>Leave the public object visible.</span></figcaption>
+            </figure>
+          </div>
+          <p class="fixture-note">The media kind is an explicit local test hint for this synthetic page. Unclassified media remains fail-closed and is fully masked until a local detector or OCR path can prove which pixels are safe.</p>
+        </section>
       </section>
     </div>
 

@@ -12,17 +12,17 @@ The extension captures the visible page locally, combines DOM and visual signals
 
 This reverses the usual browser-agent order. A conventional agent often sends a screenshot, DOM snapshot, accessibility tree, or extracted text first and attempts to protect it later. This project makes disclosure control a prerequisite for reasoning.
 
-> **Current status:** controlled synthetic prototype ready for team development and SIH demonstrations. The default package uses the checked-in UltraFace face detector with WebGPU/WASM fallback. Unified YOLO, DBNet, and the OCR/NER/barcode perception bundle are implemented behind explicit local asset/build gates. The repository does not claim universal PII detection, anonymization, browser coverage, or public-production readiness.
+> **Current status:** controlled synthetic prototype ready for team development and SIH demonstrations. The normal package uses the checked-in UltraFace face detector with WebGPU/WASM fallback; OCR/NER/barcode perception is disabled unless a separately evaluated, checksum-locked admission bundle is built. Person images are fully masked, explicitly classified public objects are preserved, and unknown or low-confidence media remains fail-closed. The repository does not claim universal PII detection, anonymization, browser coverage, or public-production readiness.
 
 ## Why this project stands out
 
 The project is not only a browser agent with a privacy setting. Privacy is enforced as a sequence of independently testable boundaries:
 
 1. **Local capture:** the page is observed inside the browser.
-2. **Local classification:** DOM metadata, fields, text patterns, known-private values, faces, and optional local perception are classified before egress.
+2. **Local classification:** DOM metadata, fields, text patterns, known-private values, faces, and explicitly admitted local perception are classified before egress.
 3. **User-controlled disclosure:** Grade 1, Grade 2, or Grade 3 determines which categories may remain.
 4. **Fresh redaction:** sensitive regions are replaced on a new canvas; the original screenshot is never used as the outbound image.
-5. **Byte-level validation:** the serialized JSON and PNG are checked for schema violations, unsafe values, canaries, invalid bounds, metadata, and missing masks.
+5. **Byte-level validation:** the serialized JSON and PNG are checked for schema violations, unsafe values, canaries, invalid bounds, metadata, missing masks, and a final local DLP scan over task text, labels, and metadata.
 6. **One egress owner:** `extension/src/egress.ts` is the only reasoning `fetch` owner.
 7. **Sanitized reasoning:** the server receives only the versioned sanitized observation.
 8. **Strict action output:** the model cannot return arbitrary JavaScript, selectors, URLs, or keyboard injection.
@@ -42,10 +42,13 @@ This gives the project a stronger privacy story than a provider setting or a pro
 | Face detection | Checked-in UltraFace ONNX, WebGPU first, WASM fallback | None for the default face path |
 | Document visual detection | Implementation present but no `yolo-privacy-v1.onnx` is checked in | Unified YOLOv8n/v10n asset, checksum, license, and held-out evaluation |
 | Canvas text detection | DBNet implementation and three-tier policy contract | `dbnet-text-det.onnx` asset and explicit production wiring |
-| OCR/NER/barcodes | Local runtime and orchestration implemented behind a feature flag | `npm run package:perception`, locked assets, browser/resource measurements, held-out accuracy |
+| Credential OCR for image fixtures | Locked local English Tesseract asset redacts PAN/payment-card and Aadhaar-style PII lines while preserving non-secret document artwork | Larger document set, multilingual OCR, and held-out precision/recall evidence |
+| OCR/NER/barcodes perception bundle | Local runtime and orchestration implemented behind an evaluation admission gate | `LOCAL_PERCEPTION_EVALUATED=1 npm run package:perception`, locked assets, browser/resource measurements, held-out accuracy |
+| High-assurance mode | User-selectable structure-only transmission: sanitized DOM plus a fully opaque black PNG | Browser/device coverage and independent review |
+| Outbound privacy receipt | Local aggregate receipt with grade, detector, redaction categories, masked area, sanitized-image hash, request count, and egress state | Long-term receipt export and independent review |
 | Reasoning | Local Ollama, normally `qwen3-vl:2b-instruct` | Provider-neutral hosted or air-gapped sanitized adapter |
 | Agent controller | Bounded TypeScript loop plus bounded FastAPI jobs | LangGraph.js is documented as a future adapter, not the current runtime |
-| Browser actions | `click`, `input`, `scroll`, `wait`, `done` | Safe navigation/download/upload policies remain future extensions |
+| Browser actions | `click`, `input`, `scroll`, `wait`, `done`, `hover`, `focus`, `doubleClick`, `check`, `uncheck`, `select` | Privileged navigation/download/upload/keyboard/cookie actions remain outside the safe broker |
 | Queue | Development in-memory jobs; optional metadata-only SQLite | Production Redis ledger and shared rate limiter |
 | Evidence | Synthetic demo, automated release gate, local Ollama smoke/e2e summaries | Independent security review, signed artifacts, live browser matrix, trained-model metrics |
 
@@ -57,7 +60,10 @@ The synthetic portal at `http://127.0.0.1:8765/demo` contains:
 - full name, email, phone, PAN, Aadhaar-like value, employee code, date of birth, home address, username, customer ID, IP address, and bank-account fields;
 - public fields such as preferred name, work email, phone, city, benefit plan, and coverage date;
 - a synthetic face image;
-- synthetic credit-card and PAN-card SVG image fixtures;
+- synthetic credit-card and PAN-card SVG image fixtures, each with a generated portrait for local face-redaction coverage;
+- a synthetic Aadhaar-style document fixture with a generated female portrait plus name, date of birth, gender, mobile, address, and Aadhaar-number lines;
+- document portraits are rendered as responsive, explicitly tagged HTML overlays above the SVG artwork, so Chrome and Firefox paint them consistently and the local media policy can classify each as `person`;
+- a media-policy lab that compares selective document redaction, full person-image masking, and preservation of an explicitly classified public object;
 - a portal password;
 - a confirmation checkbox and submit enrollment button;
 - a privacy-spectrum display showing which grades protect which categories.
@@ -68,9 +74,9 @@ The intended task is:
 Check the confirmation checkbox, then submit the enrollment.
 ```
 
-At Grade 3, the reasoning service can see the public structure, safe labels, roles, bounds, checkbox state, and submit control. Personal values, the face, passwords, and uninspectable media are redacted locally. The model can therefore identify the checkbox and submit control without receiving the enrollment data.
+At Grade 3, the reasoning service can see the public structure, safe labels, roles, bounds, checkbox state, and submit control. Personal values, the face, passwords, and uninspectable media are redacted locally. In the default package, local credential OCR narrows a confidently recognized synthetic payment/PAN or Aadhaar-style document to its complete set of PII boxes; a missing, low-confidence, timed-out, incomplete, or unsupported OCR result keeps the complete media region masked. The model can identify the checkbox and submit control without receiving the enrollment data.
 
-The image fixtures intentionally exercise the fail-closed media rule. When the local runtime cannot semantically inspect an image region, the complete region is masked before egress rather than being sent as an unclassified image.
+The image fixtures intentionally exercise four media paths: precise local OCR redaction for supported documents, full-image masking for the synthetic person, preservation for the explicitly classified public object, and fail-closed masking for unclassified or low-confidence media.
 
 ## Architecture
 
@@ -199,7 +205,7 @@ sequenceDiagram
     Model->>API: Strict action JSON
     API->>SW: Action or opaque job result
     SW->>CS: Verify target and execute
-    CS->>Page: Click, input, scroll, wait, or finish
+    CS->>Page: Safe click/input/scroll/hover/focus/select/check actions
     CS->>SW: Action result and new revision
     SW->>CS: Recapture next step
 ```
@@ -263,6 +269,9 @@ The panel supports:
 - step count, detector backend, redaction count, masked-area percentage, and last server latency;
 - live activity log;
 - sanitized preview image;
+- judge-facing **Sanitized DOM capsule** showing the exact sanitized task,
+  page metadata, opaque element IDs, roles, bounds, safe labels, state flags,
+  redaction counts, and an expandable sanitized DOM payload;
 - full-screen preview modal and separate full-view extension tab.
 
 The API key and canaries are kept only in panel memory during the run. They are not persisted into source, storage, request metadata, logs, or evidence.
@@ -303,7 +312,9 @@ The background service worker pins:
 
 ### Supported actions
 
-The model can return only these actions:
+The model can return only these actions. Every target is an opaque ID from the
+current sanitized observation; the page-side broker resolves it locally after
+fresh revision and visibility checks.
 
 | Action | Current behavior |
 | --- | --- |
@@ -312,8 +323,17 @@ The model can return only these actions:
 | `scroll` | Scroll the page or a verified scroll-region target by a bounded amount. |
 | `wait` | Wait a bounded duration and capture again. |
 | `done` | End the task with a status message. |
+| `hover` | Dispatch a local hover sequence (`mouseover`, `mousemove`, `mouseenter`) to reveal ordinary menus/tooltips. |
+| `focus` | Focus the current target without allowing the model to supply a selector or script. |
+| `doubleClick` | Dispatch a local double-click event; destructive labels use the same native confirmation as `click`. |
+| `check` / `uncheck` | Set a current checkbox to the requested state without toggle ambiguity. |
+| `select` | Choose an exact public label/value on a current native `<select>`; no option list or private value is sent. |
 
-The content script rejects arbitrary JavaScript, selectors, URLs, keyboard injection, unknown action fields, stale snapshot IDs, stale document revisions, cross-origin targets, hidden/detached elements, disabled/read-only controls, and duplicate in-flight actions.
+The content script rejects arbitrary JavaScript, selectors, URLs, keyboard injection,
+unknown action fields, stale snapshot IDs, stale document revisions, cross-origin
+targets, hidden/detached elements, disabled/read-only controls, unsupported custom
+combobox selection, and duplicate in-flight actions. The server also checks checkbox
+and combobox roles and applies the PII floor to `select.option`.
 
 Clicks with destructive or irreversible labels such as submit, pay, delete, checkout, confirm, or navigation pause for native `window.confirm()` approval. The model cannot silently bypass that confirmation.
 
@@ -367,7 +387,7 @@ The main detector categories are:
 | Category | Grade 1 | Grade 2 | Grade 3 |
 | --- | :---: | :---: | :---: |
 | Credentials, secrets, government IDs, financial data, faces | hide | hide | hide |
-| Known private values and uninspectable media | hide | hide | hide |
+| Known private values and unsupported/uninspectable media | hide | hide | hide |
 | Email, phone, address/location, date of birth, network/device IDs, account IDs | keep when safe | hide | hide |
 | Names, usernames, professional/employee identifiers | keep when safe | keep when safe | hide |
 | Unknown populated editable fields | keep only when classified safe | keep only when classified safe | hide |
@@ -419,6 +439,24 @@ The default repository package does **not** contain `yolo-privacy-v1.onnx`; ther
 - never treats a visual overlay on the original screenshot as a valid outbound artifact;
 - does not expose the original screenshot in `SanitizedObservation`.
 
+### High-assurance structure-only mode
+
+The Advanced privacy controls include **High-assurance structure-only mode**.
+When selected, the local pipeline still captures the page to obtain viewport
+dimensions and the safe DOM capsule, but it skips visual detection, OCR, NER,
+and barcode interpretation for that capture. It creates a fresh all-black PNG
+and sends only that opaque image plus sanitized roles, labels, bounds, and
+state. The wire metadata reports `detectorBackend: "missing"`,
+`visualFallback: "full-mask"`, and `redactionMode: "opaque"`, so the server
+cannot mistake the image for a semantic screenshot.
+
+Every preview and accepted reasoning request also exposes a local outbound
+privacy receipt. It contains only the selected grade, detector backend,
+redaction category counts, masked-area percentage, a SHA-256 hash of the
+sanitized PNG, request count, transmission mode, and whether the request was
+accepted. Raw values and the original screenshot are never shown in the
+receipt.
+
 ### Canvas, frames, and media
 
 Canvas-rendered applications are difficult because text pixels may not exist in the DOM. `canvas-privacy.ts` defines a three-tier strategy:
@@ -427,7 +465,24 @@ Canvas-rendered applications are difficult because text pixels may not exist in 
 2. **DBNet blind masking:** optional DBNet text-region detection without OCR or content retention.
 3. **Manual escalation:** require user review when safe local classification is unavailable.
 
-The default live path conservatively masks inspectability-uncertain media and frames. `dbnet-detector.ts` is implemented, but `dbnet-text-det.onnx` is not in the default package. The repository therefore does not claim DBNet coverage until the asset and explicit runtime wiring are supplied.
+The default live path conservatively masks inspectability-uncertain media and frames. A narrow local document-OCR pass runs only on image media that would otherwise be fully masked. If it confidently recognizes a supported PAN, payment-card, or Aadhaar-style fixture, the full media mask is replaced with credential/PII boxes; a local coarse card hint can help recover a small CVV token when its caption is lost during downscaling, but card number, expiry, and CVV coverage are still required together. The local preview renders category-specific placeholders such as `[REDACTED:CARD_NUMBER]`, `[REDACTED:EXPIRY]`, `[REDACTED:CVV]`, `[REDACTED:NAME]`, `[REDACTED:PHONE_NUMBER]`, and `[REDACTED:AADHAAR_NUMBER]`, while raw OCR text is discarded. If OCR is absent, low confidence, over budget, or cannot classify the image, the full media mask remains. A page may explicitly mark a known public object with `data-privacy-media-kind="object"`; only that opt-in fixture path is preserved, while unknown media remains fail-closed. `dbnet-detector.ts` is implemented, but `dbnet-text-det.onnx` is not in the default package. The repository therefore does not claim DBNet coverage until the asset and explicit runtime wiring are supplied.
+
+The document preview uses locally upscaled, contrast-normalized OCR crops with sparse-text segmentation and a single-block retry when required fields are missing. Fullscreen uses a dedicated preview tab and a viewport-sized fallback when the browser rejects native fullscreen; Escape exits the expanded view. Rebuild and reload the extension before generating a new preview.
+
+### Local credential OCR for image media
+
+The default package includes an explicitly locked local bundle. The build
+verifies `extension/models/ocr/lang-data/eng.traineddata` against
+`extension/models/ocr-lock.json`; set `LOCAL_OCR=0` only for a constrained
+package that intentionally omits this path. `document-ocr.ts` uses Tesseract.js
+locally on cropped media boxes and emits only:
+
+- a document class: `credit-card`, `pan-card`, or `aadhaar-card`;
+- credential/PII boxes for payment card number, expiry/CVV, PAN identifier,
+  Aadhaar number, name, date of birth, gender, mobile, and address;
+- confidence and bounds.
+
+Raw OCR text is transient local data and is discarded before observation construction. The server receives semantic redaction records such as `source: "ocr"` and the freshly redacted PNG, not the OCR text. This deliberately does not claim generic document understanding; unsupported image media remains covered by `uninspectable-media`. The public-object fixture is a separate explicit page hint, not a generic “images are safe” rule.
 
 ### Optional local perception bundle
 
@@ -443,15 +498,24 @@ The opt-in bundle is implemented in `perception.ts` and `perception-runtime.ts`:
 
 The raw OCR text, NER entities, and decoded barcode values are transient local data. They are never sent, logged, or included in evidence.
 
-Build it only after local perception assets have passed the lock-file checks:
+Build it only after local perception assets have passed the lock-file checks
+and the team has reviewed the local evaluation report:
 
 ```powershell
 Push-Location extension
+$env:LOCAL_PERCEPTION_EVALUATED = "1"
 npm run package:perception
 Pop-Location
 ```
 
-If an asset is absent, corrupt, over budget, low confidence, or returns invalid bounds, local perception fails with a generic error and egress is blocked. `evidence/local-perception.json` records real local measurements on a small synthetic corpus; those measurements are not universal recall/precision results.
+The build refuses `--perception` without `LOCAL_PERCEPTION_EVALUATED=1`.
+This is an admission acknowledgement, not a fabricated score: the report
+must still be reviewed for corpus limits, latency, and browser coverage. If an
+asset is absent, corrupt, over budget, low confidence, or returns invalid
+bounds, local perception fails with a generic error and egress is blocked.
+`evidence/local-perception.json` records real local measurements on a small
+synthetic corpus; those measurements are not universal recall/precision
+results.
 
 ### Chrome and Firefox sanitizer paths
 
@@ -470,6 +534,12 @@ Chrome uses `sanitizer-offscreen.ts` and the offscreen document for image decodi
 - sends one sanitized `POST /v1/reason` with `Prefer: respond-async`;
 - polls only with an opaque UUID job ID;
 - uses bounded timeouts and abort signals.
+
+Immediately before serialization, `dlp.ts` performs the final local gate over
+the task, page title, element labels, redaction metadata, and privacy metadata.
+It rejects suspicious grade-sensitive PII findings instead of attempting a
+remote repair. The complete JSON is also checked for canaries, including
+encoded forms, before the POST is created.
 
 The release gate checks this source-level invariant.
 
@@ -680,11 +750,10 @@ The complete policy matrix is in [PRIVACY_LEVELS.md](PRIVACY_LEVELS.md). The com
 
 ### Recorded validation totals
 
-The latest recorded release gate reports:
-
-- **92 extension tests passed**;
-- **157 server tests passed**;
-- **32 evaluation tests passed**;
+The totals below are regenerated by `python scripts/release-gate.py`; the
+current repository contains the extension privacy-receipt/DLP tests and the
+held-out adversarial-corpus contract tests in addition to the earlier suites.
+Do not copy these numbers into a release note without rerunning the gate.
 - TypeScript typecheck passed;
 - Ruff lint passed;
 - Chrome package built;
@@ -698,6 +767,8 @@ The evidence is synthetic or aggregate:
 | `evidence/extension-e2e-summary.json` | Deterministic sanitized Chrome flow, three requests, WASM path, nine redactions per step, canaries absent, enrollment submitted. |
 | `evidence/live-ollama-summary.json` | Local Ollama flow, asynchronous POST/poll sequence, empty poll bodies, canaries absent, final `done`, enrollment submitted. |
 | `evidence/local-perception.json` | Local OCR/NER/model timings and category measurements on a small synthetic corpus. |
+| `evidence/browser-matrix-chrome.json` | Chrome extension smoke run covering semantic preview, high-assurance opaque preview, and a local privacy receipt. |
+| `evidence/browser-matrix-firefox.json` | Firefox matrix status; it is `skipped` until a Firefox executable is supplied to the runner. |
 | `evidence/latest-release.json` | Automated release-gate result, package hashes, and suite totals. |
 | `evidence/sih-demo-package.json` | Synthetic grade matrix, demonstrations, data-handling statement, and limitations. |
 
@@ -709,11 +780,28 @@ These results prove repository contracts and the controlled demo. They do not pr
 xychart-beta
     title "Automated test suites in the latest release gate"
     x-axis ["Extension", "Server", "Evaluation"]
-    y-axis "Passing tests" 0 --> 170
-    bar [92, 157, 32]
+    y-axis "Passing tests" 0 --> 220
+    bar [115, 165, 34]
 ```
 
 The bar chart shows test volume, not a privacy score. Accuracy, recall, redaction IoU, excess area, resource use, and live browser coverage require separate evidence.
+
+Run the browser smoke matrix after building the extension:
+
+```powershell
+node scripts/browser-matrix.mjs
+$env:PRIVACY_E2E_BROWSER = "firefox"
+node scripts/browser-matrix.mjs
+```
+
+The Chrome runner verifies both semantic and structure-only previews and
+checks that the structure-only PNG is opaque black. The Firefox command
+records an explicit `skipped` status when no Firefox executable is installed;
+it never turns a missing browser into a passing claim. The held-out privacy
+coverage contract is in
+`evaluation/corpus/adversarial-privacy-v1.json` and requires precision,
+recall, IoU, excess masked area, latency, and peak-memory measurements before
+results can be admitted.
 
 Run the aggregate local checks:
 
@@ -722,7 +810,14 @@ Run the aggregate local checks:
 python scripts/release-gate.py
 ```
 
-The release gate also verifies governance synchronization, model/package metadata, tracked-file secrets, SBOM generation, extension/server/evaluation checks, and the source-level single-egress invariant.
+The release gate also verifies governance synchronization, model/package
+metadata, tracked-file secrets, SBOM generation, extension/server/evaluation
+checks, the source-level single-egress invariant, dependency/model lock
+checksums, and the allowlisted browser permissions. Development mode reports
+unsigned artifacts explicitly. Production mode additionally requires a pinned
+Ollama digest and detached SHA-256/GPG signatures; use
+`scripts/sign-release.ps1` after packaging. The independent-review status is
+tracked in [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
 Before a judging run, use the preflight script:
 
@@ -792,6 +887,14 @@ npm run package:perception
 Pop-Location
 ```
 
+If the local OCR asset ever needs to be restored, verify and download it with:
+
+```powershell
+Push-Location extension
+npm run prepare:ocr
+Pop-Location
+```
+
 Chrome:
 
 1. Open `chrome://extensions`.
@@ -816,10 +919,16 @@ Firefox:
 5. Optionally enter fictional demo values under **Known private values**.
 6. Select Grade 1, Grade 2, or Grade 3.
 7. Click **Privacy preview** and inspect the locally generated image, redaction count, detector backend, and mask area. Preview makes no reasoning request.
-8. Use **Expand** or **Open full view** to inspect the sanitized preview at full size.
-9. Click **Start agent**.
-10. Approve the native confirmation when the agent requests the submit action.
-11. Confirm `Enrollment submitted successfully.` appears in the demo.
+8. Open **Sanitized DOM capsule** below the image. Its snapshot ID matches the
+   image preview, and its expandable JSON view shows the structured fields
+   eligible for the reasoning request. The panel explicitly lists omitted raw
+   values, selectors, DOM references, cookies, the real URL, and the raw DOM
+   snapshot.
+9. Use **Expand** or **Open full view** to inspect the redacted image and DOM
+   capsule at full size.
+10. Click **Start agent**.
+11. Approve the native confirmation when the agent requests the submit action.
+12. Confirm `Enrollment submitted successfully.` appears in the demo.
 
 For a grade comparison recording, reset the demo and run Privacy preview once at each grade:
 

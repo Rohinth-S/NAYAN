@@ -2,6 +2,14 @@ import type { Bounds, RawDomSnapshot, Redaction, SanitizedElement, SanitizedObse
 import { shouldRedactCategory, type PrivacyGrade } from './privacy-policy';
 import { perceive, type PerceptionRuntime, type PerceptionResult } from './perception';
 import type { UnifiedVisionDetector, VisionDetection } from './vision-detector';
+import {
+  DOCUMENT_OCR_MIN_CONFIDENCE,
+  requiredDocumentFields,
+  shouldRedactDocumentSecret,
+  type DocumentOcrResult,
+  type DocumentOcrRuntime,
+  type DocumentSecret,
+} from './document-ocr';
 
 export type SanitizedRaster = Readonly<{
   dataBase64: string;
@@ -24,6 +32,28 @@ export type SanitizedRaster = Readonly<{
 const PLACEHOLDER_BACKGROUND = '#f3f4f6';
 const PLACEHOLDER_BORDER = '#94a3b8';
 const PLACEHOLDER_TEXT = '#334155';
+
+/**
+ * OCR returns a document kind plus the particular field it located. Keep the
+ * wire redaction taxonomy stable (`kind: aadhaar-card` / `kind:
+ * sensitive-field`) while rendering a field-specific semantic marker in the
+ * local preview. This lets the server understand which category was removed
+ * without exposing the source value or changing the protocol schema.
+ */
+function placeholderForDocumentSecret(secretType: DocumentSecret['secretType']): string {
+  switch (secretType) {
+    case 'aadhaar-number': return '[REDACTED:AADHAAR_NUMBER]';
+    case 'date-of-birth': return '[REDACTED:DATE_OF_BIRTH]';
+    case 'name': return '[REDACTED:NAME]';
+    case 'gender': return '[REDACTED:GENDER]';
+    case 'address': return '[REDACTED:ADDRESS]';
+    case 'mobile': return '[REDACTED:PHONE_NUMBER]';
+    case 'pan': return '[REDACTED:PAN]';
+    case 'card-number': return '[REDACTED:CARD_NUMBER]';
+    case 'expiry': return '[REDACTED:EXPIRY]';
+    case 'cvv': return '[REDACTED:CVV]';
+  }
+}
 
 function placeholderFor(kind: Redaction['kind']): string {
   switch (kind) {
@@ -52,6 +82,8 @@ export async function sanitizeRaster(
   privacyGrade: PrivacyGrade,
   sanitizeLabel: (value: string) => string,
   perception?: { runtime: PerceptionRuntime; task: string; canaries: readonly string[] },
+  documentOcr?: DocumentOcrRuntime,
+  highAssuranceMode = false,
 ): Promise<SanitizedRaster> {
   if (!screenshotDataUrl.startsWith('data:image/png;base64,')) throw new Error('Capture was not a PNG');
   const rawBlob = dataUrlToBlob(screenshotDataUrl);
@@ -67,6 +99,48 @@ export async function sanitizeRaster(
     const scaleY = bitmap.height / dom.viewport.height;
     if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) || scaleX <= 0 || scaleY <= 0) throw new Error('Viewport scale is invalid');
     if (!uniformViewportScale(scaleX, scaleY)) throw new Error('Capture viewport scale mismatch; transmission blocked');
+
+    // High-assurance mode intentionally throws away every visual pixel. The
+    // screenshot is decoded only to determine its dimensions and is never
+    // passed to a detector, OCR, NER, barcode decoder, preview compositor, or
+    // network client. The server receives an opaque PNG plus the separately
+    // sanitized DOM structure.
+    if (highAssuranceMode) {
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('Canvas is unavailable');
+      context.fillStyle = '#000000';
+      context.fillRect(0, 0, bitmap.width, bitmap.height);
+      const sanitizedBlob = await canvas.convertToBlob({ type: 'image/png' });
+      const dataBase64 = bytesToBase64(new Uint8Array(await sanitizedBlob.arrayBuffer()));
+      const redactions: Redaction[] = [{
+        kind: 'visual-fallback',
+        source: 'fallback',
+        bounds: { x: 0, y: 0, width: bitmap.width, height: bitmap.height },
+      }];
+      const elements: SanitizedElement[] = dom.elements.map((element) => ({
+        ...element,
+        label: sanitizeLabel(element.label),
+        bounds: scaleBounds(element.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
+      }));
+      return {
+        dataBase64,
+        previewDataUrl: `data:image/png;base64,${dataBase64}`,
+        width: bitmap.width,
+        height: bitmap.height,
+        elements,
+        redactions,
+        detectorBackend: 'missing',
+        detectorArch: undefined,
+        visualFallback: 'full-mask',
+        redactionMode: 'opaque',
+        safeTask: sanitizeLabel(perception?.task ?? ''),
+        safeTitle: sanitizeLabel(dom.title),
+        categoryCounts: { 'visual-fallback': 1 },
+        maskedAreaPercentage: 100,
+      };
+    }
+
     const detection = await detector.detect(bitmap);
     const detectorReady = detection.backend === 'webgpu' || detection.backend === 'wasm';
     if (!detectorReady && !allowFullMaskFallback) {
@@ -78,6 +152,7 @@ export async function sanitizeRaster(
     if (!privateContext) throw new Error('Canvas is unavailable');
     privateContext.drawImage(bitmap, 0, 0);
     let local: PerceptionResult | undefined;
+    let documentScan: DocumentOcrResult | undefined;
     try {
       local = perception ? await perceive(
       perception.runtime, privateCanvas,
@@ -87,24 +162,66 @@ export async function sanitizeRaster(
       ].map(region => ({ text: region.text, bounds: scaleBounds(region.bounds, scaleX, scaleY, bitmap.width, bitmap.height) })),
       [dom.title, perception.task, ...dom.elements.map(e => e.label)], privacyGrade, perception.canaries,
     ) : undefined;
+      // Image-only media is normally masked in full because its pixels have
+      // no trustworthy DOM semantics. A dedicated local OCR pass may narrow
+      // that mask for a verified card/PAN document. The OCR result contains
+      // only category and geometry; source text is discarded before egress.
+      const mediaBounds = dom.redactions
+        .filter(item => item.kind === 'uninspectable-media')
+        .map(item => scaleBounds(item.bounds, scaleX, scaleY, bitmap.width, bitmap.height));
+      // `collectTextRedactions` can add a full-viewport media fallback when a
+      // page is too large to inspect structurally. Never treat that aggregate
+      // fallback as a document crop: doing so could unmask unrelated page
+      // content after finding one card-shaped text block.
+      const documentMediaBounds = mediaBounds.filter(item => !coversWholeImage(item, bitmap.width, bitmap.height));
+      if (documentOcr && detectorReady && documentMediaBounds.length > 0) {
+        try {
+          // Media hints are extension-local DOM metadata. Scale them into the
+          // screenshot coordinate space alongside the media boxes; the OCR
+          // classifier uses only the coarse document type and still requires
+          // complete field coverage before narrowing a fail-closed mask.
+          const documentMediaHints = (dom.mediaHints ?? [])
+            .filter(hint => hint.kind === 'document')
+            .map(hint => ({
+              bounds: scaleBounds(hint.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
+              ...(hint.documentType ? { documentType: hint.documentType } : {}),
+            }));
+          documentScan = await documentOcr.scan(privateCanvas, documentMediaBounds, documentMediaHints, privacyGrade);
+        } catch {
+          // Keep the original full-media masks if the local OCR runtime is
+          // unavailable, times out, or returns invalid geometry.
+          await documentOcr.close().catch(() => undefined);
+        }
+      }
     } finally {
       privateContext.clearRect(0, 0, bitmap.width, bitmap.height);
       privateCanvas.width = 1;
       privateCanvas.height = 1;
     }
-    const domRedactions: Redaction[] = dom.redactions.map((item) => ({
-      kind: item.kind,
-      source: item.source,
-      bounds: scaleBounds(item.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
-    }));
+    const semanticLabels = new WeakMap<object, string>();
+    const rawDomRedactions: Redaction[] = dom.redactions.map((item) => {
+      const redaction: Redaction = {
+        kind: item.kind,
+        source: item.source,
+        bounds: scaleBounds(item.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
+      };
+      if (item.fieldLabel) semanticLabels.set(redaction, `[REDACTED:${item.fieldLabel}]`);
+      return redaction;
+    });
+    const domRedactions = narrowVerifiedDocumentMedia(rawDomRedactions, documentScan, privacyGrade);
     const visualRedactions: Redaction[] = detection.detections
       .filter((item) => shouldRedactVisionClass(item, privacyGrade))
-      .map((item) => ({
+      .map((item): Redaction => ({
         kind: redactionKindForVisionClass(item.class),
         source: detection.arch === 'ultraface' ? 'onnx' : 'unified-detector',
         bounds: padded(item.bounds, bitmap.width, bitmap.height),
         confidence: item.confidence,
-      }));
+      }))
+      // Once OCR has completely verified a supported document, its semantic
+      // field boxes are more precise than a detector's coarse whole-card box.
+      // Suppress only that overlapping document box; face/signature findings
+      // remain independent and continue to be redacted.
+      .filter((item) => !isVerifiedDocumentBox(item, documentScan, privacyGrade));
     const fallbackRedactions: Redaction[] = detectorReady
       ? []
       : [{ kind: 'visual-fallback', source: 'fallback', bounds: { x: 0, y: 0, width: bitmap.width, height: bitmap.height } }];
@@ -114,7 +231,28 @@ export async function sanitizeRaster(
     const localRedactions: Redaction[] = local?.findings.map(finding => ({
       kind: 'pii-text', source: 'fallback', bounds: padded(finding.bounds, bitmap.width, bitmap.height),
     })) ?? [];
-    const redactions = detectorReady ? [...domRedactions, ...visualRedactions, ...localRedactions] : fallbackRedactions;
+    // Create each OCR redaction and register its field label at the same time.
+    // Keeping the association by object identity avoids geometry matching
+    // collisions when two document fields happen to share similar bounds.
+    const documentRedactions: Redaction[] = documentScan?.secrets
+      .filter(secret => shouldRedactDocumentSecret(secret.secretType, privacyGrade))
+      .filter(secret => documentScan.documents.some(document =>
+        document.confidence >= DOCUMENT_OCR_MIN_CONFIDENCE
+        && sameBounds(secret.mediaBounds, document.bounds)
+        && completeDocumentCoverage(document, documentScan!.secrets, privacyGrade)))
+      .map(secret => {
+        const item: Redaction = {
+          kind: secret.kind,
+          source: 'ocr',
+          bounds: tightlyPadded(secret.bounds, bitmap.width, bitmap.height),
+          confidence: secret.confidence,
+        };
+        semanticLabels.set(item, placeholderForDocumentSecret(secret.secretType));
+        return item;
+      }) ?? [];
+    const redactions = detectorReady
+      ? [...domRedactions, ...visualRedactions, ...localRedactions, ...documentRedactions]
+      : fallbackRedactions;
 
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     const context = canvas.getContext('2d', { alpha: false });
@@ -141,7 +279,9 @@ export async function sanitizeRaster(
       drawSemanticPlaceholder(
         context,
         expandedSemanticMaskBounds(mask, bitmap.width, bitmap.height),
-        placeholderFor(containsFace ? 'face' : item.kind),
+        containsFace
+          ? placeholderFor('face')
+          : semanticLabels.get(item) ?? placeholderFor(item.kind),
       );
     }
     // convertToBlob creates a new PNG and drops metadata from the original capture.
@@ -150,6 +290,10 @@ export async function sanitizeRaster(
     
     // M5: Compute Privacy UX Metrics
     const categoryCounts: Record<string, number> = {};
+    if (documentScan) {
+      categoryCounts['debug-ocr-documents'] = documentScan.documents.length;
+      categoryCounts['debug-ocr-secrets'] = documentScan.secrets.length;
+    }
     let maskedAreaPixels = 0;
     
     // Create a temporary canvas to calculate union of masked area to avoid double-counting overlapping boxes
@@ -236,6 +380,68 @@ function containsBounds(outer: Bounds, inner: Bounds): boolean {
     && outer.y + outer.height >= inner.y + inner.height;
 }
 
+function isVerifiedDocumentBox(redaction: Redaction, scan: DocumentOcrResult | undefined, privacyGrade: PrivacyGrade = 3): boolean {
+  if (redaction.kind !== 'aadhaar-card' && redaction.kind !== 'pan-card') return false;
+  if (!scan) return false;
+  const documentKind = redaction.kind === 'aadhaar-card' ? 'aadhaar-card' : 'pan-card';
+  return scan.documents.some(document =>
+    document.kind === documentKind
+    && document.confidence >= DOCUMENT_OCR_MIN_CONFIDENCE
+    && completeDocumentCoverage(document, scan.secrets, privacyGrade)
+    && (containsBounds(redaction.bounds, document.bounds) || containsBounds(document.bounds, redaction.bounds)));
+}
+
+function sameBounds(a: Bounds, b: Bounds): boolean {
+  return Math.abs(a.x - b.x) < 0.5
+    && Math.abs(a.y - b.y) < 0.5
+    && Math.abs(a.width - b.width) < 0.5
+    && Math.abs(a.height - b.height) < 0.5;
+}
+
+function coversWholeImage(bounds: Bounds, width: number, height: number): boolean {
+  return bounds.x <= 2
+    && bounds.y <= 2
+    && bounds.x + bounds.width >= width - 2
+    && bounds.y + bounds.height >= height - 2;
+}
+
+/**
+ * Remove a whole-media mask only when local OCR positively identified a
+ * supported document and every required credential for that document type
+ * inside that exact media box. Partial OCR remains fail-closed.
+ */
+function narrowVerifiedDocumentMedia(
+  redactions: readonly Redaction[],
+  scan: DocumentOcrResult | undefined,
+  privacyGrade: PrivacyGrade = 3,
+): Redaction[] {
+  if (!scan || scan.documents.length === 0 || scan.secrets.length === 0) return [...redactions];
+  return redactions.filter((item) => {
+    if (item.kind !== 'uninspectable-media') return true;
+    return !scan.documents.some(document =>
+      document.confidence >= DOCUMENT_OCR_MIN_CONFIDENCE
+      && sameBounds(document.bounds, item.bounds)
+      && completeDocumentCoverage(document, scan.secrets, privacyGrade)
+      && scan.secrets.some(secret =>
+        sameBounds(secret.mediaBounds, document.bounds)
+        && containsBounds(item.bounds, secret.bounds)));
+  });
+}
+
+function completeDocumentCoverage(
+  document: DocumentOcrResult['documents'][number],
+  secrets: DocumentOcrResult['secrets'],
+  privacyGrade: PrivacyGrade = 3,
+): boolean {
+  const found = new Set(
+    secrets
+      .filter(secret => sameBounds(secret.mediaBounds, document.bounds))
+      .map(secret => secret.secretType),
+  );
+  const required = requiredDocumentFields(document.kind, privacyGrade);
+  return required.every(secretType => found.has(secretType));
+}
+
 function uniformViewportScale(scaleX: number, scaleY: number): boolean {
   return Number.isFinite(scaleX) && Number.isFinite(scaleY) && scaleX > 0 && scaleY > 0
     && Math.abs(scaleX - scaleY) <= Math.max(scaleX, scaleY) * 0.02;
@@ -299,6 +505,18 @@ function padded(bounds: Bounds, width: number, height: number): Bounds {
   return { x, y, width: right - x, height: bottom - y };
 }
 
+function tightlyPadded(bounds: Bounds, width: number, height: number): Bounds {
+  // OCR word boxes are already field-specific. A small fixed gutter covers
+  // antialiasing without spreading into the public heading next to the value.
+  const paddingX = Math.max(2, Math.min(4, bounds.width * 0.025));
+  const paddingY = Math.max(2, Math.min(3, bounds.height * 0.08));
+  const x = clamp(bounds.x - paddingX, 0, width);
+  const y = clamp(bounds.y - paddingY, 0, height);
+  const right = clamp(bounds.x + bounds.width + paddingX, x, width);
+  const bottom = clamp(bounds.y + bounds.height + paddingY, y, height);
+  return { x, y, width: right - x, height: bottom - y };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -343,11 +561,18 @@ export const imageRedactorInternals = {
   padded,
   integerMaskBounds,
   expandedSemanticMaskBounds,
+  tightlyPadded,
   bytesToBase64,
   dataUrlToBlob,
   placeholderFor,
+  placeholderForDocumentSecret,
   uniformViewportScale,
   shouldRedactVisionClass,
   redactionKindForVisionClass,
+  narrowVerifiedDocumentMedia,
+  completeDocumentCoverage,
+  sameBounds,
+  coversWholeImage,
+  isVerifiedDocumentBox,
 };
 

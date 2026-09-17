@@ -18,6 +18,7 @@ ext.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     request.canaries,
     request.privacyGrade,
     request.task ?? '',
+    request.highAssuranceMode ?? false,
   )
     .then((raster) => sendResponse({
       target: OFFSCREEN_TARGET, requestId: request.requestId, ok: true, type: 'SANITIZE_RESULT', raster,

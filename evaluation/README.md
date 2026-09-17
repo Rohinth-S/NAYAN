@@ -21,6 +21,7 @@ The corpus is intentionally narrow. It tests synthetic PAN-, Aadhaar-, Indian-ph
 ## Files
 
 - `corpus/synthetic_cases.json`: labeled, explicitly synthetic fixtures and canaries.
+- `corpus/adversarial-privacy-v1.json`: held-out synthetic coverage for multilingual text, canvas/image/QR/CSS/shadow-DOM surfaces, spacing errors, and overlap geometry. Its `results` field is intentionally `null` until a measured browser run produces evidence.
 - `schemas/corpus.schema.json`: JSON Schema for corpus authors.
 - `schemas/run-results.schema.json`: JSON Schema for measured result producers.
 - `examples/run-results.template.json`: empty template; its null metadata and empty observations are deliberate.

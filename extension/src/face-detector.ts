@@ -123,6 +123,7 @@ export class LocalFaceDetector {
         this.session = await ort.InferenceSession.create(model, {
           executionProviders: ['webgpu'],
           graphOptimizationLevel: 'all',
+          logSeverityLevel: 3,
         });
         this.backend = 'webgpu';
         return;
@@ -145,6 +146,7 @@ export class LocalFaceDetector {
         this.session = await ort.InferenceSession.create(model, {
           executionProviders: ['wasm'],
           graphOptimizationLevel: 'all',
+          logSeverityLevel: 3,
         });
         this.backend = 'wasm';
         this.failure = '';

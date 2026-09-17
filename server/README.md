@@ -44,8 +44,13 @@ $env:PRIVACY_AGENT_OLLAMA_MODEL = "qwen3-vl:2b-instruct"
 ```
 
 Open `http://127.0.0.1:8765/demo`. The page contains fictional test PII in visible text, a password input, a
-DOM attribute, a link URL, and a synthetic face. The extension should show all corresponding masks before it
-enables **Send sanitized context**.
+DOM attribute, a link URL, and a synthetic face. Its local media-policy lab also includes a synthetic
+Aadhaar-style document with a synthetic female portrait, a PAN card with a synthetic male portrait, a cat image, and a public computer illustration so the extension can demonstrate
+selective document redaction, full-image biometric masking, and explicit public-object preservation. The
+two document portraits are direct responsive HTML media overlays above the card artwork; this avoids the
+cross-browser failure mode where external image references nested inside an SVG rendered through `<img>`
+appear as blank photo boxes, while keeping each portrait tagged as `data-privacy-media-kind="person"`. The
+extension should show all corresponding masks before it enables **Send sanitized context**.
 
 Health endpoints:
 
@@ -135,10 +140,16 @@ Allowed action shapes are:
 - `scroll`: `direction` (`up` or `down`), `amount` (1–5000), and an optional scroll-region `elementId`
 - `wait`: `milliseconds` (100–5000)
 - `done`: optional `message`
+- `hover`: `elementId`
+- `focus`: `elementId`
+- `doubleClick`: `elementId`
+- `check` / `uncheck`: `elementId` for a checkbox
+- `select`: `elementId`, `option` for a native combobox
 
 All other action fields are forbidden. An element target must exist in the same observation, disabled targets
-are rejected, and input targets must be marked editable. The extension must independently check the returned
-snapshot and current document revision immediately before execution.
+are rejected, checkbox/select actions must target matching roles, and input targets must be marked editable.
+`select.option` is scanned against the configured PII floor before model execution completes. The extension must
+independently check the returned snapshot and current document revision immediately before execution.
 
 ## Boundary checks
 

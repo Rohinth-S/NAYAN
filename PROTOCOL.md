@@ -87,7 +87,20 @@ The extension polls `GET /v1/reason/{jobId}` with the same authentication and `P
 }
 ```
 
-No other properties are permitted. `state.required` is structural form metadata only; it never carries a field value. `redactionMode: "semantic"` means each sensitive rectangle is replaced locally with a neutral background and an italic category-only marker such as `[REDACTED:EMAIL]`; `redactionMode: "opaque"` is reserved for the explicit full-mask fallback. Older clients may omit `redactionMode` and the server treats it as `opaque`. Older clients may omit `grade` and the server treats it as the fail-safe Grade 3. Older clients may omit `state.required` and the server treats it as `false`. Clients may send `privacy.registryDigest` as `sha256:` plus 64 lowercase hex characters; when present the server requires an exact match with the compiled detector-registry digest, and when absent the server keeps the existing invariant-floor scan. `page.origin` is a keyed, session-scoped alias with the exact shape `https://site-<20 lowercase hex>.invalid`; it does not reveal the visited hostname and deliberately contains no path, query, fragment, credentials, or full URL. Values, HTML, selectors, DOM attributes, cookies, local file paths, original image bytes, and secret maps are forbidden. The HTTP `Origin` header used for server CORS is separate from this aliased observation field.
+No other properties are permitted. `state.required` is structural form metadata only; it never carries a field value. `redaction.source` is one of `dom`, `regex`, `onnx`, `unified-detector`, `dbnet`, `ocr`, or `fallback`; `ocr` means a local credential-only document OCR pass emitted category and bounds without sending OCR text. `redactionMode: "semantic"` means each sensitive rectangle is replaced locally with a neutral background and an italic category-only marker such as `[REDACTED:EMAIL]`; `redactionMode: "opaque"` is reserved for the explicit full-mask fallback. Older clients may omit `redactionMode` and the server treats it as `opaque`. Older clients may omit `grade` and the server treats it as the fail-safe Grade 3. Older clients may omit `state.required` and the server treats it as `false`. Clients may send `privacy.registryDigest` as `sha256:` plus 64 lowercase hex characters; when present the server requires an exact match with the compiled detector-registry digest, and when absent the server keeps the existing invariant-floor scan. `page.origin` is a keyed, session-scoped alias with the exact shape `https://site-<20 lowercase hex>.invalid`; it does not reveal the visited hostname and deliberately contains no path, query, fragment, credentials, or full URL. Values, HTML, selectors, DOM attributes, cookies, local file paths, original image bytes, OCR text, and secret maps are forbidden. The HTTP `Origin` header used for server CORS is separate from this aliased observation field.
+
+When the user enables high-assurance structure-only mode, the same schema is
+used with an all-black freshly encoded PNG, `visualFallback: "full-mask"`,
+`redactionMode: "opaque"`, and `detectorBackend: "missing"`. The accompanying
+DOM capsule is still grade-sanitized. This mode deliberately avoids local
+visual interpretation for that capture so the remote model receives
+structure only.
+
+The extension maintains a local outbound privacy receipt for every preview or
+accepted request. The receipt is UI-only and is never added to this protocol.
+It contains aggregate category counts, mask area, detector/mode, a hash of the
+sanitized PNG, a request count, and sent/not-sent state; it never contains raw
+labels, OCR tokens, field values, or original pixels.
 
 ### What crosses the boundary
 
@@ -144,8 +157,14 @@ Exactly one action is returned. Allowed actions and their complete field sets ar
 - `scroll`: `type`, `direction`, `amount`, with optional `elementId` for a scroll region
 - `wait`: `type`, `milliseconds`
 - `done`: `type`, with optional `message`
+- `hover`: `type`, `elementId`
+- `focus`: `type`, `elementId`
+- `doubleClick`: `type`, `elementId`
+- `check`: `type`, `elementId` for a checkbox
+- `uncheck`: `type`, `elementId` for a checkbox
+- `select`: `type`, `elementId`, `option` (an exact public native-select label/value)
 
-No other action properties are permitted. The extension rejects a mismatched snapshot, changed document or viewport, missing element, disallowed field, invalid range, or stale DOM target. Version 1.0 does not support inserting private values: private form values remain local and are never requested from the reasoning server.
+No other action properties are permitted. The extension rejects a mismatched snapshot, changed document or viewport, missing element, disallowed field, invalid range, or stale DOM target. Version 1.0 does not support inserting private values: private form values remain local and are never requested from the reasoning server. `select` is resolved locally against the current native `<select>` and its option is rejected by the server if it resembles protected PII. `hover`, `focus`, `check`, and `uncheck` do not grant script, selector, URL, cookie, storage, download, upload, or keyboard privileges.
 
 ### Action grammar
 
@@ -166,7 +185,14 @@ flowchart TD
 
 ## Failure behavior
 
-Capture, inference, decoding, redaction, validation, encoding, or transport preparation failure produces no reasoning request. Uninspectable visual regions receive semantic placeholders when local detection is available. If detection is unavailable, the explicit full-image opaque fallback is required. The sanitized image is encoded into a new PNG; an overlay on top of the original pixels is not a valid outbound artifact.
+Capture, inference, decoding, redaction, validation, encoding, final-DLP, or
+transport preparation failure produces no reasoning request. Uninspectable
+visual regions receive semantic placeholders when local detection is
+available. If detection is unavailable, the explicit full-image opaque
+fallback is required. The sanitized image is encoded into a new PNG; an
+overlay on top of the original pixels is not a valid outbound artifact. The
+final local DLP gate scans the serialized task, labels, and metadata and
+rejects suspicious values before the POST is constructed.
 
 The guarantee applies to reasoning-server traffic. Normal traffic between the visited page and its own servers remains visible to that site and is governed separately.
 

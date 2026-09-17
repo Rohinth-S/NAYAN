@@ -28,21 +28,24 @@ The project is an extension and reasoning service. It is **not a custom browser 
 - The redactor draws a completely new sanitized PNG. Semantic category placeholders or a verified opaque full-image fallback replace sensitive regions. The original screenshot is not retained in the outbound observation.
 - Chrome uses an offscreen document for decoding, inference, composition, and PNG encoding. Firefox uses the compatible direct local path.
 - A page-owned scroll-drift guard invalidates a captured set-of-mark registry when the user scrolls or the viewport changes while the server is reasoning.
-- The extension executes only the allowlisted actions `click`, `input`, `scroll`, `wait`, and `done`, after snapshot, document, revision, visibility, editability, origin, tab, window, and duplicate-action checks.
+- The extension executes only the allowlisted actions `click`, `input`, `scroll`, `wait`, `done`, `hover`, `focus`, `doubleClick`, `check`, `uncheck`, and `select`, after snapshot, document, revision, visibility, editability, origin, tab, window, and duplicate-action checks.
 - Potentially destructive clicks such as submit, pay, delete, or navigation require native user confirmation.
 - The FastAPI server validates the strict protocol, PNG structure, mask evidence, policy digest, request limits, authentication, origins, and model responses.
 - Slow reasoning is admitted through a bounded asynchronous job queue. The development profile uses in-memory jobs by default; SQLite metadata or Redis can be selected. Production configuration requires Redis.
 - Ollama is the default provider adapter. The local setup uses `qwen3-vl:2b-instruct` on loopback and asks for strict JSON action output.
 - A provider-neutral sanitized gateway adapter is implemented for a hosted or air-gapped reasoning service.
 - A deterministic structural planner is available only as a development fallback for unambiguous schema-valid tasks. Production configuration forces it off.
-- The synthetic portal includes Indian-style PII, a face, sensitive fields, privacy-grade labels, synthetic credit-card and PAN-card image fixtures, a confirmation checkbox, and a submit action.
-- The release gate currently reports 92 extension tests, 157 server tests, and 32 evaluation tests passing, plus typecheck, lint, package, governance, security, SBOM, metadata, and source-egress checks.
+- The synthetic portal includes Indian-style PII, a face, sensitive fields, privacy-grade labels, synthetic credit-card, PAN-card, and Aadhaar-style document fixtures, a person-image/object media lab, a confirmation checkbox, and a submit action.
+- The release gate currently reports the test totals recorded in `evidence/latest-release.json`, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
 
 ### What is deliberately not claimed as default
 
 - The checked-in default package does **not** contain `yolo-privacy-v1.onnx`; the YOLO implementation is present but asset-gated.
 - The checked-in default package does **not** contain `dbnet-text-det.onnx`; DBNet canvas text detection is implemented but optional and asset-gated.
-- OCR, multilingual NER, barcode decoding, and the small visual model are implemented as an opt-in local perception bundle. They are packaged only by `npm run package:perception` after locked local assets pass checksums. The normal build keeps the deterministic baseline.
+- The normal package does not enable OCR/NER/barcode perception. An evaluated, checksum-locked perception bundle is opt-in and is packaged only by `npm run package:perception` after `LOCAL_PERCEPTION_EVALUATED=1`; unsupported or uncertain media remains fully masked.
+- High-assurance structure-only mode sends sanitized DOM structure plus a newly generated opaque black PNG. It skips visual interpretation and is exposed in both panel UIs.
+- Each capture produces a local privacy receipt containing only aggregate categories, detector backend, transmission mode, masked-area percentage, request count, and a SHA-256 hash of the sanitized image. Raw values are never shown in the receipt.
+- A final local DLP gate scans serialized task text, labels, metadata, and canaries immediately before the sole network egress. A finding blocks the request.
 - `agent-graph.ts` documents the Approach B state topology and human-in-the-loop transitions. The live controller is the bounded TypeScript loop in `background.ts`; LangGraph.js is not the current runtime.
 - The synthetic evidence is not universal PII recall/precision evidence. It does not certify production use with real personal data.
 - A built Firefox package is not the same as a live Firefox browser-matrix run. A live Firefox run remains separate evidence.
@@ -321,8 +324,13 @@ The current action protocol supports:
 | `scroll` | Scrolls the page or a verified scroll-region element by a bounded amount. |
 | `wait` | Waits a bounded number of milliseconds before the next capture. |
 | `done` | Ends the loop with a model message/status. |
+| `hover` | Dispatches a local hover sequence to a current target for menus and tooltips. |
+| `focus` | Focuses a current target without exposing selectors or script execution. |
+| `doubleClick` | Dispatches a local double-click event and reuses destructive-action confirmation. |
+| `check` / `uncheck` | Explicitly sets a checkbox state, avoiding ambiguous toggle semantics. |
+| `select` | Chooses an exact public label/value on a current native `<select>`; custom comboboxes are rejected locally. |
 
-The content script rejects arbitrary JavaScript, CSS selectors, arbitrary URLs, keyboard injection, unknown action fields, stale snapshot IDs, stale document IDs/revisions, cross-origin targets, hidden/detached targets, disabled controls, read-only controls, and duplicate in-flight action keys.
+The content script rejects arbitrary JavaScript, CSS selectors, arbitrary URLs, keyboard injection, unknown action fields, stale snapshot IDs, stale document IDs/revisions, cross-origin targets, hidden/detached targets, disabled controls, read-only controls, unsupported custom combobox selection, and duplicate in-flight action keys. The server validates checkbox/combobox roles and applies the PII floor to `select.option`.
 
 ### Capture identity and scroll-drift guard
 
@@ -402,6 +410,13 @@ The implementation is present, but the repository's default package contains no 
 3. **Tier 3 — manual escalation:** require user review/escalation when a canvas-rendered application cannot be safely classified.
 
 The default content capture path conservatively masks media and frames as uninspectable. The DBNet module and policy are implemented, but the default build does not claim DBNet coverage unless its asset and explicit wiring are present.
+
+The default build also runs a narrow, checksum-verified local document-OCR pass
+on media that would otherwise be fully masked. A confident `credit-card`,
+`pan-card`, or `aadhaar-card` classification replaces the whole-media mask with
+credential/PII boxes only; the document artwork remains available to the
+reasoner. A person image stays fully masked, an explicitly marked public object
+may remain visible, and unknown or low-confidence media stays fully masked.
 
 ### Optional local perception bundle
 
@@ -575,6 +590,8 @@ Recorded evidence:
 | `evidence/local-perception.json` | Real local OCR/NER/model measurements on a small synthetic corpus; category presence and latency only. |
 | `evidence/latest-release.json` | Automated release-gate checks, package hashes, and current test-suite totals. |
 | `evidence/sih-demo-package.json` | Synthetic SIH demo matrix, grade behavior, no-real-data statement, and failure-mode demonstrations. |
+| `evidence/browser-matrix-chrome.json` | Chrome extension smoke evidence for semantic preview, structure-only preview, and receipt rendering. |
+| `evaluation/corpus/adversarial-privacy-v1.json` | Held-out synthetic privacy cases covering multilingual, canvas, QR, CSS, shadow DOM, and overlapping-element risks; result fields remain empty until measured. |
 
 The recorded live Ollama evidence is machine-specific. It must not be presented as a universal latency or accuracy guarantee.
 
@@ -586,9 +603,9 @@ The latest recorded release gate reports:
 
 | Suite/check | Result |
 | --- | ---: |
-| Extension Vitest tests | 92 passed |
-| Server Pytest tests | 157 passed |
-| Evaluation Pytest tests | 32 passed |
+| Extension Vitest tests | See `evidence/latest-release.json` |
+| Server Pytest tests | See `evidence/latest-release.json` |
+| Evaluation Pytest tests | See `evidence/latest-release.json` |
 | TypeScript typecheck | passed |
 | Ruff lint | passed |
 | Chrome package | built |

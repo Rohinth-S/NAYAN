@@ -87,6 +87,19 @@ describe('v1 protocol validation', () => {
     })).toThrow('outside');
   });
 
+  it('accepts OCR redaction boxes with bounded confidence', () => {
+    const base = observation();
+    expect(() => validateObservation({
+      ...base,
+      redactions: [{
+        kind: 'sensitive-field',
+        source: 'ocr',
+        bounds: { x: 10, y: 10, width: 80, height: 20 },
+        confidence: 0.91,
+      }],
+    })).not.toThrow();
+  });
+
   it('accepts revision-bound allowlisted actions', () => {
     const result = parseReasonResponse({
       schemaVersion: SCHEMA_VERSION,
@@ -106,6 +119,39 @@ describe('v1 protocol validation', () => {
       schemaVersion: SCHEMA_VERSION,
       snapshotId,
       action: { type: 'click', elementId: 'e_1234567890abcdef', text: 'unused' },
+    }, snapshotId)).toThrow('Unexpected field');
+  });
+
+  it('accepts safe interaction actions with their exact fields', () => {
+    const actions = [
+      { type: 'hover', elementId: 'e_1234567890abcdef' },
+      { type: 'focus', elementId: 'e_1234567890abcdef' },
+      { type: 'doubleClick', elementId: 'e_1234567890abcdef' },
+      { type: 'check', elementId: 'e_1234567890abcdef' },
+      { type: 'uncheck', elementId: 'e_1234567890abcdef' },
+      { type: 'select', elementId: 'e_1234567890abcdef', option: 'India' },
+    ] as const;
+    for (const action of actions) {
+      const result = parseReasonResponse({ schemaVersion: SCHEMA_VERSION, snapshotId, action }, snapshotId);
+      expect(result.action.type).toBe(action.type);
+    }
+  });
+
+  it('rejects malformed safe interaction actions', () => {
+    expect(() => parseReasonResponse({
+      schemaVersion: SCHEMA_VERSION,
+      snapshotId,
+      action: { type: 'focus' },
+    }, snapshotId)).toThrow('requires elementId');
+    expect(() => parseReasonResponse({
+      schemaVersion: SCHEMA_VERSION,
+      snapshotId,
+      action: { type: 'select', elementId: 'e_1234567890abcdef' },
+    }, snapshotId)).toThrow('requires elementId and option');
+    expect(() => parseReasonResponse({
+      schemaVersion: SCHEMA_VERSION,
+      snapshotId,
+      action: { type: 'select', elementId: 'e_1234567890abcdef', option: 'India', text: 'unexpected' },
     }, snapshotId)).toThrow('Unexpected field');
   });
 

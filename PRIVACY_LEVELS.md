@@ -100,7 +100,9 @@ For every screenshot step, the client applies the following sequence locally:
 3. Run the bundled ONNX face detector through WebGPU or WASM.
 4. Assign each finding to an always-protected, Grade 2 or Grade 3 policy class.
 5. Apply the selected grade and merge overlapping protected rectangles.
-6. Replace protected pixels with category-only semantic cards in a fresh PNG.
+6. Replace protected pixels with category-only semantic cards in a fresh PNG,
+   or create an opaque all-black PNG when high-assurance structure-only mode
+   is selected.
 7. Apply the same grade-aware text sanitizer to the task, page title and element labels.
 8. Validate the exact serialized request and allow the single reasoning egress only if all checks pass.
 
@@ -127,6 +129,6 @@ sequenceDiagram
 
 ## Current coverage and limits
 
-The current release directly recognizes email, Indian phone numbers, Aadhaar, PAN, card-like numbers, IPv4, prefixed dates of birth, prefixed passport numbers, labeled names and addresses, sensitive field metadata, exact custom private values and faces. It masks visual regions that it cannot inspect safely.
+The current release directly recognizes email, Indian phone numbers, Aadhaar, PAN, card-like numbers, IPv4, prefixed dates of birth, prefixed passport numbers, labeled names and addresses, sensitive field metadata, exact custom private values and faces. The default package does not admit OCR/NER/barcode perception; an explicitly evaluated and checksum-verified bundle may be built after the team sets the admission gate. Unsupported visual regions remain masked when the bundle is absent or uncertain.
 
-General multilingual NER, OCR inside images/canvas/video, QR-code decoding, signatures, minors, vehicle identifiers, IPv6/MAC/IMEI, and broad health, genetic, religious, sexual or political classification are not claimed in v1. These categories belong in the policy now so a future local OCR/NER model can add detections without changing what the grades mean.
+General multilingual NER, OCR for arbitrary images/canvas/video, QR-code decoding, signatures, minors, vehicle identifiers, IPv6/MAC/IMEI, and broad health, genetic, religious, sexual or political classification are not claimed in v1. These categories belong in the policy now so a future local OCR/NER model can add detections without changing what the grades mean.

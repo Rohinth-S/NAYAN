@@ -113,10 +113,13 @@ export function validateObservation(
   if (!Array.isArray(value.redactions) || value.redactions.length > MAX_REDACTIONS) throw new Error('Invalid redactions');
   for (const redaction of value.redactions) {
     if (!isRecord(redaction)) throw new Error('Invalid redaction');
-    exactKeys(redaction, ['kind', 'source', 'bounds']);
+    exactKeys(redaction, ['kind', 'source', 'bounds'], ['confidence']);
     if (!REDACTION_KINDS.includes(redaction.kind as never)) throw new Error('Invalid redaction kind');
-    if (!['dom', 'regex', 'onnx', 'fallback'].includes(String(redaction.source))) throw new Error('Invalid redaction source');
+    if (!['dom', 'regex', 'onnx', 'unified-detector', 'dbnet', 'ocr', 'fallback'].includes(String(redaction.source))) {
+      throw new Error('Invalid redaction source');
+    }
     validateBounds(redaction.bounds);
+    if (redaction.confidence !== undefined) finiteNumber(redaction.confidence, 'redaction.confidence', 0, 1);
   }
 
   if (!isRecord(value.privacy)) throw new Error('Invalid privacy metadata');
@@ -172,13 +175,33 @@ export function validateObservation(
 
 function validateAction(value: unknown): asserts value is AgentAction {
   if (!isRecord(value)) throw new Error('Invalid action');
-  if (!['click', 'input', 'scroll', 'wait', 'done'].includes(String(value.type))) throw new Error('Unsupported action');
+  if (
+    ![
+      'click',
+      'input',
+      'scroll',
+      'wait',
+      'done',
+      'hover',
+      'focus',
+      'doubleClick',
+      'check',
+      'uncheck',
+      'select',
+    ].includes(String(value.type))
+  ) throw new Error('Unsupported action');
   const allowedByType: Record<AgentAction['type'], readonly string[]> = {
     click: ['type', 'elementId'],
     input: ['type', 'elementId', 'text'],
     scroll: ['type', 'direction', 'amount', 'elementId'],
     wait: ['type', 'milliseconds'],
     done: ['type', 'message'],
+    hover: ['type', 'elementId'],
+    focus: ['type', 'elementId'],
+    doubleClick: ['type', 'elementId'],
+    check: ['type', 'elementId'],
+    uncheck: ['type', 'elementId'],
+    select: ['type', 'elementId', 'option'],
   };
   const type = value.type as AgentAction['type'];
   exactKeys(value, ['type'], allowedByType[type]!.filter((key) => key !== 'type'));
@@ -186,6 +209,7 @@ function validateAction(value: unknown): asserts value is AgentAction {
     throw new Error('Invalid action elementId');
   }
   if (value.text !== undefined) boundedString(value.text, 'action.text', 512, true);
+  if (value.option !== undefined) boundedString(value.option, 'action.option', 300);
   if (value.message !== undefined) boundedString(value.message, 'action.message', 512, true);
   if (value.direction !== undefined && !['up', 'down'].includes(String(value.direction))) throw new Error('Invalid scroll direction');
   if (value.amount !== undefined) finiteNumber(value.amount, 'action.amount', 1, 5_000);
@@ -195,6 +219,12 @@ function validateAction(value: unknown): asserts value is AgentAction {
   if (value.type === 'input' && (!value.elementId || value.text === undefined)) throw new Error('input requires elementId and text');
   if (value.type === 'scroll' && (!value.direction || value.amount === undefined)) throw new Error('scroll requires direction and amount');
   if (value.type === 'wait' && value.milliseconds === undefined) throw new Error('wait requires milliseconds');
+  if (['hover', 'focus', 'doubleClick', 'check', 'uncheck'].includes(String(value.type)) && !value.elementId) {
+    throw new Error(`${value.type} requires elementId`);
+  }
+  if (value.type === 'select' && (!value.elementId || value.option === undefined)) {
+    throw new Error('select requires elementId and option');
+  }
 }
 
 export function parseReasonResponse(value: unknown, expectedSnapshotId: string): ReasonResponse {

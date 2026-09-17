@@ -336,15 +336,91 @@ def create_app(
 
     @app.get("/demo/assets/app.js", include_in_schema=False)
     async def demo_javascript() -> FileResponse:
-        return FileResponse(DEMO_DIR / "app.js", media_type="application/javascript")
+        return FileResponse(
+            DEMO_DIR / "app.js",
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/demo/assets/app.css", include_in_schema=False)
     async def demo_stylesheet() -> FileResponse:
-        return FileResponse(DEMO_DIR / "app.css", media_type="text/css")
+        return FileResponse(
+            DEMO_DIR / "app.css",
+            media_type="text/css",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/demo/assets/face.jpg", include_in_schema=False)
     async def demo_face() -> FileResponse:
-        return FileResponse(DEMO_DIR / "face.jpg", media_type="image/jpeg")
+        return FileResponse(
+            DEMO_DIR / "face.jpg",
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/cat.png", include_in_schema=False)
+    async def demo_cat() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "cat.png",
+            media_type="image/png",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/female.png", include_in_schema=False)
+    async def demo_female() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "female.png",
+            media_type="image/png",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/male.png", include_in_schema=False)
+    async def demo_male() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "male.png",
+            media_type="image/png",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/credit-card.svg", include_in_schema=False)
+    async def demo_credit_card() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "credit-card.svg",
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/pan-card.svg", include_in_schema=False)
+    async def demo_pan_card() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "pan-card.svg",
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/aadhaar-card.svg", include_in_schema=False)
+    async def demo_aadhaar_card() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "aadhaar-card.svg",
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/object.svg", include_in_schema=False)
+    async def demo_object() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "object.svg",
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/demo/assets/computer.png", include_in_schema=False)
+    async def demo_computer() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "computer.png",
+            media_type="image/png",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/demo/api/reset", response_model=DemoState)
     async def demo_reset() -> DemoState:

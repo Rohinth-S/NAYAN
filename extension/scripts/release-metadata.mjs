@@ -29,13 +29,21 @@ for (const browser of ['chrome', 'firefox']) {
 }
 const digest = process.env.PRIVACY_AGENT_OLLAMA_MODEL_DIGEST || null;
 if (digest && !/^sha256:[0-9a-f]{64}$/.test(digest)) throw new Error('Invalid reasoning model digest');
+const archivePaths = files.filter(file => file.path.endsWith('.zip')).map(file => join(root, file.path));
+const signed = archivePaths.length > 0 && archivePaths.every(file => existsSync(`${file}.asc`) && existsSync(`${file}.sha256`));
 const output = {
-  metadataVersion: '1.1',
+  metadataVersion: '1.2',
   node: process.version,
-  signingStatus: 'unsigned',
-  model: { id: process.env.PRIVACY_AGENT_OLLAMA_MODEL || 'qwen3-vl:2b-instruct', digest, digestRequired: Boolean(digest) },
+  signingStatus: signed ? 'signed' : 'unsigned',
+  model: {
+    id: process.env.PRIVACY_AGENT_OLLAMA_MODEL || 'qwen3-vl:2b-instruct',
+    digest,
+    digestRequired: process.env.PRIVACY_AGENT_PRODUCTION === '1',
+  },
   promptVersion: '2026-09-16.1',
   detectorRegistryVersion: '1.1.0',
+  documentOcrEnabled: existsSync(join(dist, 'chrome/ocr/lang-data/eng.traineddata')),
+  documentOcrLockSha256: createHash('sha256').update(readFileSync(join(root, 'models/ocr-lock.json'))).digest('hex'),
   perceptionEnabled: existsSync(join(dist, 'chrome/perception')),
   perceptionLockSha256: createHash('sha256').update(readFileSync(join(root, 'models/perception-lock.json'))).digest('hex'),
   artifacts: files.sort((a, b) => a.path.localeCompare(b.path)),

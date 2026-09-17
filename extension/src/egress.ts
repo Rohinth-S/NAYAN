@@ -1,4 +1,5 @@
 import { assertNoCanaries, assertNoUnsafeKeys } from './privacy';
+import { assertFinalDlpClear } from './dlp';
 import type { ReasonResponse, SanitizedObservation } from './types';
 import { parseReasonResponse, validateObservation } from './validation';
 
@@ -120,6 +121,7 @@ export async function sendSanitizedObservation(
   const endpoint = validateReasoningEndpoint(endpointRaw);
   validateObservation(observation);
   assertNoUnsafeKeys(observation);
+  assertFinalDlpClear(observation, canaries);
   const body = JSON.stringify(observation);
   assertNoCanaries(body, canaries);
 

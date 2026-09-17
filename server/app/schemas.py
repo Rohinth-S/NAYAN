@@ -108,7 +108,7 @@ class Redaction(StrictModel):
         "uninspectable-media",
         "visual-fallback",
     ]
-    source: Literal["dom", "regex", "onnx", "unified-detector", "dbnet", "fallback"]
+    source: Literal["dom", "regex", "onnx", "unified-detector", "dbnet", "ocr", "fallback"]
     bounds: Bounds
     # Approach B: confidence from unified detector, absent for rule-based sources.
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -166,13 +166,28 @@ class SanitizedObservation(StrictModel):
         return self
 
 
-ActionType = Literal["click", "input", "scroll", "wait", "done"]
+ActionType = Literal[
+    "click",
+    "input",
+    "scroll",
+    "wait",
+    "done",
+    "hover",
+    "focus",
+    "doubleClick",
+    "check",
+    "uncheck",
+    "select",
+]
 
 
 class BrowserAction(StrictModel):
     type: ActionType
     elementId: str | None = Field(default=None, pattern=ELEMENT_ID_PATTERN)
     text: str | None = Field(default=None, max_length=512)
+    # Public option label/value only; the local executor resolves it against a
+    # current native <select> without exposing the option list in the protocol.
+    option: str | None = Field(default=None, min_length=1, max_length=300)
     direction: Literal["up", "down"] | None = None
     amount: int | None = Field(default=None, ge=1, le=5_000)
     milliseconds: int | None = Field(default=None, ge=100, le=5_000)
@@ -183,6 +198,7 @@ class BrowserAction(StrictModel):
         present = {
             "elementId": self.elementId is not None,
             "text": self.text is not None,
+            "option": self.option is not None,
             "direction": self.direction is not None,
             "amount": self.amount is not None,
             "milliseconds": self.milliseconds is not None,
@@ -194,6 +210,12 @@ class BrowserAction(StrictModel):
             "scroll": {"direction", "amount"},
             "wait": {"milliseconds"},
             "done": set(),
+            "hover": {"elementId"},
+            "focus": {"elementId"},
+            "doubleClick": {"elementId"},
+            "check": {"elementId"},
+            "uncheck": {"elementId"},
+            "select": {"elementId", "option"},
         }
         allowed: dict[str, set[str]] = {
             "click": {"elementId"},
@@ -201,6 +223,12 @@ class BrowserAction(StrictModel):
             "scroll": {"elementId", "direction", "amount"},
             "wait": {"milliseconds"},
             "done": {"message"},
+            "hover": {"elementId"},
+            "focus": {"elementId"},
+            "doubleClick": {"elementId"},
+            "check": {"elementId"},
+            "uncheck": {"elementId"},
+            "select": {"elementId", "option"},
         }
         missing = required[self.type] - {name for name, exists in present.items() if exists}
         extra = {name for name, exists in present.items() if exists} - allowed[self.type]

@@ -7,6 +7,7 @@
     "build": "node scripts/build.mjs",
     "package": "node scripts/build.mjs --package",
     "package:perception": "node scripts/build.mjs --package --perception",
+    "prepare:ocr": "node scripts/prepare-ocr.mjs",
     "evaluate:perception": "node scripts/evaluate-perception.mjs",
     "release-metadata": "node scripts/release-metadata.mjs",
     "test": "vitest run",

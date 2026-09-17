@@ -83,6 +83,11 @@ body::before {
 .step-badge { color: #d2d2d6; }
 .profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 0; }
 .profile-field { padding: 13px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 11px; background: rgba(0, 0, 0, .26); }
+.profile-field { position: relative; }
+.profile-field::after { content: "G" attr(data-privacy-grade); position: absolute; top: 9px; right: 9px; display: grid; width: 22px; height: 18px; place-items: center; border: 1px solid rgba(255, 255, 255, .22); border-radius: 5px; color: #d8d8dc; background: rgba(255, 255, 255, .08); font-size: .54rem; font-weight: 850; letter-spacing: .03em; }
+.profile-field[data-privacy-grade="1"]::after { color: #050505; background: #fff; }
+.profile-field[data-privacy-grade="2"]::after { color: #fff; background: #66666d; }
+.profile-field[data-privacy-grade="3"]::after { color: #fff; background: #303037; }
 .profile-field dt { margin-bottom: 6px; color: #85858b; font-size: .67rem; }
 .profile-field dd { overflow: hidden; margin: 0; color: #e8e8eb; font-size: .8rem; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .privacy-note { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 12px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 11px; color: #a7a7ad; background: rgba(255, 255, 255, .045); font-size: .72rem; line-height: 1.4; }
@@ -100,6 +105,86 @@ body::before {
 .level-one { background: #fff; }
 .level-two { color: #fff; background: #77777d; }
 .level-three { color: #fff; background: #3d3d42; }
+.visual-fixtures { margin-top: 18px; padding: 13px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 12px; background: linear-gradient(145deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .015)); }
+.fixture-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.fixture-card { min-width: 0; margin: 0; padding: 10px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px; background: rgba(0, 0, 0, .22); }
+.fixture-image-wrap { position: relative; overflow: hidden; border-radius: 7px; background: #080808; }
+.fixture-image-wrap img { display: block; width: 100%; height: auto; aspect-ratio: 1.64; object-fit: contain; }
+.fixture-card:nth-child(2) .fixture-image-wrap img { aspect-ratio: 1.62; }
+.fixture-badge { position: absolute; right: 8px; bottom: 8px; padding: 3px 5px; border: 1px solid rgba(255, 255, 255, .3); border-radius: 4px; color: #050505; background: rgba(255, 255, 255, .88); font-size: .42rem; font-weight: 850; letter-spacing: .035em; }
+.fixture-card figcaption { display: grid; gap: 2px; margin-top: 7px; color: #e5e5e9; font-size: .62rem; }
+.fixture-card figcaption span { color: #85858a; font-size: .57rem; }
+.fixture-note { margin: 9px 0 0; color: #85858a; font-size: .59rem; line-height: 1.45; }
+.media-lab { margin-top: 19px; padding: 13px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 12px; background: linear-gradient(145deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .015)); }
+.media-lab-document { margin: 0; padding: 10px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px; background: rgba(0, 0, 0, .22); }
+.media-lab-document .fixture-image-wrap {
+  /* Keep any sub-pixel edge or fallback space in the same dark visual
+     language as the media lab instead of exposing a bright band. */
+  background: #0b0b0b;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+.media-lab-document .fixture-image-wrap img { aspect-ratio: 1.587; }
+.media-lab-document figcaption { display: grid; gap: 2px; margin-top: 7px; color: #e5e5e9; font-size: .62rem; }
+.media-lab-document figcaption span { color: #85858a; font-size: .57rem; }
+.media-lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.media-lab-grid .fixture-card { padding: 8px; }
+.media-lab-grid .fixture-image-wrap img { aspect-ratio: 1.62; }
+.media-lab-grid .fixture-card:first-child .fixture-image-wrap img { filter: grayscale(1); }
+
+/* Keep the identity document at its native card ratio so the image does not
+   acquire vertical letterboxing. The lower fixtures absorb the remaining
+   height in the confirmation card and remain fully visible. */
+.enrollment-card { display: flex; flex-direction: column; }
+.enrollment-card .media-lab { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.enrollment-card .media-lab-document { display: flex; flex: 0 0 auto; flex-direction: column; min-height: 0; overflow: hidden; }
+.enrollment-card .media-lab-document .fixture-image-wrap { flex: 0 0 auto; min-height: 0; }
+.enrollment-card .media-lab-document .fixture-image-wrap img { width: 100%; height: auto; aspect-ratio: auto; object-fit: contain; }
+.enrollment-card .media-lab-grid { flex: 1 1 auto; min-height: 220px; align-items: stretch; grid-auto-rows: minmax(180px, 1fr); }
+.enrollment-card .media-lab-grid .fixture-card { display: flex; min-height: 0; flex-direction: column; }
+.enrollment-card .media-lab-grid .fixture-image-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+.enrollment-card .media-lab-grid .fixture-image-wrap img {
+  /* Both generated fixtures are edge-to-edge artwork. Cover-fit them to the
+     flexible frames so neither card exposes vertical letterboxing. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.enrollment-card .media-lab-grid .fixture-card:first-child .fixture-image-wrap img { filter: none; }
+
+/* The portraits are real DOM media layered over the document artwork.  This
+   keeps them visible in every browser even when an SVG is rendered through an
+   <img> element (where relative SVG image references are not consistently
+   painted), while still exposing an explicit `person` media hint to the local
+   privacy filter.  Percent coordinates follow each card's viewBox. */
+.fixture-badge { z-index: 2; }
+.document-portrait-overlay {
+  position: absolute !important;
+  z-index: 1;
+  display: block !important;
+  max-width: none;
+  margin: 0;
+  aspect-ratio: auto !important;
+  object-fit: cover !important;
+  object-position: center;
+  pointer-events: none;
+}
+.document-aadhaar-wrap .document-portrait-overlay {
+  left: 5.8%;
+  top: 26.8056%;
+  width: 22% !important;
+  height: 38.3333% !important;
+  border-radius: 1.4%;
+}
+.document-pan-wrap .document-portrait-overlay {
+  left: 6.3158%;
+  top: 26.8085%;
+  width: 19.4737% !important;
+  height: 40.4255% !important;
+  border-radius: 1.1%;
+}
 
 #enrollment { display: grid; gap: 10px; }
 .enrollment-card label { display: flex; justify-content: space-between; margin-top: 3px; color: #d3d3d7; font-size: .73rem; font-weight: 650; }
@@ -161,6 +246,8 @@ select.form-control { appearance: auto; }
   .form-grid { grid-template-columns: 1fr; }
   .spectrum-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
   .spectrum-heading small { text-align: left; }
+  .fixture-grid { grid-template-columns: 1fr; }
+  .media-lab-grid { grid-template-columns: 1fr; }
   .footer { flex-wrap: wrap; }
   .footer-ref { width: 100%; }
   .progress-wrap { margin-right: 4px; margin-left: 4px; }

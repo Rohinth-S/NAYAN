@@ -22,7 +22,19 @@ def main() -> int:
     expected = {
         "schemaVersion": "1.0",
         "policyVersion": "1.0",
-        "allowedActions": ["click", "input", "scroll", "wait", "done"],
+        "allowedActions": [
+            "click",
+            "input",
+            "scroll",
+            "wait",
+            "done",
+            "hover",
+            "focus",
+            "doubleClick",
+            "check",
+            "uncheck",
+            "select",
+        ],
         "privacyGrades": [1, 2, 3],
         "singleEgressFile": "extension/src/egress.ts",
         "defaultDetectorFailure": "full-mask-or-no-request",
@@ -48,7 +60,7 @@ def main() -> int:
     action_match = re.search(r"ActionType = Literal\[(.*?)\]", schemas, re.S)
     if not action_match:
         fail("action_type_not_found")
-    actions = re.findall(r'"([a-z]+)"', action_match.group(1))
+    actions = re.findall(r'"([A-Za-z]+)"', action_match.group(1))
     if actions != manifest["allowedActions"]:
         fail("action_registry_drift")
     if not (ROOT / manifest["singleEgressFile"]).is_file():
@@ -93,7 +105,7 @@ def main() -> int:
         payload = json.loads((evidence_dir / filename).read_text(encoding="utf-8"))
         check_keys(payload)
     print(
-        "governance_check=passed protocol=1.0 policy=1.0 actions=5 grades=3 "
+        f"governance_check=passed protocol=1.0 policy=1.0 actions={len(actions)} grades=3 "
         f"single_egress=true registry_digest={digest}"
     )
     return 0

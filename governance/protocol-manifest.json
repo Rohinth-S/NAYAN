@@ -5,7 +5,19 @@
   "privacyDocument": "PRIVACY_LEVELS.md",
   "edgeCaseDocument": "EDGE_CASE_MATRIX.md",
   "singleEgressFile": "extension/src/egress.ts",
-  "allowedActions": ["click", "input", "scroll", "wait", "done"],
+  "allowedActions": [
+    "click",
+    "input",
+    "scroll",
+    "wait",
+    "done",
+    "hover",
+    "focus",
+    "doubleClick",
+    "check",
+    "uncheck",
+    "select"
+  ],
   "privacyGrades": [1, 2, 3],
   "invariantCategories": [
     "credentials",

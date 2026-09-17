@@ -452,14 +452,16 @@ metadata using documented commands without exposing protected content. (STATUS: 
 ### P13. Formal action-policy verification and browser capability expansion — P1/P2
 
 Make the server action guard auditable as a state machine before adding richer
-browser capabilities.
+or privileged browser capabilities. The current safe broker already covers
+click, input, scroll, wait, done, hover, focus, doubleClick, checkbox
+check/uncheck, and native select.
 
 Implementation steps:
 
 1. Model page revision, element state, consent state, navigation origin, and
    irreversible-operation confirmation as explicit states and transitions.
-2. Prove invariants for click/input/scroll/wait/done and any future navigation,
-   download, upload, keyboard, or tab actions; reject actions without a proof
+2. Prove invariants for every current safe action and any future navigation,
+   download, upload, keyboard, or tab action; reject actions without a proof
    obligation or explicit user confirmation.
 3. Add model-based tests that generate action sequences, replay them after page
    drift, and assert no duplicate or cross-origin side effect occurs.

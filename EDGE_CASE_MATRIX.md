@@ -34,7 +34,7 @@ recapture, local redaction, zero egress, or a validated sanitized request.
 | PII in a page title, label, task, attribute, URL, or known canary | Replace with typed placeholder or block the final body | `sanitizeText`, keyed origin alias, `assertNoCanaries`, server defense-in-depth scan |
 | Face in an inspectable screenshot | Detect locally and redact before encoding | Bundled UltraFace ONNX in `extension/src/face-detector.ts`; WebGPU/WASM tests |
 | Face detector missing, model corrupt, adapter unavailable, or inference error | Send no request unless the user explicitly enables full-image fallback | `image-redactor.ts`, `sanitizer-direct.ts`, `sanitizer-offscreen.ts`; unavailable-detector schema invariant |
-| Canvas, video, SVG, image, CSS background, pseudo-element, custom element, or inaccessible frame | Mask the uninspectable region conservatively | `collectMediaRedactions`, `collectFrameRedactions`, and full-mask fallback |
+| Canvas, video, SVG, image, CSS background, pseudo-element, custom element, or inaccessible frame | Mask the uninspectable region conservatively; a synthetic document may be narrowed to verified PII boxes, while an explicitly marked public object may remain visible | `collectMediaRedactions`, `media-policy.ts`, `document-ocr.ts`, `collectFrameRedactions`, and full-mask fallback |
 | Closed shadow DOM or pixels rendered by a plugin | Treat as uninspectable; do not guess | Documented limitation; no raw visual fallback |
 | Fractional device scale, zoom, clipped element, or detector box at an image edge | Clamp and integer-expand the local mask; reject out-of-image declarations | `scaleBounds`, `integerMaskBounds`, `expandedSemanticMaskBounds`; extension/server bounds tests |
 | Semantic placeholder raster has rounding or antialiasing at its border | Ensure the declared region has been replaced before the request | Fresh PNG composition plus receiver-side semantic-region verification |
@@ -42,7 +42,8 @@ recapture, local redaction, zero egress, or a validated sanitized request.
 | Oversized screenshot, too many elements, or too many redactions | Block before model invocation | Client and server size/count limits |
 | DOM changes, navigation, tab switch, origin change, resize, or scroll during capture or server reasoning | Discard the snapshot; never send or execute against a changed context | Document revision, pinned tab/window/origin, update generation, activation generation, viewport, and scroll checks in `background.ts`, `context-guard.ts`, and `content.ts` |
 | Agent steps or preview requests arrive faster than the browser screenshot quota | Queue capture slots locally; never retry by using an older or unsanitized frame | `CaptureRateGate` enforces a 550 ms minimum start interval before `captureVisibleTab` |
-| Model returns an unknown ID, stale snapshot, disabled target, invalid action shape, or PII in input text | Reject the response; never execute it | `validation.ts`, `egress.ts`, and `server/app/validation.py` |
+| Model returns an unknown ID, stale snapshot, disabled target, invalid action shape, incompatible checkbox/combobox role, or PII in input/option text | Reject the response; never execute it | `validation.ts`, `egress.ts`, `content.ts`, and `server/app/validation.py` |
+| Model requests hover, focus, double-click, check/uncheck, or native select | Execute only against the current opaque element ID; require visibility/enabled state, exact native option matching, and confirmation for destructive double-clicks | `content.ts`, strict action schemas, and safe-action contract tests |
 | Model repeats a checked consent click or chooses an unrelated control in a high-confidence submit task | Use the sanitized structural guard or stop safely | `server/app/action_guard.py` and `server/tests/test_action_guard.py` |
 | Multiple possible submit controls or a fill-oriented task | Preserve model choice; do not invent a target | Ambiguity and fill-task guard tests |
 | Popup closes, Ollama has a cold start, or MV3 pressures the service worker during inference | Keep Chrome raster inference in the offscreen document; use short asynchronous submit/poll requests plus a bounded extension-API heartbeat | `sanitizer-offscreen.ts`, `egress.ts`, `background.ts`, and async transport tests |
@@ -56,8 +57,9 @@ recapture, local redaction, zero egress, or a validated sanitized request.
 
 ## Gaps before real-data deployment
 
-The prototype still needs a larger multilingual, held-out corpus; local OCR for
-visual text; measurements on real Chrome and Firefox hardware; independent
+The prototype still needs a larger multilingual, held-out corpus; broader local
+OCR for arbitrary visual text beyond the narrow PAN/payment-card/Aadhaar-style
+credential path; measurements on real Chrome and Firefox hardware; independent
 extension and dependency review; signed release artifacts; and confirmation that
 browser policy, OS telemetry, other extensions, and page traffic are within the
 deployment threat model. These are follow-up controls, not reasons to bypass the
