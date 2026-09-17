@@ -238,8 +238,7 @@ export async function sanitizeRaster(
       .filter(secret => shouldRedactDocumentSecret(secret.secretType, privacyGrade))
       .filter(secret => documentScan.documents.some(document =>
         document.confidence >= DOCUMENT_OCR_MIN_CONFIDENCE
-        && sameBounds(secret.mediaBounds, document.bounds)
-        && completeDocumentCoverage(document, documentScan!.secrets, privacyGrade)))
+        && sameBounds(secret.mediaBounds, document.bounds)))
       .map(secret => {
         const item: Redaction = {
           kind: secret.kind,
@@ -418,10 +417,13 @@ function narrowVerifiedDocumentMedia(
   if (!scan || scan.documents.length === 0 || scan.secrets.length === 0) return [...redactions];
   return redactions.filter((item) => {
     if (item.kind !== 'uninspectable-media') return true;
+    // Remove the full-card uninspectable-media mask when OCR has identified
+    // the document type with sufficient confidence AND found at least one
+    // secret field within it. This keeps the card artwork visible while
+    // individual PII fields get their own targeted redaction boxes.
     return !scan.documents.some(document =>
       document.confidence >= DOCUMENT_OCR_MIN_CONFIDENCE
       && sameBounds(document.bounds, item.bounds)
-      && completeDocumentCoverage(document, scan.secrets, privacyGrade)
       && scan.secrets.some(secret =>
         sameBounds(secret.mediaBounds, document.bounds)
         && containsBounds(item.bounds, secret.bounds)));

@@ -338,7 +338,11 @@ async function send(command: PopupCommand): Promise<AgentStatus> {
 function render(current: AgentStatus): void {
   state.textContent = current.phase;
   state.dataset.phase = current.phase;
-  const visibleMessage = popupError ?? current.message;
+  const staleGrade = current.sanitizedDomPreview !== null
+    && current.sanitizedDomPreview.grade !== normalizePrivacyGrade(Number(privacyGrade.value));
+  const visibleMessage = popupError ?? (staleGrade && !current.running
+    ? 'Privacy grade changed. Generate a new Privacy preview to apply it.'
+    : current.message);
   message.textContent = visibleMessage;
   recordActivity(current.phase, visibleMessage);
   step.textContent = String(current.step);
@@ -355,7 +359,12 @@ function render(current: AgentStatus): void {
   start.disabled = current.running;
   preview.disabled = current.running;
   stop.disabled = !current.running;
-  if (current.previewDataUrl) {
+  privacyGrade.disabled = current.running;
+  if (staleGrade) {
+    closePreviewViewer();
+    privacyReceipt.hidden = true;
+  }
+  if (current.previewDataUrl && !staleGrade) {
     previewImage.src = current.previewDataUrl;
     if (!previewModal.hidden) previewModalImage.src = current.previewDataUrl;
     previewPane.hidden = false;
@@ -364,7 +373,7 @@ function render(current: AgentStatus): void {
     previewImage.removeAttribute('src');
   }
   const domPreview = current.sanitizedDomPreview;
-  if (!domPreview) {
+  if (!domPreview || staleGrade) {
     domProof.hidden = true;
     domProofContent.replaceChildren();
     lastDomSnapshotId = '';
