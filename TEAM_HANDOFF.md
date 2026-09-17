@@ -5,7 +5,7 @@
 | Project | On-device Visual Perception for Light-weight Browser Agents |
 | Organization | ISRO / Department of Space |
 | Repository | `sih-privacy-agent` |
-| Handoff date | 16 September 2026 |
+| Handoff date | 18 September 2026 |
 | Current branch | `main` |
 | Current stage | Controlled synthetic prototype with a complete privacy-boundary path, Chrome/Firefox packages, a local Ollama reasoning path, a synthetic end-to-end demo, automated release checks, and explicit asset/evidence gates. |
 
@@ -36,7 +36,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 - A provider-neutral sanitized gateway adapter is implemented for a hosted or air-gapped reasoning service.
 - A deterministic structural planner is available only as a development fallback for unambiguous schema-valid tasks. Production configuration forces it off.
 - The synthetic portal includes Indian-style PII, a face, sensitive fields, privacy-grade labels, synthetic credit-card, PAN-card, and Aadhaar-style document fixtures, a person-image/object media lab, a confirmation checkbox, and a submit action.
-- The release gate currently reports the test totals recorded in `evidence/latest-release.json`, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
+- The release gate currently reports 148 extension, 165 server, and 34 evaluation tests in `evidence/latest-release.json`, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
 
 ### What is deliberately not claimed as default
 
@@ -46,7 +46,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 - High-assurance structure-only mode sends sanitized DOM structure plus a newly generated opaque black PNG. It skips visual interpretation and is exposed in both panel UIs.
 - Each capture produces a local privacy receipt containing only aggregate categories, detector backend, transmission mode, masked-area percentage, request count, and a SHA-256 hash of the sanitized image. Raw values are never shown in the receipt.
 - A final local DLP gate scans serialized task text, labels, metadata, and canaries immediately before the sole network egress. A finding blocks the request.
-- `agent-graph.ts` implements the LangGraph.js StateGraph orchestration. The graph stores counters and routing only; captures, keys, observations, and actions stay in private callbacks. The graph has no checkpointer, so durable resume remains a gated future capability.
+- `agent-graph.ts` implements the LangGraph.js StateGraph orchestration. The graph stores counters and routing only; captures, keys, observations, and actions stay in private callbacks. Stop signals and a bounded deadline propagate into each callback, stale scrolls recapture within a drift budget, and ambiguous dispatches are never replayed. The graph has no checkpointer, so durable resume remains a gated future capability.
 - The synthetic evidence is not universal PII recall/precision evidence. It does not certify production use with real personal data.
 - A built Firefox package is not the same as a live Firefox browser-matrix run. A live Firefox run remains separate evidence.
 
@@ -88,6 +88,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 | `extension/scripts/evaluate-perception.mjs` | Runs the local perception measurement workflow. |
 | `extension/scripts/release-metadata.mjs` | Creates package/model/protocol metadata. |
 | `extension/models/version-RFB-320.onnx` | Checked-in UltraFace fallback model. Its reviewed SHA-256 is `B63E0028667FD9E7E5DCC56EBD91E85281B8DF1498B4C3C5799DE9229305C0B1`. |
+| `extension/models/vision-lock.json` | Required admission lock for packaged ONNX detectors; records size, SHA-256, license, and provenance. |
 | `extension/models/perception-lock.json`, `perception-sources.json` | Optional perception asset lock and source metadata. |
 | `server/` | FastAPI receiver, model adapters, bounded jobs, Redis/SQLite ledgers, policy compiler, validation, demo portal, tests, and container files. |
 | `server/app/main.py` | Application factory, health endpoints, reasoning routes, async job polling, model/fallback orchestration, and synthetic demo routes. |

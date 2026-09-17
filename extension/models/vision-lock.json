@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "artifacts": [
+    {
+      "path": "version-RFB-320.onnx",
+      "bytes": 1259725,
+      "sha256": "b63e0028667fd9e7e5dcc56ebd91e85281b8df1498b4c3c5799de9229305c0b1",
+      "license": "MIT",
+      "provenance": "NOTICE.md"
+    }
+  ]
+}

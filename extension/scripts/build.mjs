@@ -16,6 +16,19 @@ const modelIncluded = await exists(modelSource);
 const yoloModelIncluded = await exists(yoloModelSource);
 const dbnetModelIncluded = await exists(dbnetModelSource);
 const ocrModelIncluded = await exists(ocrModelSource);
+// File presence alone must never activate a replacement privacy detector.
+// Every packaged ONNX asset needs an independently reviewed lock entry.
+const visionLock = JSON.parse(await readFile(join(root, 'models/vision-lock.json'), 'utf8'));
+for (const source of [modelSource, yoloModelSource, dbnetModelSource]) {
+  if (!await exists(source)) continue;
+  const name = relative(join(root, 'models'), source).replaceAll('\\', '/');
+  const asset = visionLock.artifacts.find(item => item.path === name);
+  if (!asset?.license || !asset?.provenance) throw new Error(`Vision model is not admitted in vision-lock.json: ${name}`);
+  const bytes = await readFile(source);
+  if (bytes.length !== asset.bytes || createHash('sha256').update(bytes).digest('hex') !== asset.sha256) {
+    throw new Error(`Vision model checksum mismatch: ${name}`);
+  }
+}
 const perceptionRequested = process.argv.includes('--perception') || process.env.LOCAL_PERCEPTION === '1';
 const perceptionEvaluated = process.env.LOCAL_PERCEPTION_EVALUATED === '1';
 if (perceptionRequested && !perceptionEvaluated) {

@@ -34,7 +34,8 @@ const signed = archivePaths.length > 0 && archivePaths.every(file => existsSync(
 const output = {
   metadataVersion: '1.2',
   node: process.version,
-  signingStatus: signed ? 'signed' : 'unsigned',
+  signingStatus: signed ? 'signature-present-unverified' : 'unsigned',
+  visionLockSha256: createHash('sha256').update(readFileSync(join(root, 'models/vision-lock.json'))).digest('hex'),
   model: {
     id: process.env.PRIVACY_AGENT_OLLAMA_MODEL || 'qwen3-vl:2b-instruct',
     digest,

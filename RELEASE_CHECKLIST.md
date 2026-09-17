@@ -30,6 +30,10 @@
 - [ ] Sign packages outside the repository, record the signer and key ID, and
       retain rollback instructions.
 - [ ] Confirm the project license and third-party notices are present.
+- [ ] Set `PRIVACY_AGENT_SIGNER_FINGERPRINT` to the approved 40/64-character
+      fingerprint and sign both archives, `dist/RELEASE_METADATA.json`, and
+      `artifacts/sbom.json`; production verification rejects untrusted or
+      unverifiable signatures.
 
 ## Demo reliability
 

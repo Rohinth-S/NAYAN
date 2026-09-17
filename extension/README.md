@@ -30,7 +30,10 @@ The release build includes `models/version-RFB-320.onnx` when it is present.
 The reviewed model in this workspace has SHA-256
 `B63E0028667FD9E7E5DCC56EBD91E85281B8DF1498B4C3C5799DE9229305C0B1`.
 Its upstream project and MIT attribution are in `models/NOTICE.md` and
-`models/ULTRAFACE_LICENSE.txt`.
+`models/ULTRAFACE_LICENSE.txt`. The build verifies the reviewed size, SHA-256,
+license, and provenance entry in `models/vision-lock.json` before copying any
+ONNX model; optional YOLO/DBNet assets must be added to that lock before they
+can be packaged.
 
 The release build also includes a small locked English Tesseract OCR asset at
 `models/ocr/lang-data/eng.traineddata`. It is used only on image media that
@@ -126,12 +129,25 @@ The only explicit reasoning-server network call in extension source is
    no cookies, no referrer, no redirects, a 100-second total deadline, and an
    optional request key.
 
+### Bounded workflow runtime
+
+`agent-graph.ts` runs the controller as a LangGraph.js `StateGraph` with
+`observe → reason → verify → dispatch → settle` nodes. Only counters and route
+decisions enter graph state; captures, sanitized observations, model responses,
+and the opaque DOM map remain in callback-local memory. The graph pins the tab
+and page revision, recaptures after bounded scroll drift, propagates the Stop
+signal into capture and model requests, aborts the run at its deadline, and
+never replays an ambiguous browser side effect. There is intentionally no
+checkpointer in the browser package, so durable resume is a separate deployment
+gate.
+
 The content script is injected only into the active tab after a user gesture.
 It creates new random element IDs for each snapshot. The mapping between those
 IDs and live DOM elements never leaves the content script. A returned action is
 accepted only when its schema version, snapshot ID, document ID, DOM revision,
 tab origin, and target ID still match. The action allowlist is `click`, `input`,
-`scroll`, `wait`, and `done`; each type rejects irrelevant fields.
+`scroll`, `wait`, `done`, `hover`, `focus`, `doubleClick`, `check`, `uncheck`,
+and `select`; each type rejects irrelevant fields.
 
 The v1 request body is:
 

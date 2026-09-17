@@ -32,4 +32,31 @@ describe('private bounded LangGraph workflow', () => {
     await expect(runAgentGraph(h, { ...options(), signal: controller.signal })).rejects.toThrow();
     expect(h.dispatch).not.toHaveBeenCalled();
   });
+  it('aborts an in-flight planning request at the run deadline', async () => {
+    const h = hooks();
+    let requestSignal: AbortSignal | undefined;
+    h.reason = async signal => {
+      requestSignal = signal;
+      return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    };
+    await expect(runAgentGraph(h, { ...options(), deadlineMs: 40 })).rejects.toThrow();
+    expect(requestSignal?.aborted).toBe(true);
+    expect(h.dispatch).not.toHaveBeenCalled();
+  });
+  it('returns promptly when stopped while a callback is unresponsive', async () => {
+    const h = hooks();
+    const controller = new AbortController();
+    let started!: () => void;
+    const observing = new Promise<void>(resolve => { started = resolve; });
+    h.observe = async () => { started(); return new Promise(() => {}); };
+    const run = runAgentGraph(h, { ...options(), signal: controller.signal });
+    const rejected = expect(run).rejects.toThrow();
+    await observing;
+    controller.abort();
+    await rejected;
+    expect(h.reason).not.toHaveBeenCalled();
+  });
+  it.each([NaN, Infinity, 0, -1])('rejects invalid deadline %s', async deadlineMs => {
+    await expect(runAgentGraph(hooks(), { ...options(), deadlineMs })).rejects.toThrow('deadline is invalid');
+  });
 });

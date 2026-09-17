@@ -11,12 +11,41 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_PERMISSIONS = {"activeTab", "tabs", "storage", "scripting", "offscreen", "sidePanel"}
 ALLOWED_HOSTS = {"http://*/*", "https://*/*"}
+
+
+def verify_signature(path: Path, fingerprint: str | None) -> bool:
+    """Check cryptographic validity AND an independently pinned signer identity."""
+    signature = Path(f"{path}.asc")
+    if not signature.is_file() or not fingerprint or not re.fullmatch(r"[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64}", fingerprint):
+        return False
+    gpg = shutil.which("gpg")
+    if not gpg:
+        return False
+    try:
+        result = subprocess.run(
+            [gpg, "--batch", "--no-auto-key-retrieve", "--status-fd", "1", "--verify", str(signature), str(path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 11 and parts[:2] == ["[GNUPG:]", "VALIDSIG"]:
+            # GPG reports both the signing subkey and the primary fingerprint.
+            if fingerprint.upper() in {parts[2].upper(), parts[-1].upper()}:
+                return True
+    return False
 
 
 def sha256(path: Path) -> str:
@@ -51,20 +80,24 @@ def verify_manifests() -> list[str]:
     for browser in ("chrome", "firefox"):
         manifest_path = ROOT / "extension" / "dist" / browser / "manifest.json"
         if not manifest_path.exists():
+            failures.append(f"{browser} package manifest is missing")
             continue
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         # Chrome keeps site access in `host_permissions`; Firefox MV2 places
         # the same patterns in `permissions`. Normalize both shapes before
         # checking the least-privilege allowlist.
-        declared = set(manifest.get("permissions", []))
-        hosts = {value for value in declared if value.startswith(("http://", "https://"))}
+        declared = set(manifest.get("permissions", [])) | set(manifest.get("optional_permissions", []))
+        hosts = {value for value in declared if '://' in value or value == '<all_urls>'}
         hosts |= set(manifest.get("host_permissions", []))
         hosts |= set(manifest.get("optional_host_permissions", []))
         permissions = declared - hosts
         unexpected = permissions - ALLOWED_PERMISSIONS
         if unexpected:
             failures.append(f"{browser} unexpected permissions: {sorted(unexpected)}")
-        unexpected_hosts = {host for host in hosts if host.startswith(("http://", "https://"))} - ALLOWED_HOSTS
+        # Chrome needs <all_urls> for side-panel capture without a fresh
+        # activeTab gesture. The runtime separately refuses non-HTTP(S) tabs.
+        allowed_hosts = ALLOWED_HOSTS | ({"<all_urls>"} if browser == "chrome" else set())
+        unexpected_hosts = hosts - allowed_hosts
         if unexpected_hosts:
             failures.append(f"{browser} unexpected host permissions: {sorted(unexpected_hosts)}")
     return failures
@@ -86,6 +119,9 @@ def main() -> int:
     code, messages = verify_lock(ROOT / "extension" / "models" / "ocr-lock.json", ROOT / "extension" / "models" / "ocr", required=False)
     if code:
         failures.extend(messages)
+    code, messages = verify_lock(ROOT / "extension/models/vision-lock.json", ROOT / "extension/models", required=True)
+    if code:
+        failures.extend(messages)
     code, messages = verify_lock(ROOT / "extension" / "models" / "perception-lock.json", ROOT / "extension" / "models" / "perception", required=False)
     if code:
         failures.extend(messages)
@@ -96,8 +132,16 @@ def main() -> int:
     if metadata.exists():
         payload = json.loads(metadata.read_text(encoding="utf-8"))
         digest = digest or payload.get("model", {}).get("digest")
-    if production and (not digest or not str(digest).startswith("sha256:")):
+    if production and (not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)):
         failures.append("production mode requires PRIVACY_AGENT_OLLAMA_MODEL_DIGEST=sha256:<64 hex>")
+
+    fingerprint = os.environ.get("PRIVACY_AGENT_SIGNER_FINGERPRINT")
+    if production:
+        # Sign metadata and the SBOM as well as the archives so the model
+        # digest and dependency declaration are covered by a trusted signer.
+        for document in (metadata, ROOT / "artifacts/sbom.json"):
+            if not document.is_file() or not verify_signature(document, fingerprint):
+                failures.append(f"trusted signature required: {document.name}")
 
     archives = sorted((ROOT / "extension" / "artifacts").glob("*.zip"))
     if production and not archives:
@@ -105,11 +149,13 @@ def main() -> int:
     for archive in archives:
         checksum = Path(f"{archive}.sha256")
         signature = Path(f"{archive}.asc")
-        if production and (not checksum.exists() or not signature.exists()):
-            failures.append(f"production archive is not signed: {archive.name}")
+        if production and (not checksum.exists() or not verify_signature(archive, fingerprint)):
+            failures.append(f"production archive lacks a valid signature from PRIVACY_AGENT_SIGNER_FINGERPRINT: {archive.name}")
+        elif signature.exists() and not verify_signature(archive, fingerprint):
+            failures.append(f"archive signature could not be verified: {archive.name}")
         if checksum.exists():
-            expected = checksum.read_text(encoding="ascii").split()[0].lower()
-            if expected != sha256(archive):
+            parts = checksum.read_text(encoding="ascii").split()
+            if not parts or parts[0].lower() != sha256(archive):
                 failures.append(f"archive checksum mismatch: {archive.name}")
 
     status = "passed" if not failures else "failed"

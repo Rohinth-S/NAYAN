@@ -207,7 +207,9 @@ async function captureAndSanitize(
   pinnedTab?: TabContext,
   validationOptions: ObservationValidationOptions = {},
   receiptRequestCount = 0,
+  signal?: AbortSignal,
 ): Promise<CapturedContext> {
+  signal?.throwIfAborted();
   const visibleTab = await activeTab();
   const tab = pinnedTab ?? visibleTab;
   if (pinnedTab && !sameTabContext(pinnedTab, visibleTab)) {
@@ -216,6 +218,7 @@ async function captureAndSanitize(
   const initialTabGeneration = tabUpdateGeneration.get(tab.id) ?? 0;
   const initialWindowGeneration = windowActivationGeneration.get(tab.windowId) ?? 0;
   await ensureContent(tab.id);
+  signal?.throwIfAborted();
   const snapshotId = crypto.randomUUID();
   update({ phase: 'capturing', message: 'Capturing locally…' });
   let contentResponse: ContentResponse;
@@ -231,6 +234,7 @@ async function captureAndSanitize(
   if (dom.origin !== tab.origin) throw new Error('Tab origin changed during capture');
   const screenshot = await captureVisible(tab.windowId);
   const tabAfterCapture = await activeTab();
+  signal?.throwIfAborted();
   if (
     !sameTabContext(tab, tabAfterCapture) ||
     (tabUpdateGeneration.get(tab.id) ?? 0) !== initialTabGeneration ||
@@ -248,6 +252,7 @@ async function captureAndSanitize(
     settings.task,
     settings.highAssuranceMode,
   );
+  signal?.throwIfAborted();
   // Do not retain the raw screenshot. Only the freshly encoded sanitized PNG is kept for preview/request.
   const observation: SanitizedObservation = {
     schemaVersion: SCHEMA_VERSION,
@@ -298,6 +303,7 @@ async function captureAndSanitize(
     receiptRequestCount,
     false,
   );
+  signal?.throwIfAborted();
   update({
     detectorBackend: raster.detectorBackend,
     redactionCount: raster.redactions.length,
@@ -324,7 +330,8 @@ async function setScrollGuard(tabId: number, active: boolean): Promise<ScrollDri
   return response.scrollDrift;
 }
 
-async function execute(context: CapturedContext, action: AgentAction): Promise<string> {
+async function execute(context: CapturedContext, action: AgentAction, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
   const visibleTab = await activeTab();
   if (
     !sameTabContext(context.tab, visibleTab) ||
@@ -334,6 +341,7 @@ async function execute(context: CapturedContext, action: AgentAction): Promise<s
     throw new Error('Active tab changed before action');
   }
   const current = await ext.tabs.get(context.tab.id);
+  signal?.throwIfAborted();
   if (!current.url || new URL(current.url).origin !== context.tab.origin) throw new Error('Tab origin changed before action');
   const response = (await ext.tabs.sendMessage(context.tab.id, {
     type: 'EXECUTE_ACTION',
@@ -392,24 +400,23 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     let plannedAction: AgentAction | null = null;
     let requestCount = 0;
     await runAgentGraph({
-      async observe(step) {
+      async observe(step, signal) {
         plannedAction = null;
         update({ step });
         requestCount = reasoningRequestCount + 1;
-        context = await captureAndSanitize(settings, pinnedTab, {}, requestCount);
+        context = await captureAndSanitize(settings, pinnedTab, {}, requestCount, signal);
       },
-      async reason() {
+      async reason(signal) {
       // Approach B: activate the guard inside the page content script before
       // the VLM call. The service worker cannot observe webpage scroll events.
       const guardState = await setScrollGuard(context.tab.id, true);
-      update({ phase: 'reasoning', message: 'Sending sanitized observation…', scrollDrift: guardState });
       const started = performance.now();
       let accepted = false;
       let progressTimer: ReturnType<typeof setInterval> | undefined;
       const progressOptions: ReasoningRequestOptions = {
-        signal: reasoningController.signal,
+        signal,
         onProgress: (stage) => {
-          if (reasoningController.signal.aborted) return;
+          if (signal.aborted) return;
           if (stage === 'accepted') accepted = true;
           if (stage === 'accepted') {
             reasoningRequestCount = requestCount;
@@ -427,7 +434,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         },
       };
       progressTimer = setInterval(() => {
-        if (reasoningController.signal.aborted) return;
+        if (signal.aborted) return;
         const elapsed = Math.max(0, Math.round((performance.now() - started) / 1_000));
         update({
           phase: 'reasoning',
@@ -439,6 +446,8 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       let response;
       let driftState: ScrollDriftState = guardState;
       try {
+        signal.throwIfAborted();
+        update({ phase: 'reasoning', message: 'Sending sanitized observation…', scrollDrift: guardState });
         response = await keepServiceWorkerAlive(
           sendSanitizedObservation(settings.endpoint, settings.apiKey, context.observation, settings.canaries, progressOptions),
         );
@@ -450,7 +459,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
           debounceMs: 350,
         }));
       }
-      reasoningController.signal.throwIfAborted();
+      signal.throwIfAborted();
       // Discard actions resolved against a viewport that moved during the
       // network call. The content script owns this observation.
       if (driftState.drifted) {
@@ -471,10 +480,11 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         // execute() and the page broker repeat snapshot/origin/revision checks
         // immediately before dispatch. There is no durable action replay.
       },
-      async dispatch() {
+      async dispatch(signal) {
         if (!plannedAction) throw new Error('Action is missing');
         update({ phase: 'executing', message: `Executing ${plannedAction.type}…` });
-        const result = await execute(context, plannedAction);
+        const result = await execute(context, plannedAction, signal);
+        signal.throwIfAborted();
         const done = plannedAction.type === 'done';
         update({ message: result, ...(done ? { running: false, phase: 'done' as const } : {}) });
         return done;
