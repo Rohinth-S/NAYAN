@@ -1,12 +1,12 @@
 {
   "reportVersion": "1.0",
-  "recordedAtUtc": "2026-09-17T20:02:36.485517+00:00",
-  "sourceCommit": "6f7c76167f486e4a9f5def0806ea9e103d2a1a94",
-  "workingTreeHasChanges": true,
+  "recordedAtUtc": "2026-09-17T20:06:05.369129+00:00",
+  "sourceCommit": "f98d8d4a9f57e76315dbf65a7d2718ab3dfefd58",
+  "workingTreeHasChanges": false,
   "protocolVersion": "1.0",
   "policyVersion": "1.0",
   "scope": "automated-contract-and-package-checks",
-  "passed": false,
+  "passed": true,
   "checks": {
     "governance": true,
     "typecheck": true,
@@ -18,7 +18,7 @@
     "metadata": true,
     "security": true,
     "sbom": true,
-    "supply_chain": false
+    "supply_chain": true
   },
   "testSuites": {
     "extension": {
