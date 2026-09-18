@@ -8,6 +8,13 @@ const JOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-
 export const REASONING_TIMEOUT_MS = 100_000;
 export const REASONING_POLL_MS = 1_000;
 
+function rejection(status: number): Error {
+  // Fixed messages only: never surface an untrusted server body or a key.
+  if (status === 403) return new Error('Server rejected the extension origin (403). Start the local server with Start-Prototype.ps1 and enter the key from .runtime/api-key.txt; remote servers need an allowed extension origin.');
+  if (status === 401) return new Error('Server authentication failed (401). Enter the matching key from .runtime/api-key.txt in the API key field.');
+  return new Error(`Reasoning server rejected the request (${status})`);
+}
+
 export type ReasoningRequestOptions = Readonly<{
   /** Cancel a user-stopped run without waiting for the reasoning deadline. */
   signal?: AbortSignal;
@@ -156,7 +163,7 @@ export async function sendSanitizedObservation(
       options.onProgress?.('accepted');
       return parseReasonResponse(await readBoundedJson(submitted, canaries), observation.snapshotId);
     }
-    if (submitted.status !== 202) throw new Error(`Reasoning server rejected the request (${submitted.status})`);
+    if (submitted.status !== 202) throw rejection(submitted.status);
     options.onProgress?.('accepted');
     const job = parsePendingJob(await readBoundedJson(submitted, canaries), observation.snapshotId);
     const statusUrl = pollUrl(endpoint, job.jobId);
@@ -171,7 +178,7 @@ export async function sendSanitizedObservation(
       if (polled.status === 200) {
         return parseReasonResponse(await readBoundedJson(polled, canaries), observation.snapshotId);
       }
-      if (polled.status !== 202) throw new Error(`Reasoning server rejected the request (${polled.status})`);
+      if (polled.status !== 202) throw rejection(polled.status);
       parsePendingJob(await readBoundedJson(polled, canaries), observation.snapshotId, job.jobId);
     }
   } catch (error) {

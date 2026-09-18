@@ -226,7 +226,6 @@ def create_app(
         except TimeoutError:
             raise ReasoningJobError(503, "reasoning_capacity_timeout") from None
         try:
-            backend_ready = await reasoner.ready()
             # Unambiguous sanitized enrollment forms resolve locally so a cold
             # VLM cannot strand the required demonstration. Ambiguous pages
             # still use the model, or the structural planner if it is down.
@@ -241,31 +240,46 @@ def create_app(
                     snapshotId=observation.snapshotId,
                     action=fast_action,
                 )
-            elif not backend_ready or breaker.is_blocking():
-                if not settings.structural_fallback:
-                    await metrics.increment("reasoning.backend_unavailable")
-                    raise ReasoningJobError(503, "reasoning_backend_unavailable")
-                response = _structural_response(observation)
-                response = guard_reasoned_action(observation, response)
-                await metrics.increment("reasoning.structural_fallback")
             else:
-                try:
-                    response = await breaker.call(reasoner.reason, observation)
-                    response = guard_reasoned_action(observation, response)
-                except ReasonerContextLimit:
-                    raise ReasoningJobError(503, "reasoning_context_limit") from None
-                except (ReasonerUnavailable, CircuitOpen, TimeoutError):
+                backend_ready = await reasoner.ready()
+                if not backend_ready or breaker.is_blocking():
                     if not settings.structural_fallback:
                         await metrics.increment("reasoning.backend_unavailable")
                         raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
                     response = _structural_response(observation)
                     response = guard_reasoned_action(observation, response)
                     await metrics.increment("reasoning.structural_fallback")
-                except (ReasonerInvalidResponse, ObservationRejected):
-                    raise ReasoningJobError(502, "invalid_reasoning_response") from None
+                else:
+                    try:
+                        response = await breaker.call(reasoner.reason, observation)
+                        response = guard_reasoned_action(observation, response)
+                    except ReasonerContextLimit:
+                        raise ReasoningJobError(503, "reasoning_context_limit") from None
+                    except (ReasonerUnavailable, CircuitOpen, TimeoutError):
+                        if not settings.structural_fallback:
+                            await metrics.increment("reasoning.backend_unavailable")
+                            raise ReasoningJobError(503, "reasoning_backend_unavailable") from None
+                        response = _structural_response(observation)
+                        response = guard_reasoned_action(observation, response)
+                        await metrics.increment("reasoning.structural_fallback")
+                    except ReasonerInvalidResponse:
+                        # A local model can occasionally emit malformed JSON or a
+                        # stale/unknown target after a long multimodal decode. For
+                        # an unambiguous sanitized form, recover with the bounded
+                        # structural planner instead of burning the whole run.
+                        # It still emits only checkbox/submit/wait/done actions;
+                        # it never invents field values or bypasses confirmation.
+                        if not settings.structural_fallback:
+                            raise ReasoningJobError(502, "invalid_reasoning_response") from None
+                        response = _structural_response(observation)
+                        response = guard_reasoned_action(observation, response)
+                        await metrics.increment("reasoning.structural_fallback")
             try:
                 validate_action_for_observation(response.snapshotId, response.action, observation)
             except ObservationRejected:
+                # An unknown target, stale snapshot, incompatible role, or
+                # private action value is a security rejection. It must not be
+                # replaced by a guessed structural action.
                 raise ReasoningJobError(502, "invalid_reasoning_response") from None
             await store.record_reason(observation, response.action.type)
             await metrics.increment("reasoning.succeeded")
@@ -290,6 +304,16 @@ def create_app(
         if wants_async:
             if not settings.structural_fallback and (not await reasoner.ready() or breaker.is_blocking()):
                 raise HTTPException(status_code=503, detail="reasoning_backend_unavailable")
+            # The enrollment path is fully resolved from sanitized structure
+            # alone. Return its action directly instead of adding a queue/poll
+            # round-trip; model-backed pages retain the async contract.
+            fast_action = (
+                deterministic_form_action(observation)
+                if settings.structural_fallback and isinstance(reasoner, OllamaReasoner)
+                else None
+            )
+            if fast_action is not None:
+                return await process_reasoning(observation)
             try:
                 job = await jobs.submit(
                     observation.snapshotId,
@@ -335,6 +359,12 @@ def create_app(
         return FileResponse(
             DEMO_DIR / "index.html", media_type="text/html", headers={"Cache-Control": "no-store"}
         )
+
+    @app.get("/demo/success", include_in_schema=False, response_model=None)
+    async def demo_success() -> FileResponse | RedirectResponse:
+        if not (await store.get()).submitted:
+            return RedirectResponse("/demo", status_code=303)
+        return FileResponse(DEMO_DIR / "success.html", media_type="text/html")
 
     @app.get("/demo/assets/app.js", include_in_schema=False)
     async def demo_javascript() -> FileResponse:

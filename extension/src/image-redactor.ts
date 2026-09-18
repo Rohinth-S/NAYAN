@@ -185,6 +185,10 @@ export async function sanitizeRaster(
             .map(hint => ({
               bounds: scaleBounds(hint.bounds, scaleX, scaleY, bitmap.width, bitmap.height),
               ...(hint.documentType ? { documentType: hint.documentType } : {}),
+              ...(hint.localImage ? { localImage: hint.localImage } : {}),
+              excludedRegions: (dom.mediaHints ?? [])
+                .filter(other => other.kind === 'person' && containsBounds(hint.bounds, other.bounds))
+                .map(other => scaleBounds(other.bounds, scaleX, scaleY, bitmap.width, bitmap.height)),
             }));
           documentScan = await documentOcr.scan(privateCanvas, documentMediaBounds, documentMediaHints, privacyGrade);
         } catch {

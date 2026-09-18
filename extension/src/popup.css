@@ -193,6 +193,7 @@ body.preview-open { overflow: hidden; }
 .dom-proof-header p:last-child { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .dom-proof-toggle { flex: 0 0 auto; white-space: nowrap; }
 .dom-proof-content { display: grid; gap: 10px; }
+.dom-proof-content[hidden] { display: none !important; }
 .dom-proof-banner {
   display: flex; align-items: flex-start; gap: 8px;
   border: 1px solid #9aa89e; border-radius: 8px; padding: 8px 9px;

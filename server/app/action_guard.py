@@ -76,6 +76,19 @@ def _is_submit_like(element: Element) -> bool:
     )
 
 
+def _is_selected_combobox(element: Element) -> bool:
+    return element.role == "combobox" and "[filled]" in element.label.casefold()
+
+
+def _public_fields_complete(elements: tuple[Element, ...]) -> bool:
+    visible_public = [
+        element
+        for element in elements
+        if element.role in {"textbox", "combobox"} and "[public]" in element.label.casefold()
+    ]
+    return bool(visible_public) and all("[filled]" in element.label.casefold() for element in visible_public)
+
+
 def _is_terminal_label(element: Element) -> bool:
     return (
         element.role == "button"
@@ -132,9 +145,27 @@ def deterministic_form_action(observation: SanitizedObservation) -> BrowserActio
     labels, bounds, and checkbox state; values and pixels never enter the
     decision. Ambiguous pages continue to the VLM reasoner.
     """
-    if not _is_commit_task(observation.task) or _is_fill_task(observation.task):
+    if not _is_commit_task(observation.task):
         return None
     elements = tuple(observation.elements)
+    # A post-submit navigation has fresh opaque IDs and no form controls.
+    # Recognize the new confirmation page from sanitized context, instead of
+    # asking the model to click its return link and restarting the form.
+    confirmation_page = re.search(
+        r"\b(?:enrollment|form|application|registration)\s+(?:submitted|completed)\s+successfully\b",
+        observation.page.title,
+        re.I,
+    )
+    if confirmation_page and not any(
+        element.role in {"textbox", "checkbox", "radio", "combobox", "button"}
+        and not element.state.disabled for element in elements
+    ):
+        return BrowserAction(type="done", message="The page reports successful enrollment submission.")
+    # The extension performs explicit public-field filling locally. Once all
+    # visible opted-in fields carry the boolean [filled] marker, the same
+    # deterministic consent/submit plan is safe for a fill-and-submit task.
+    if _is_fill_task(observation.task) and not _public_fields_complete(elements):
+        return None
     submit_like = [element for element in elements if _is_submit_like(element)]
     disabled_terminal = [
         element for element in elements if _is_terminal_label(element) and element.state.disabled
@@ -156,6 +187,8 @@ def deterministic_form_action(observation: SanitizedObservation) -> BrowserActio
         and not pending
         and any(element.role == "checkbox" and element.state.checked for element in elements)
     ):
+        return BrowserAction(type="scroll", direction="down", amount=450)
+    if not submit_like and not pending and _is_commit_task(observation.task):
         return BrowserAction(type="scroll", direction="down", amount=450)
     if not submit_like and not pending and len(disabled_terminal) == 1:
         return BrowserAction(type="done", message="Form action completed; inspect the page result.")
@@ -256,6 +289,23 @@ def guard_reasoned_action(
             if pending:
                 return response.model_copy(update={"action": _click(pending[0].id)})
             return response.model_copy(update={"action": _click(submit_like[0].id)})
+
+    # A local public-field pass may have already selected a native option
+    # before the model's first observation. If the model repeats that select,
+    # move deterministically to consent/submit instead of burning one
+    # reasoning round per identical action.
+    if action.type in {"input", "select"} and action.elementId:
+        target_info = by_id.get(action.elementId)
+        if target_info is not None and _is_selected_combobox(target_info[1]):
+            pending = [element for element in elements if _is_pending_prerequisite(element)]
+            if pending:
+                return response.model_copy(update={"action": _click(pending[0].id)})
+            if len(submit_like) == 1:
+                return response.model_copy(update={"action": _click(submit_like[0].id)})
+            if _is_commit_task(observation.task):
+                return response.model_copy(update={
+                    "action": BrowserAction(type="scroll", direction="down", amount=450),
+                })
 
     # A terse/incomplete `done` response can otherwise strand a task after a
     # model step. Only recover when there is one terminal control, the task is

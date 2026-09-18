@@ -143,6 +143,26 @@ async def test_demo_reset_state_and_submit_are_deterministic(settings: Settings)
 
 
 @pytest.mark.asyncio
+async def test_success_page_requires_confirmed_submission(settings: Settings) -> None:
+    app = create_app(settings, FakeReasoner())
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        before = await client.get("/demo/success")
+        assert before.status_code == 303
+        assert before.headers["location"] == "/demo"
+        rejected = await client.post("/demo/api/submit", json={"consent": False})
+        assert rejected.status_code == 422
+        assert (await client.get("/demo/success")).status_code == 303
+        await client.post("/demo/api/submit", json={"consent": True})
+        success = await client.get("/demo/success")
+        assert success.status_code == 200
+        assert "Enrollment submitted successfully" in success.text
+        assert 'href="/demo"' in success.text
+        assert "no-store" in success.headers["cache-control"]
+        assert "aarav.sharma@example.test" not in success.text
+
+
+@pytest.mark.asyncio
 async def test_reasoning_updates_metadata_only_demo_state(settings: Settings) -> None:
     app = create_app(settings, FakeReasoner())
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)

@@ -51,6 +51,13 @@ afterEach(() => {
 });
 
 describe('single outbound gateway', () => {
+  it.each([[401, 'authentication failed'], [403, 'extension origin']])('explains HTTP %s without displaying server response contents', async (status, expected) => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: 'untrusted-response-secret' }, status as number));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(sendSanitizedObservation('http://127.0.0.1:8765/v1/reason', '', cleanObservation, []))
+      .rejects.toThrow(expected as string);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
   it('allows HTTPS and loopback HTTP only', () => {
     expect(validateReasoningEndpoint('http://127.0.0.1:8765/v1/reason').href).toContain('/v1/reason');
     expect(validateReasoningEndpoint('https://agent.example/v1/reason').href).toContain('/v1/reason');

@@ -20,6 +20,7 @@ const apiKey = byId<HTMLInputElement>('apiKey');
 const canaries = byId<HTMLTextAreaElement>('canaries');
 const fallback = byId<HTMLInputElement>('fallback');
 const highAssurance = byId<HTMLInputElement>('highAssurance');
+const autoApproveLocalDemo = byId<HTMLInputElement>('autoApproveLocalDemo');
 const start = byId<HTMLButtonElement>('start');
 
 
@@ -220,6 +221,7 @@ function settings(): ExtensionSettings {
     privacyGrade: normalizePrivacyGrade(Number(privacyGrade.value)),
     allowFullMaskFallback: fallback.checked,
     highAssuranceMode: highAssurance.checked,
+    autoApproveLocalDemo: autoApproveLocalDemo.checked,
     canaries: canaries.value.split(/\r?\n/u).map((item) => item.trim()).filter((item) => item.length >= 3),
   };
 }
@@ -482,7 +484,7 @@ privacyGrade.addEventListener('change', () => {
   void ext.storage.local.set({ privacyGrade: grade });
 });
 
-for (const field of [task, endpoint, maxSteps, apiKey, canaries, fallback, highAssurance]) {
+for (const field of [task, endpoint, maxSteps, apiKey, canaries, fallback, highAssurance, autoApproveLocalDemo]) {
   field.addEventListener('input', () => {
     popupError = null;
   });
@@ -494,6 +496,7 @@ void ext.storage.local.get([...PERSISTED_SETTING_KEYS]).then((saved) => {
   if (typeof saved.maxSteps === 'number') maxSteps.value = String(saved.maxSteps);
   if (typeof saved.allowFullMaskFallback === 'boolean') fallback.checked = saved.allowFullMaskFallback;
   if (typeof saved.highAssuranceMode === 'boolean') highAssurance.checked = saved.highAssuranceMode;
+  if (typeof saved.autoApproveLocalDemo === 'boolean') autoApproveLocalDemo.checked = saved.autoApproveLocalDemo;
   renderPrivacyGrade(saved.privacyGrade);
 });
 

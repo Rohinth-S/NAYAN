@@ -18,6 +18,7 @@ KNOWN_PATHS = {
     "/health/metrics",
     "/demo",
     "/demo/",
+    "/demo/success",
     "/demo/api/reset",
     "/demo/api/state",
     "/demo/api/submit",

@@ -5,7 +5,8 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Model = 'qwen3-vl:2b-instruct',
     [string]$ApiKey = '',
-    [switch]$SkipOllama
+    [switch]$SkipOllama,
+    [switch]$Background
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,6 +77,7 @@ try {
 }
 
 $env:PRIVACY_AGENT_API_KEY = $ApiKey
+$env:PRIVACY_AGENT_REQUIRE_API_KEY = 'true'
 $env:PRIVACY_AGENT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434'
 $env:PRIVACY_AGENT_OLLAMA_MODEL = $Model
 $env:PRIVACY_AGENT_ALLOW_REMOTE_OLLAMA = 'false'
@@ -89,10 +91,27 @@ $arguments = @(
     '--no-proxy-headers'
 )
 Write-Host "Starting server..."
+Write-Host "Paste the key from $keyFile into the extension API key field."
+if ($Background) {
+    $serverProcess = Start-Process -FilePath $serverExecutable -ArgumentList $arguments -WorkingDirectory $serverDirectory -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog -PassThru
+    @{ pid = $serverProcess.Id; executable = $serverExecutable; port = $Port } | ConvertTo-Json | Set-Content -LiteralPath $pidFile -Encoding utf8
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        $serverProcess.Refresh()
+        if ($serverProcess.HasExited) { throw "Privacy server exited. See $stderrLog" }
+        try {
+            $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health/ready" -TimeoutSec 2
+            if ($health.status -eq 'ready') {
+                Write-Host "Privacy server ready at http://127.0.0.1:$Port. Stop it with .\Stop-Prototype.ps1."
+                return
+            }
+        } catch { }
+        Start-Sleep -Milliseconds 400
+    }
+    throw "Server started but readiness did not pass. See $stderrLog"
+}
 Set-Location $serverDirectory
 try {
     & $serverExecutable $arguments
 } finally {
     Set-Location $projectRoot
 }
-

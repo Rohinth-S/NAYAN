@@ -49,9 +49,11 @@ hidden by a [REDACTED:*] placeholder or an opaque image mask. Choose exactly one
 schema. Use only an elementId that exists in the observation. Prefer element IDs over spatial guesses. Echo
 schemaVersion and snapshotId exactly. A click uses elementId only. Input uses elementId and public text only.
 Hover and focus use elementId only. DoubleClick uses elementId only and must be treated like a click for
-destructive confirmation. Check and uncheck use elementId only and are for checkbox controls. Select uses
+destructive confirmation. Check and uncheck use elementId only and are for checkbox controls; prefer `check`
+for an unchecked consent box and never toggle an already checked one. Select uses
 elementId plus a public option label/value that is already visible in the current sanitized context; never
-invent or copy a redacted value. Scroll uses direction and amount. Wait uses
+invent or copy a redacted value. Do not repeat a select action when the combobox label contains `[filled]`;
+move to the next required control. Scroll uses direction and amount. Wait uses
 milliseconds. Return done only after the task is complete or when
 masked context makes safe progress impossible. Return JSON only, with no Markdown or commentary. If safe
 progress is impossible, use a done message that briefly asks for more sanitized context.

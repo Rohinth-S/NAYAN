@@ -2,6 +2,7 @@ import { createWorker, PSM, type Worker } from 'tesseract.js';
 import { runtimeUrl } from './webext';
 import type { Bounds } from './types';
 import { shouldRedactCategory, type PrivacyCategory, type PrivacyGrade } from './privacy-policy';
+import type { LocalDocumentImage } from './document-source';
 
 /**
  * This detector is deliberately narrower than the general perception bundle.
@@ -9,7 +10,7 @@ import { shouldRedactCategory, type PrivacyCategory, type PrivacyGrade } from '.
  * The wire protocol receives the resulting boxes and categories, never OCR
  * text or an image crop.
  */
-export const DOCUMENT_OCR_VERSION = 'tesseract-eng-credential-v2-contrast';
+export const DOCUMENT_OCR_VERSION = 'tesseract-eng-credential-v3-document-crops';
 export const DOCUMENT_OCR_MIN_CONFIDENCE = 0.72;
 export const DOCUMENT_OCR_MAX_MEDIA_REGIONS = 8;
 export const DOCUMENT_OCR_MAX_PIXELS = 4_194_304;
@@ -87,6 +88,9 @@ export type DocumentOcrResult = Readonly<{
 export type DocumentOcrMediaHint = Readonly<{
   bounds: Bounds;
   documentType?: 'aadhaar-card' | 'pan-card' | 'credit-card' | 'unknown';
+  /** Already-masked portrait pixels: exclude from OCR, never from redaction. */
+  excludedRegions?: readonly Bounds[];
+  localImage?: LocalDocumentImage;
 }>;
 
 export interface DocumentOcrRuntime {
@@ -679,10 +683,11 @@ export function classifyDocumentOcr(
   };
 }
 
-function cropCanvas(image: OffscreenCanvas, media: Bounds): {
+function cropCanvas(image: OffscreenCanvas, media: Bounds, excludedRegions: readonly Bounds[] = [], contrast = false): {
   canvas: OffscreenCanvas;
   origin: Bounds;
-  scale: number;
+  scaleX: number;
+  scaleY: number;
 } {
   const x = Math.max(0, Math.floor(media.x));
   const y = Math.max(0, Math.floor(media.y));
@@ -692,12 +697,9 @@ function cropCanvas(image: OffscreenCanvas, media: Bounds): {
   const height = Math.max(1, bottom - y);
   // Upscaling small cards materially improves OCR while the per-crop and
   // total-pixel caps keep the extension responsive.
-  // The demo cards render at roughly 435 CSS pixels wide.  A 1,000-pixel
-  // target leaves the credit-card expiry as an ambiguous token (for example
-  // `038/29`), which prevents the complete-field safety gate from selecting
-  // the precise redactions.  A 1,300-pixel target reaches the existing 3x
-  // cap for these cards while staying under the aggregate OCR pixel budget.
-  const scale = Math.min(3, Math.max(1, 1_300 / Math.max(width, height)));
+  // A higher scale helps small captures, but cannot reconstruct letters
+  // already lost to downsampling. Loaded native image pixels are preferred.
+  const scale = Math.min(6, Math.max(1, 1_300 / Math.max(width, height)));
   const canvas = new OffscreenCanvas(
     Math.max(1, Math.min(2_048, Math.round(width * scale))),
     Math.max(1, Math.min(2_048, Math.round(height * scale))),
@@ -707,11 +709,18 @@ function cropCanvas(image: OffscreenCanvas, media: Bounds): {
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(image, x, y, width, height, 0, 0, canvas.width, canvas.height);
+  // Portrait texture otherwise gets segmented as text and joined to nearby
+  // field values. These pixels retain their original privacy masks in the
+  // compositor; blanking them here only improves the private OCR input.
+  for (const bounds of excludedRegions) {
+    context.fillStyle = '#ffffff';
+    context.fillRect((bounds.x - x) * scale, (bounds.y - y) * scale, bounds.width * scale, bounds.height * scale);
+  }
   // Browser screenshots often downsample light card text over a saturated
   // background.  A local grayscale/contrast pass restores the character
   // edges before Tesseract sees the crop (and never leaves this canvas).  The
   // pixel loop is bounded by DOCUMENT_OCR_MAX_PIXELS across all crops.
-  try {
+  if (contrast) try {
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
     for (let index = 0; index < pixels.data.length; index += 4) {
       const luminance = (pixels.data[index] ?? 0) * 0.299
@@ -728,7 +737,38 @@ function cropCanvas(image: OffscreenCanvas, media: Bounds): {
     // the unprocessed crop remains valid and the normal confidence gate still
     // fails closed when OCR cannot prove the required fields.
   }
-  return { canvas, origin: { x, y, width, height }, scale };
+  return { canvas, origin: { x, y, width, height }, scaleX: canvas.width / width, scaleY: canvas.height / height };
+}
+
+async function documentCrop(image: OffscreenCanvas, media: Bounds, hint: DocumentOcrMediaHint | undefined) {
+  const source = hint?.localImage;
+  if (source && source.width > 0 && source.height > 0 && source.width * source.height <= DOCUMENT_OCR_MAX_PIXELS
+    && source.dataUrl.startsWith('data:image/png;base64,') && source.dataUrl.length <= 3_000_000) {
+    let bitmap: ImageBitmap | undefined;
+    try {
+      const bytes = Uint8Array.from(atob(source.dataUrl.slice('data:image/png;base64,'.length)), c => c.charCodeAt(0));
+      bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+      if (bitmap.width !== source.width || bitmap.height !== source.height) throw new Error('Local image dimensions changed');
+      const scale = Math.min(2, 1_300 / Math.max(bitmap.width, bitmap.height));
+      const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('Local image canvas unavailable');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const scaleX = canvas.width / media.width;
+      const scaleY = canvas.height / media.height;
+      for (const bounds of hint?.excludedRegions ?? []) {
+        context.fillRect((bounds.x - media.x) * scaleX, (bounds.y - media.y) * scaleY, bounds.width * scaleX, bounds.height * scaleY);
+      }
+      return { canvas, origin: media, scaleX, scaleY };
+    } catch {
+      // An unreadable source does not disable the screenshot OCR path.
+    } finally {
+      bitmap?.close();
+    }
+  }
+  return cropCanvas(image, media, hint?.excludedRegions, hint?.documentType === 'credit-card');
 }
 
 export function createBrowserDocumentOcrRuntime(): DocumentOcrRuntime {
@@ -762,10 +802,15 @@ export function createBrowserDocumentOcrRuntime(): DocumentOcrRuntime {
       const selected = mediaBounds
         .filter(item => item.width > 0 && item.height > 0 && documentShapeLikely(item))
         .slice(0, DOCUMENT_OCR_MAX_MEDIA_REGIONS);
-      const lines: DocumentOcrLine[] = [];
+      const documents: DocumentClassification[] = [];
+      const secrets: DocumentSecret[] = [];
       let pixels = 0;
       for (const media of selected) {
-        const crop = cropCanvas(image, media);
+        // Classify each media crop independently. An overlapping image must
+        // never borrow a recognized field from its neighbour.
+        const lines: DocumentOcrLine[] = [];
+        const hint = mediaHints.find(item => sameBounds(item.bounds, media));
+        const crop = await documentCrop(image, media, hint);
         pixels += crop.canvas.width * crop.canvas.height;
         if (pixels > DOCUMENT_OCR_MAX_PIXELS) {
           crop.canvas.width = 1;
@@ -788,19 +833,19 @@ export function createBrowserDocumentOcrRuntime(): DocumentOcrRuntime {
               for (const paragraph of block.paragraphs ?? []) {
                 for (const line of paragraph.lines ?? []) {
                   const lineBounds = {
-                    x: crop.origin.x + line.bbox.x0 / crop.scale,
-                    y: crop.origin.y + line.bbox.y0 / crop.scale,
-                    width: (line.bbox.x1 - line.bbox.x0) / crop.scale,
-                    height: (line.bbox.y1 - line.bbox.y0) / crop.scale,
+                    x: crop.origin.x + line.bbox.x0 / crop.scaleX,
+                    y: crop.origin.y + line.bbox.y0 / crop.scaleY,
+                    width: (line.bbox.x1 - line.bbox.x0) / crop.scaleX,
+                    height: (line.bbox.y1 - line.bbox.y0) / crop.scaleY,
                   };
                   const words = (line.words ?? []).map(word => ({
                     text: word.text,
                     confidence: word.confidence / 100,
                     bounds: {
-                      x: crop.origin.x + word.bbox.x0 / crop.scale,
-                      y: crop.origin.y + word.bbox.y0 / crop.scale,
-                      width: (word.bbox.x1 - word.bbox.x0) / crop.scale,
-                      height: (word.bbox.y1 - word.bbox.y0) / crop.scale,
+                      x: crop.origin.x + word.bbox.x0 / crop.scaleX,
+                      y: crop.origin.y + word.bbox.y0 / crop.scaleY,
+                      width: (word.bbox.x1 - word.bbox.x0) / crop.scaleX,
+                      height: (word.bbox.y1 - word.bbox.y0) / crop.scaleY,
                     },
                   }));
                   lines.push({
@@ -817,14 +862,16 @@ export function createBrowserDocumentOcrRuntime(): DocumentOcrRuntime {
             const required = kind ? requiredDocumentFields(kind, privacyGrade) : [];
             if (kind && required.every(type => partial.secrets.some(secret => secret.secretType === type))) break;
           }
+          const classified = classifyDocumentOcr(lines, [media], mediaHints);
+          documents.push(...classified.documents);
+          secrets.push(...classified.secrets);
         } finally {
           crop.canvas.width = 1;
           crop.canvas.height = 1;
         }
       }
-      const classified = classifyDocumentOcr(lines, selected, mediaHints);
       return {
-        ...classified,
+        documents, secrets, modelVersion: DOCUMENT_OCR_VERSION,
         durationMs: performance.now() - started,
       };
     },

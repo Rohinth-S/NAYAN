@@ -1,5 +1,6 @@
 import { runAgentGraph } from './agent-graph';
 import { CaptureRateGate } from './capture-rate-gate';
+import { CaptureChangedError, capturePause, retryStableCapture } from './capture-retry';
 import { sameTabContext, type TabContext } from './context-guard';
 import { sendSanitizedObservation, type ReasoningRequestOptions } from './egress';
 import { localSanitizer } from '#local-sanitizer';
@@ -93,7 +94,7 @@ function createSanitizedDomPreview(observation: SanitizedObservation): Sanitized
 function safeMessage(error: unknown): string {
   if (!(error instanceof Error)) return 'Operation failed safely';
   const allowed = [
-    'blocked', 'unavailable', 'invalid', 'stale', 'changed', 'permission', 'rejected', 'too large', 'forbidden',
+    'blocked', 'unavailable', 'invalid', 'stale', 'changed', 'changing', 'permission', 'rejected', 'too large', 'forbidden',
     'unsupported', 'missing', 'failed', 'not a PNG', 'endpoint', 'origin', 'detector', 'target', 'editable', 'option',
   ];
   return allowed.some((word) => error.message.toLowerCase().includes(word)) ? error.message.slice(0, 240) : 'Operation failed safely';
@@ -127,6 +128,7 @@ function validateSettings(settings: ExtensionSettings, requireTask = true): void
   if (settings.apiKey.length > 1_000) throw new Error('API key is invalid');
   if (!isPrivacyGrade(settings.privacyGrade)) throw new Error('Privacy grade is invalid');
   if (typeof settings.highAssuranceMode !== 'boolean') throw new Error('High-assurance mode is invalid');
+  if (typeof settings.autoApproveLocalDemo !== 'boolean') throw new Error('Local demo approval setting is invalid');
   if (settings.canaries.length > 100 || settings.canaries.some((item) => item.length > 500)) throw new Error('Canary list is invalid');
 }
 
@@ -209,6 +211,39 @@ async function captureAndSanitize(
   receiptRequestCount = 0,
   signal?: AbortSignal,
 ): Promise<CapturedContext> {
+  // Pin all retries to one page. Each retry creates a new screenshot and DOM
+  // snapshot; no stale pixels or planned actions are reused.
+  const tab = pinnedTab ?? await activeTab();
+  await ensureContent(tab.id);
+  const initial = await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' }) as ContentResponse;
+  if (!initial.ok || !initial.revision) throw new Error('Page revision check is unavailable');
+  const documentId = initial.revision.documentId;
+  return retryStableCapture(async () => {
+    update({ phase: 'capturing', message: 'Waiting for the page to settle…' });
+    let previous = initial;
+    for (let poll = 0; poll < 8; poll++) {
+      await capturePause(signal);
+      if (!sameTabContext(tab, await activeTab())) throw new Error('Active tab changed before capture');
+      const next = await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' }) as ContentResponse;
+      if (!next.ok || !next.revision) throw new Error('Page revision check is unavailable');
+      if (next.revision.documentId !== documentId || next.revision.origin !== tab.origin) throw new Error('Document or origin changed before capture');
+      if (previous.ok && previous.revision && JSON.stringify(previous.revision) === JSON.stringify(next.revision)) {
+        return captureOnce(settings, tab, validationOptions, receiptRequestCount, signal, documentId);
+      }
+      previous = next;
+    }
+    throw new CaptureChangedError();
+  }, attempt => update({ message: `Page changed; discarding stale capture and retrying (${attempt}/3)…` }), signal);
+}
+
+async function captureOnce(
+  settings: ExtensionSettings,
+  pinnedTab: TabContext,
+  validationOptions: ObservationValidationOptions,
+  receiptRequestCount: number,
+  signal: AbortSignal | undefined,
+  expectedDocumentId: string,
+): Promise<CapturedContext> {
   signal?.throwIfAborted();
   const visibleTab = await activeTab();
   const tab = pinnedTab ?? visibleTab;
@@ -231,6 +266,7 @@ async function captureAndSanitize(
   }
   if (!contentResponse.ok || !contentResponse.snapshot) throw new Error(contentResponse.ok ? 'DOM capture failed' : contentResponse.error);
   const dom = contentResponse.snapshot;
+  if (dom.documentId !== expectedDocumentId) throw new Error('Document changed before capture');
   if (dom.origin !== tab.origin) throw new Error('Tab origin changed during capture');
   const screenshot = await captureVisible(tab.windowId);
   const tabAfterCapture = await activeTab();
@@ -283,17 +319,17 @@ async function captureAndSanitize(
     throw new Error('Page revision check is unavailable. Reload the page and retry');
   }
   const revision = revisionResponse.ok ? revisionResponse.revision : undefined;
+  if (!revision || revision.documentId !== dom.documentId || revision.origin !== dom.origin) {
+    throw new Error('Document or origin changed during capture');
+  }
   if (
-    !revision ||
-    revision.documentId !== dom.documentId ||
     revision.documentRevision !== dom.documentRevision ||
-    revision.origin !== dom.origin ||
     revision.viewport.width !== dom.viewport.width ||
     revision.viewport.height !== dom.viewport.height ||
     revision.viewport.scrollX !== dom.viewport.scrollX ||
     revision.viewport.scrollY !== dom.viewport.scrollY
   ) {
-    throw new Error('Document changed during capture or local sanitization');
+    throw new CaptureChangedError();
   }
   validateObservation(observation, validationOptions);
   const privacyReceipt = await createPrivacyReceipt(
@@ -330,7 +366,16 @@ async function setScrollGuard(tabId: number, active: boolean): Promise<ScrollDri
   return response.scrollDrift;
 }
 
-async function execute(context: CapturedContext, action: AgentAction, signal?: AbortSignal): Promise<string> {
+async function fillExplicitPublicFields(tabId: number, task: string): Promise<void> {
+  // This is a local acceleration path for the synthetic/public-field demo.
+  // The task text is sent only to the already-authorized content script; it
+  // never enters an observation or crosses the reasoning boundary here.
+  const response = await ext.tabs.sendMessage(tabId, { type: 'FILL_PUBLIC_FIELDS', task }) as ContentResponse;
+  if (!response.ok || !response.result) return;
+  if (/^Filled\s+/u.test(response.result)) update({ message: response.result });
+}
+
+async function execute(context: CapturedContext, action: AgentAction, signal?: AbortSignal, autoApproveIrreversible = false): Promise<string> {
   signal?.throwIfAborted();
   const visibleTab = await activeTab();
   if (
@@ -349,6 +394,7 @@ async function execute(context: CapturedContext, action: AgentAction, signal?: A
     documentId: context.dom.documentId,
     documentRevision: context.documentRevision,
     action,
+    autoApproveIrreversible,
   })) as ContentResponse;
   if (!response.ok) throw new Error(response.error);
   return response.result ?? 'Action executed';
@@ -396,6 +442,8 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     // switch must stop the run instead of silently moving the agent and its
     // privacy state onto another page.
     const pinnedTab = await activeTab();
+    await ensureContent(pinnedTab.id);
+    await fillExplicitPublicFields(pinnedTab.id, settings.task);
     let context: CapturedContext;
     let plannedAction: AgentAction | null = null;
     let requestCount = 0;
@@ -483,7 +531,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       async dispatch(signal) {
         if (!plannedAction) throw new Error('Action is missing');
         update({ phase: 'executing', message: `Executing ${plannedAction.type}…` });
-        const result = await execute(context, plannedAction, signal);
+        const result = await execute(context, plannedAction, signal, settings.autoApproveLocalDemo);
         signal.throwIfAborted();
         const done = plannedAction.type === 'done';
         update({ message: result, ...(done ? { running: false, phase: 'done' as const } : {}) });

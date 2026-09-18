@@ -100,6 +100,10 @@
           <input id="highAssurance" type="checkbox" />
           <span><strong>High-assurance structure-only mode.</strong> Send the sanitized DOM structure with an opaque black image; no visual semantics leave this device.</span>
         </label>
+        <label class="check" for="autoApproveLocalDemo">
+          <input id="autoApproveLocalDemo" type="checkbox" />
+          <span><strong>Auto-approve local demo submissions.</strong> Skip the in-page submit review only on the synthetic <code>127.0.0.1:8765/demo</code> page.</span>
+        </label>
       </details>
 
       <div class="actions">
@@ -151,7 +155,7 @@
             <h2 id="domProofTitle">Sanitized DOM capsule</h2>
             <p>Review the structured context that accompanies the redacted screenshot.</p>
           </div>
-          <button id="toggleDomProof" class="preview-expand dom-proof-toggle" type="button" aria-expanded="true">Hide DOM proof</button>
+          <button id="toggleDomProof" class="preview-expand dom-proof-toggle" type="button" aria-expanded="true" aria-controls="domProofContent">Hide DOM proof</button>
         </header>
         <div id="domProofContent" class="dom-proof-content"></div>
       </section>

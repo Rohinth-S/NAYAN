@@ -63,14 +63,15 @@ try {
   const result = await Promise.race([run, new Promise((_, reject) => {
     timeout = setTimeout(() => reject(new Error('Workflow smoke timed out')), 120_000);
   })]).finally(() => clearTimeout(timeout));
-  assert.equal(await demo.locator('#status').textContent(), 'Enrollment submitted successfully.', result.message);
-  assert.equal(await demo.locator('#consent').isChecked(), true);
+  assert.equal(new URL(demo.url()).pathname, '/demo/success', result.message);
+  assert.match(await demo.locator('#success-heading').innerText(), /Enrollment submitted\s+successfully\./);
+  assert.equal((await (await fetch(`${base}/demo/api/state`)).json()).submitted, true);
   assert.equal(result.phase, 'done', result.message);
   assert(confirmations > 0, 'Native confirmation must run before submit');
   const report = {
     scope: 'synthetic-Chrome-structural-planner-workflow', status: 'passed',
     steps: result.step, detector: result.detectorBackend, confirmations,
-    submitted: true, modelInferenceTested: false, elapsedMs: Date.now() - started,
+    submitted: true, redirectedToSuccess: true, modelInferenceTested: false, elapsedMs: Date.now() - started,
   };
   await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
   await fs.writeFile(path.join(root, 'artifacts/workflow-smoke.json'), JSON.stringify(report, null, 2));

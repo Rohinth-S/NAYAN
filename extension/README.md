@@ -77,6 +77,23 @@ rejects non-HTTP(S) tabs, no page data is sent by the permission itself, and
 the egress gateway still accepts only sanitized context. Firefox uses explicit
 HTTP(S) host patterns for the same local capture boundary.
 
+The synthetic enrollment preset has a local public-field fast path. It parses
+only values explicitly supplied in the task and writes only to controls opted
+into `data-public-field="true"`; no field value is sent to the reasoning
+server. The sanitized structure carries boolean progress markers so the
+server can advance to consent and submit without re-planning every field. An
+in-page review card tells the user to verify every populated field
+without blocking access to the website. The user approves or cancels the
+terminal submit click, and repeated submit responses are held while navigation
+is in flight. Unambiguous enrollment controls receive a
+synchronous structural decision, avoiding a model queue/poll round-trip;
+ambiguous pages still use the model-backed async path.
+
+The Advanced privacy controls expose an explicit **Auto-approve local demo
+submissions** switch for the synthetic `http://127.0.0.1:8765/demo` page. It
+is disabled by default and is ignored on every other origin, so ordinary
+websites continue to require the in-page review card.
+
 The default endpoint is `http://127.0.0.1:8765/v1/reason`. Non-loopback
 endpoints must use HTTPS. API keys and known private values are kept in the
 background/panel memory and are not saved to extension storage. The endpoint,
@@ -193,6 +210,8 @@ background memory.
 
 ## Current detection behavior
 
+Capture first waits for the page revision to settle. A change during filtering discards the entire capture and retries up to three times with fresh pixels and DOM metadata. Tab/origin/document replacement and persistent mutation still block the run; no stale observation or action is replayed. HTTP 403 now identifies extension-origin rejection and HTTP 401 identifies a missing or mismatched API key. Local preview does not verify server connectivity: use the authenticated project launcher and copy the saved session key into the panel before starting the agent.
+
 The extension applies the selected cumulative grade before encoding a new PNG:
 
 - Grade 1 always protects passwords, authentication secrets, government and
@@ -232,8 +251,20 @@ The extension applies the selected cumulative grade before encoding a new PNG:
   `[REDACTED:AADHAAR_NUMBER]`; these
   labels contain no source values; they are painted into the sanitized image
   and can therefore be visible to the reasoning server along with that image.
-  OCR uses local upscaling and contrast normalization, sparse-text segmentation,
-  and a single-block retry for incomplete document crops. High-confidence
+  OCR first uses the original pixels of an already-loaded, canvas-readable
+  document image so browser zoom does not destroy small names and dates. The
+  content script reads these pixels locally without fetching an image URL;
+  they remain in extension-local IPC and never enter the server payload. The
+  source path has a cumulative pixel budget and requires an unclipped image
+  with a valid source-to-screen map. Cross-origin canvas restrictions,
+  transforms, filters, padding and incompatible image geometry use screenshot
+  OCR instead. Detected fields are mapped back to screenshot coordinates,
+  while portrait overlays keep their separate full-portrait masks.
+  Screenshot OCR uses local upscaling, contrast normalization for payment
+  cards, sparse-text segmentation, and a single-block retry for incomplete
+  document crops. Portraits already scheduled for masking are excluded from
+  the OCR input so facial texture cannot merge into name/date lines. Each crop
+  is classified independently. High-confidence
   words can recover a line affected by decorative noise, but its original
   bounds are retained so uncertain value characters remain covered;
 - a page can explicitly mark a known public object fixture with
@@ -245,6 +276,13 @@ may explicitly enable the visual full-mask fallback; in that mode the entire
 image becomes opaque black, the request records `visualFallback: "full-mask"`
 and `redactionMode: "opaque"`, and sanitized DOM structure remains available
 to the server.
+
+Run `node scripts/document-media-smoke.mjs` from the repository root after
+`npm --prefix extension run package` with the local demo server running. This
+checks the packaged Chrome sanitizer at three page scales, two display scales,
+and all three privacy grades. It asserts field-level card masks, portrait
+coverage, and zero reasoning requests; aggregate results and sanitized images
+are written to `artifacts/document-media-*`.
 
 ## Known limits
 

@@ -52,6 +52,7 @@ h1 { margin: 0; color: var(--ink); font-size: clamp(20px, 3vw, 34px); letter-spa
 .dom-proof-panel-header p:last-child { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
 .dom-proof-panel-header button { flex: 0 0 auto; }
 .dom-proof-panel .dom-proof-content { display: grid; gap: 14px; }
+.dom-proof-panel .dom-proof-content[hidden] { display: none !important; }
 .dom-proof-banner {
   display: flex; align-items: flex-start; gap: 9px; border: 1px solid #9aa89e;
   border-radius: 8px; padding: 10px 11px; color: #173321; background: #eef6f0;

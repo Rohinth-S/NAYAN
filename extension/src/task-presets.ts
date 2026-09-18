@@ -22,7 +22,7 @@ export const TASK_PRESETS: readonly TaskPreset[] = [
   {
     id: 'fill-public-fields',
     label: 'Fill public fields from my instructions',
-    task: 'Fill the public demo form fields with: preferred name Kavya Menon, work email kavya.menon@example.test, phone +91 90000 12345, city Bengaluru, benefit plan Orbital Health Plus, coverage start date 2026-10-01. Then check the consent box and submit the enrollment.',
+    task: 'Fill the public demo form fields with: preferred name Rohan Mehta, work email rohan.mehta@example.test, phone +91 91234 56789, city Pune, benefit plan Family Care Standard, coverage start date 2026-11-15. Then check the consent box and submit the enrollment.',
   },
   {
     id: 'find-information',

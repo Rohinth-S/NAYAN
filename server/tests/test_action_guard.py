@@ -53,6 +53,21 @@ def test_deterministic_form_planner_scrolls_after_checked_checkbox() -> None:
     assert result.type == "scroll" and result.direction == "down" and result.amount == 450
 
 
+@pytest.mark.parametrize("task", ["Submit the enrollment", "Fill and submit the enrollment form"])
+def test_confirmation_page_completes_without_clicking_return_link(task: str) -> None:
+    payload = observation_payload(task=task, elements=[])
+    payload["page"]["title"] = "Enrollment submitted successfully | Orbital Benefits"
+    action = deterministic_form_action(SanitizedObservation.model_validate(payload))
+    assert action is not None and action.type == "done"
+
+
+def test_completion_title_does_not_skip_pending_form_controls() -> None:
+    payload = _form_payload()
+    payload["page"]["title"] = "Enrollment submitted successfully | Orbital Benefits"
+    action = deterministic_form_action(SanitizedObservation.model_validate(payload))
+    assert action is not None and action.type == "click" and action.elementId == CONSENT_ID
+
+
 @pytest.mark.asyncio
 async def test_submit_click_is_reordered_before_unchecked_required_consent(client, fake_reasoner) -> None:
     fake_reasoner.response = ReasoningResponse(

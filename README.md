@@ -27,7 +27,7 @@ The project is not only a browser agent with a privacy setting. Privacy is enfor
 7. **Sanitized reasoning:** the server receives only the versioned sanitized observation.
 8. **Strict action output:** the model cannot return arbitrary JavaScript, selectors, URLs, or keyboard injection.
 9. **Live-page verification:** snapshot, document, viewport, origin, target, editability, and duplicate-action checks run again before execution.
-10. **Human confirmation:** destructive clicks such as submit, delete, pay, or navigation require native confirmation.
+10. **Human confirmation:** destructive clicks such as submit, delete, pay, or navigation pause for an in-page review card.
 
 This gives the project a stronger privacy story than a provider setting or a promise that a cloud model will delete data after it has already received the original page.
 
@@ -74,6 +74,8 @@ The intended task is:
 Check the confirmation checkbox, then submit the enrollment.
 ```
 
+After the server confirms submission, the portal navigates to `/demo/success`, displaying **Enrollment submitted successfully** and a **Back to enrollment** link. Failed or unconfirmed responses stay on the form with a retry message. The agent captures the new confirmation page and finishes instead of starting another enrollment. The success view contains no profile values; opening it before a confirmed submission returns to the form. This demo uses the existing shared synthetic verification state, not per-user enrollment storage.
+
 At Grade 3, the reasoning service can see the public structure, safe labels, roles, bounds, checkbox state, and submit control. Personal values, the face, passwords, and uninspectable media are redacted locally. In the default package, local credential OCR narrows a confidently recognized synthetic payment/PAN or Aadhaar-style document to its complete set of PII boxes; a missing, low-confidence, timed-out, incomplete, or unsupported OCR result keeps the complete media region masked. The model can identify the checkbox and submit control without receiving the enrollment data.
 
 The image fixtures intentionally exercise four media paths: precise local OCR redaction for supported documents, full-image masking for the synthetic person, preservation for the explicitly classified public object, and fail-closed masking for unclassified or low-confidence media.
@@ -112,6 +114,116 @@ flowchart LR
     EG --> GUARD[Snapshot, origin,<br/>target, confirmation guard]
     GUARD --> CS
     CS --> PAGE[Live webpage]
+```
+
+### Technical modules architecture
+
+The following module-level view maps the browser UX, local privacy boundary, reasoning service, safe execution path, and operational evidence back to the source files that implement them.
+
+```mermaid
+flowchart TD
+
+subgraph group_browser_ux["Browser UX"]
+  node_popup["Task Interface<br/>[popup.ts]"]
+  node_background["Background Controller<br/>[background.ts]"]
+  node_preview["Sanitized Preview<br/>[preview.ts]"]
+end
+
+subgraph group_local_privacy["Local Privacy"]
+  node_content_capture["Page Capture<br/>[content.ts]"]
+  node_perception["Perception Runtime"]
+  node_face_detector["Face Detector<br/>[face-detector.ts]"]
+  node_document_ocr["Document OCR<br/>[document-ocr.ts]"]
+  node_media_policy["Media Policy<br/>[media-policy.ts]"]
+  node_privacy_policy["Privacy Grades<br/>[privacy-policy.ts]"]
+  node_redactor["Image Redactor<br/>[image-redactor.ts]"]
+  node_sanitizer["Observation Sanitizer<br/>[privacy.ts]"]
+  node_client_validation["Outbound Validation<br/>[validation.ts]"]
+end
+
+subgraph group_reasoning["Reasoning Service"]
+  node_api["Reasoning API<br/>[main.py]"]
+  node_server_validation["Server Validation<br/>[validation.py]"]
+  node_reasoner["Model Adapter<br/>[ollama.py]"]
+end
+
+subgraph group_safe_execution["Safe Execution"]
+  node_egress["Reasoning Egress<br/>[egress.ts]"]
+  node_action_guard["Action Guard<br/>[action_guard.py]"]
+  node_agent_graph["Agent Controller<br/>[agent-graph.ts]"]
+  node_context_guard["Context Guard<br/>[context-guard.ts]"]
+end
+
+subgraph group_operations["Operations"]
+  node_job_queue["Reasoning Jobs<br/>[jobs.py]"]
+  node_receipt["Privacy Receipt<br/>[privacy-receipt.ts]"]
+end
+
+node_user(("User"))
+node_page["Live Page"]
+node_ollama["Local Ollama"]
+
+node_user -->|"sets task"| node_popup
+node_popup -->|"starts capture"| node_background
+node_background -->|"requests snapshot"| node_content_capture
+node_content_capture -->|"provides signals"| node_perception
+node_perception -->|"detects faces"| node_face_detector
+node_perception -.->|"inspects documents"| node_document_ocr
+node_perception -->|"classifies media"| node_media_policy
+node_privacy_policy -->|"selects categories"| node_redactor
+node_perception -->|"applies grade"| node_privacy_policy
+node_redactor -->|"creates observation"| node_sanitizer
+node_sanitizer -->|"passes bytes"| node_client_validation
+node_client_validation -->|"authorizes egress"| node_egress
+node_sanitizer -->|"renders proof"| node_preview
+node_sanitizer -->|"records receipt"| node_receipt
+node_egress -->|"sends observation"| node_api
+node_api -->|"validates request"| node_server_validation
+node_api -.->|"queues reasoning"| node_job_queue
+node_api -->|"requests reasoning"| node_reasoner
+node_reasoner -->|"calls model"| node_ollama
+node_api -->|"guards action"| node_action_guard
+node_api -->|"returns action"| node_egress
+node_egress -->|"delivers action"| node_agent_graph
+node_agent_graph -->|"checks context"| node_context_guard
+node_agent_graph -->|"executes action"| node_page
+node_agent_graph -->|"requests confirmation"| node_popup
+node_page -->|"exposes state"| node_content_capture
+
+click node_popup "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/popup.ts"
+click node_background "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/background.ts"
+click node_preview "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/preview.ts"
+click node_content_capture "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/content.ts"
+click node_perception "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/perception-runtime.ts"
+click node_face_detector "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/face-detector.ts"
+click node_document_ocr "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/document-ocr.ts"
+click node_media_policy "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/media-policy.ts"
+click node_privacy_policy "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/privacy-policy.ts"
+click node_redactor "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/image-redactor.ts"
+click node_sanitizer "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/privacy.ts"
+click node_client_validation "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/validation.ts"
+click node_egress "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/egress.ts"
+click node_api "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/server/app/main.py"
+click node_server_validation "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/server/app/validation.py"
+click node_job_queue "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/server/app/jobs.py"
+click node_reasoner "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/server/app/gateways/ollama.py"
+click node_action_guard "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/server/app/action_guard.py"
+click node_agent_graph "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/agent-graph.ts"
+click node_context_guard "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/context-guard.ts"
+click node_receipt "https://github.com/rohinth-s/privacy-focused-browser-agent/blob/main/extension/src/privacy-receipt.ts"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_popup,node_background,node_preview,node_user toneBlue
+class node_content_capture,node_perception,node_face_detector,node_document_ocr,node_media_policy,node_privacy_policy,node_redactor,node_sanitizer,node_client_validation toneAmber
+class node_api,node_server_validation,node_reasoner toneMint
+class node_egress,node_action_guard,node_agent_graph,node_context_guard toneRose
+class node_job_queue,node_receipt,node_page,node_ollama toneIndigo
 ```
 
 ### Trust boundary
@@ -295,6 +407,15 @@ Only non-secret preferences are persisted in extension storage: endpoint, maximu
 
 The real map from an opaque element ID to a DOM node stays inside the content script.
 
+Document images use local original-resolution OCR when their already-loaded
+pixels are canvas-readable and their screen geometry is valid. This prevents
+small PAN/Aadhaar fields from disappearing into whole-image masks at reduced
+page zoom. Source pixels stay inside the extension; only grade-specific field
+masks are painted onto the transmitted screenshot. Portraits retain separate
+masks. Unsupported source access or geometry falls back to screenshot OCR,
+and incomplete detection keeps the document masked. The packaged-browser
+regression is `node scripts/document-media-smoke.mjs`.
+
 `capture-rate-gate.ts` keeps visible-tab screenshot capture demand-driven and below the browser's capture limit. `context-guard.ts` binds work to the original tab, window, origin, update generation, activation generation, document, and viewport. `validation.ts` performs the client-side schema, PNG, bounds, redaction, registry, and serialized-body checks before `egress.ts` can send anything.
 
 ### Capture identity and scroll-drift protection
@@ -325,7 +446,7 @@ fresh revision and visibility checks.
 | `done` | End the task with a status message. |
 | `hover` | Dispatch a local hover sequence (`mouseover`, `mousemove`, `mouseenter`) to reveal ordinary menus/tooltips. |
 | `focus` | Focus the current target without allowing the model to supply a selector or script. |
-| `doubleClick` | Dispatch a local double-click event; destructive labels use the same native confirmation as `click`. |
+| `doubleClick` | Dispatch a local double-click event; destructive labels use the same in-page review card as `click`. |
 | `check` / `uncheck` | Set a current checkbox to the requested state without toggle ambiguity. |
 | `select` | Choose an exact public label/value on a current native `<select>`; no option list or private value is sent. |
 
@@ -335,7 +456,21 @@ targets, hidden/detached elements, disabled/read-only controls, unsupported cust
 combobox selection, and duplicate in-flight actions. The server also checks checkbox
 and combobox roles and applies the PII floor to `select.option`.
 
-Clicks with destructive or irreversible labels such as submit, pay, delete, checkout, confirm, or navigation pause for native `window.confirm()` approval. The model cannot silently bypass that confirmation.
+Clicks with destructive or irreversible labels such as submit, pay, delete, checkout, or confirm pause for a non-blocking in-page review card. The user can scroll and inspect the website before choosing **Approve submission** or **Cancel**; the model cannot silently bypass that confirmation. The Advanced privacy controls include an explicit **Auto-approve local demo submissions** option for the synthetic `http://127.0.0.1:8765/demo` page; it is off by default and has no effect on other origins.
+
+For the synthetic enrollment workflow, fields marked `data-public-field="true"`
+are filled locally from explicit user instructions before reasoning begins. The
+content script exposes only boolean `[public]`/`[filled]` progress markers to
+the sanitized DOM capsule; the field values remain local. This removes a
+round-trip for every public field, supports native text/date/select controls,
+and leaves the consent checkbox and terminal submit action for the normal
+revision-bound broker. Before the terminal click, the extension asks the user
+to review every populated field and accepts submission only after the user
+chooses **OK**. A second in-flight submit cannot trigger a second click or a
+second prompt while the page is navigating to the success view.
+When the sanitized structure makes the enrollment action unambiguous, the
+server returns that structural action synchronously instead of adding an async
+job poll; model-backed pages retain the bounded async path.
 
 ### Agent state machine
 
@@ -827,7 +962,7 @@ Before a judging run, use the preflight script:
 powershell -ExecutionPolicy Bypass -File scripts/demo-preflight.ps1
 ```
 
-It checks loopback health, the configured local model, both browser-package builds, and the synthetic portal reset.
+It checks loopback health, the configured local model, both browser-package builds, the synthetic portal reset, and extension authentication. The authentication probe requires `401` without a key and `422` for an empty synthetic body with the saved key: model readiness alone cannot detect a server that rejects extension origins.
 
 ## Run the prototype
 
@@ -859,8 +994,8 @@ node scripts/workflow-smoke.mjs
 
 This isolated smoke loads the packaged Chrome extension, captures and sanitizes
 the demo locally, sends only the sanitized observation to a local development
-server, executes the real LangGraph controller, accepts the native submit
-confirmation, and writes aggregate results to `artifacts/workflow-smoke.json`.
+server, executes the real LangGraph controller, accepts the in-page submit
+review, and writes aggregate results to `artifacts/workflow-smoke.json`.
 It exercises wiring and action safety; it is not model-accuracy evidence.
 
 ### Start and stop
@@ -884,6 +1019,10 @@ Use `.\Start-Prototype.ps1 -SkipOllama` when Ollama is already managed separatel
 ```powershell
 .\Stop-Prototype.ps1
 ```
+
+For a hidden background server with process tracking, use `.\Start-Prototype.ps1 -SkipOllama -Background`. The launcher requires the session key and keeps its value out of terminal output. A manually started Uvicorn process without `PRIVACY_AGENT_API_KEY` can report healthy while rejecting extension requests with **403**; stop that process and use the launcher. **401** means the panel key is missing or differs from `.runtime\api-key.txt`. Preview remains local and does not test server authentication.
+
+Capture waits for a stable page revision, then discards and repeats a same-document capture up to three times if layout or scrolling changes during sanitization. The extension never sends the discarded image. A tab, origin, or document replacement stops the run; continuously changing pages also stop after the retry budget. Leave the page still while the agent works, then review and approve the in-page card when it requests the synthetic form submission.
 
 ### Build and load the extension
 
@@ -941,7 +1080,7 @@ Firefox:
 9. Use **Expand** or **Open full view** to inspect the redacted image and DOM
    capsule at full size.
 10. Click **Start agent**.
-11. Approve the native confirmation when the agent requests the submit action.
+11. Review the populated fields and approve the in-page card when the agent requests the submit action.
 12. Confirm `Enrollment submitted successfully.` appears in the demo.
 
 For a grade comparison recording, reset the demo and run Privacy preview once at each grade:

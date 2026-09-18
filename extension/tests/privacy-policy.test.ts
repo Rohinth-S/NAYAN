@@ -66,6 +66,7 @@ describe('user-selectable privacy grades', () => {
       maxSteps: 10,
       privacyGrade: 2,
       allowFullMaskFallback: false,
+      autoApproveLocalDemo: false,
       highAssuranceMode: false,
       canaries: ['private value'],
     });
@@ -74,6 +75,7 @@ describe('user-selectable privacy grades', () => {
       maxSteps: 10,
       privacyGrade: 2,
       allowFullMaskFallback: false,
+      autoApproveLocalDemo: false,
       highAssuranceMode: false,
     });
     expect(JSON.stringify(persisted)).not.toContain('do-not-store');

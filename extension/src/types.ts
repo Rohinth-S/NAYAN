@@ -206,6 +206,8 @@ export type RawDomSnapshot = Readonly<{
     bounds: CssBounds;
     kind: 'document' | 'person' | 'object' | 'unknown';
     documentType?: 'aadhaar-card' | 'pan-card' | 'credit-card' | 'unknown';
+    /** Original loaded image pixels, local OCR only; never part of egress. */
+    localImage?: Readonly<{ dataUrl: string; width: number; height: number }>;
   }>[];
   redactions: readonly Readonly<{
     kind: RedactionKind;
@@ -223,6 +225,8 @@ export type ExtensionSettings = Readonly<{
   maxSteps: number;
   privacyGrade: PrivacyGrade;
   allowFullMaskFallback: boolean;
+  /** Skip terminal confirmation only for the synthetic loopback demo page. */
+  autoApproveLocalDemo: boolean;
   /**
    * High-assurance mode deliberately discards all screenshot semantics. The
    * server receives an opaque black PNG plus the already-sanitized DOM
@@ -275,6 +279,8 @@ export type PopupCommand =
 export type ContentCommand =
   | { type: 'PING' }
   | { type: 'CAPTURE_DOM'; snapshotId: string; knownValues: readonly string[]; privacyGrade: PrivacyGrade }
+  /** Parse and fill only explicitly requested, page-declared public fields locally. */
+  | { type: 'FILL_PUBLIC_FIELDS'; task: string }
   | { type: 'VERIFY_REVISION' }
   | { type: 'SET_SCROLL_GUARD'; active: boolean }
   | { type: 'GET_SCROLL_DRIFT' }
@@ -284,6 +290,7 @@ export type ContentCommand =
       documentId: string;
       documentRevision: number;
       action: AgentAction;
+      autoApproveIrreversible?: boolean;
     };
 
 export type ContentResponse =

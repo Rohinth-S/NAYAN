@@ -16,6 +16,7 @@ reveal?.addEventListener("click", () => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (submit.disabled) return;
   if (!consent.checked) {
     status.textContent = "Select the confirmation checkbox before submitting.";
     status.dataset.error = "true";
@@ -32,9 +33,12 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({ consent: true }),
     });
     if (!response.ok) throw new Error("submission failed");
+    const result = await response.json();
+    if (result.submitted !== true) throw new Error("submission was not confirmed");
     status.textContent = "Enrollment submitted successfully.";
     delete status.dataset.error;
     document.body.dataset.demoComplete = "true";
+    window.location.assign("/demo/success");
   } catch {
     status.textContent = "Submission failed. Try again.";
     status.dataset.error = "true";
