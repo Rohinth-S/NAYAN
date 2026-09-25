@@ -1,4 +1,4 @@
-# Private Browser Agent
+# Privacy focused Browser Agent
 
 ## On-device visual perception with a zero-trust privacy boundary
 
