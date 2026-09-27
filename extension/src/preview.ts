@@ -1,6 +1,8 @@
 import type { AgentStatus } from './types';
 import { renderSanitizedDomPreview } from './dom-preview';
+import { downloadRedactionReport, renderRedactionReport } from './redaction-report';
 import { ext } from './webext';
+import './thinking-orb';
 
 const message = document.getElementById('message') as HTMLParagraphElement;
 const image = document.getElementById('preview') as HTMLImageElement;
@@ -11,17 +13,53 @@ const zoomValue = document.getElementById('previewZoomValue') as HTMLOutputEleme
 const zoomIn = document.getElementById('previewZoomIn') as HTMLButtonElement;
 const zoomReset = document.getElementById('previewZoomReset') as HTMLButtonElement;
 const fullscreen = document.getElementById('previewFullscreen') as HTMLButtonElement;
+const whyHiddenToggle = document.getElementById('whyHiddenToggle') as HTMLButtonElement;
+const whyHiddenExplanation = document.getElementById('whyHiddenExplanation') as HTMLDivElement;
+const whyHiddenText = document.getElementById('whyHiddenText') as HTMLParagraphElement;
+const whyHiddenCategories = document.getElementById('whyHiddenCategories') as HTMLUListElement;
 const close = document.getElementById('close') as HTMLButtonElement;
 const domProofPanel = document.getElementById('dom-proof-panel') as HTMLElement;
 const domProofContent = document.getElementById('dom-preview-content') as HTMLElement;
 const toggleDomProof = document.getElementById('toggle-dom-proof') as HTMLButtonElement;
+const runReport = document.getElementById('runReport') as HTMLElement;
+const runReportContent = document.getElementById('runReportContent') as HTMLElement;
+const downloadReport = document.getElementById('downloadReport') as HTMLButtonElement;
 let domProofOpen = true;
 let previewFallbackFullscreen = false;
+let latestStatus: AgentStatus | null = null;
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.25;
 let zoom = 1;
+
+function renderWhyHidden(status: AgentStatus): void {
+  const grade = status.sanitizedDomPreview?.grade;
+  const categories = Object.entries(status.categoryCounts ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => left.localeCompare(right));
+  if (categories.length === 0) {
+    whyHiddenText.textContent = grade
+      ? `No sensitive categories were reported for privacy Grade ${grade}. The preview may still be unavailable because the local detector failed closed.`
+      : 'No sensitive categories were reported by the local privacy filter.';
+    whyHiddenCategories.replaceChildren();
+    return;
+  }
+  whyHiddenText.textContent = grade
+    ? `The local filter applied privacy Grade ${grade} before this preview was created. It detected the following categories:`
+    : 'The local filter detected the following categories before this preview was created:';
+  whyHiddenCategories.replaceChildren(...categories.map(([kind, count]) => {
+    const item = document.createElement('li');
+    item.textContent = `${kind}: ${count}`;
+    return item;
+  }));
+}
+
+function toggleWhyHidden(): void {
+  const open = whyHiddenExplanation.hidden;
+  whyHiddenExplanation.hidden = !open;
+  whyHiddenToggle.setAttribute('aria-expanded', String(open));
+}
 
 function renderZoom(): void {
   const percentage = Math.round(zoom * 100);
@@ -82,6 +120,8 @@ async function toggleFullscreen(): Promise<void> {
 
 async function load(): Promise<void> {
   const status = (await ext.runtime.sendMessage({ type: 'GET_STATUS' })) as AgentStatus;
+  latestStatus = status;
+  renderWhyHidden(status);
   if (!status.previewDataUrl && !status.sanitizedDomPreview) {
     message.textContent = 'No local preview is available. Run Privacy preview from the extension first.';
     return;
@@ -128,10 +168,52 @@ async function load(): Promise<void> {
   } else {
     domProofPanel.hidden = true;
   }
+  if (status.latestReport) {
+    runReport.hidden = false;
+    renderRedactionReport(runReportContent, status.latestReport, status.previewDataUrl);
+  } else {
+    runReport.hidden = true;
+    runReportContent.replaceChildren();
+  }
   message.hidden = Boolean(status.previewDataUrl || status.sanitizedDomPreview);
 }
 
-close.addEventListener('click', () => window.close());
+downloadReport.addEventListener('click', () => {
+  const report = latestStatus?.latestReport;
+  if (report) downloadRedactionReport(report, latestStatus?.previewDataUrl ?? null);
+});
+
+async function closePreviewTab(): Promise<void> {
+  if (document.fullscreenElement === imagePanel) {
+    try {
+      await document.exitFullscreen();
+    } catch {
+      // The tab can still be closed if the browser has already exited native
+      // fullscreen or rejected the exit request.
+    }
+  }
+  const openerTabId = Number(new URLSearchParams(window.location.search).get('openerTabId'));
+  const currentTab = await ext.tabs.getCurrent();
+  if (Number.isInteger(openerTabId) && openerTabId > 0) {
+    try {
+      await ext.tabs.update(openerTabId, { active: true });
+    } catch {
+      // The originating tab may have been closed; closing this preview is
+      // still the correct recovery path.
+    }
+  }
+  if (currentTab?.id !== undefined) {
+    try {
+      await ext.tabs.remove(currentTab.id);
+      return;
+    } catch {
+      // Fall through to the browser's normal close behavior.
+    }
+  }
+  window.close();
+}
+
+close.addEventListener('click', () => void closePreviewTab());
 toggleDomProof.addEventListener('click', () => {
   domProofOpen = !domProofOpen;
   domProofContent.hidden = !domProofOpen;
@@ -142,6 +224,7 @@ zoomOut.addEventListener('click', () => setZoom(zoom - ZOOM_STEP));
 zoomIn.addEventListener('click', () => setZoom(zoom + ZOOM_STEP));
 zoomReset.addEventListener('click', () => setZoom(1));
 fullscreen.addEventListener('click', () => void toggleFullscreen());
+whyHiddenToggle.addEventListener('click', toggleWhyHidden);
 imageStage.addEventListener('wheel', (event) => {
   if (!event.ctrlKey && !event.metaKey) return;
   event.preventDefault();

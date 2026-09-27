@@ -68,6 +68,32 @@ def test_completion_title_does_not_skip_pending_form_controls() -> None:
     assert action is not None and action.type == "click" and action.elementId == CONSENT_ID
 
 
+def test_transfer_preset_reaches_consent_after_local_public_field_fill() -> None:
+    payload = _form_payload(
+        label="I confirm the transfer details and authorise this request."
+    )
+    payload["task"] = (
+        "Fill the transfer request with applicant name Aarav Sharma; official email "
+        "aarav.sharma@example.test; mobile number +91 98765 43210; requested centre "
+        "Orbital Satellite Centre, Bengaluru; transfer type Family relocation; effective "
+        "date 2026-11-15. Then check the consent box and ask me to review all fields "
+        "before submitting the transfer request."
+    )
+    public = [
+        {
+            "id": f"e_public_{index:016d}",
+            "role": "combobox" if index in {3, 4} else "textbox",
+            "label": f"Field {index} [public] [filled]",
+            "bounds": {"x": 4, "y": 4, "width": 50, "height": 16},
+            "state": {"disabled": False, "checked": False, "editable": True, "required": True},
+        }
+        for index in range(6)
+    ]
+    payload["elements"] = public + payload["elements"]
+    action = deterministic_form_action(SanitizedObservation.model_validate(payload))
+    assert action is not None and action.type == "click" and action.elementId == CONSENT_ID
+
+
 @pytest.mark.asyncio
 async def test_submit_click_is_reordered_before_unchecked_required_consent(client, fake_reasoner) -> None:
     fake_reasoner.response = ReasoningResponse(

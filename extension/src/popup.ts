@@ -1,9 +1,11 @@
 import type { AgentStatus, ExtensionSettings, PopupCommand, PrivacyReceipt } from './types';
 import { renderSanitizedDomPreview } from './dom-preview';
+import { downloadRedactionReport, renderRedactionReport } from './redaction-report';
 import { normalizePrivacyGrade, type PrivacyGrade } from './privacy-policy';
 import { PERSISTED_SETTING_KEYS, serializePersistedSettings } from './settings';
 import { taskPreset, TASK_PRESETS } from './task-presets';
 import { ext } from './webext';
+import { agentPhaseToOrbState, type ThinkingOrbElement } from './thinking-orb';
 
 const byId = <T extends HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -21,6 +23,9 @@ const canaries = byId<HTMLTextAreaElement>('canaries');
 const fallback = byId<HTMLInputElement>('fallback');
 const highAssurance = byId<HTMLInputElement>('highAssurance');
 const autoApproveLocalDemo = byId<HTMLInputElement>('autoApproveLocalDemo');
+const allowLocalTransfer = byId<HTMLInputElement>('allowLocalTransfer');
+const sourceTab = byId<HTMLSelectElement>('sourceTab');
+const refreshSourceTabs = byId<HTMLButtonElement>('refreshSourceTabs');
 const start = byId<HTMLButtonElement>('start');
 
 
@@ -42,6 +47,9 @@ const domProofContent = byId<HTMLElement>('domProofContent');
 const toggleDomProof = byId<HTMLButtonElement>('toggleDomProof');
 const privacyReceipt = byId<HTMLElement>('privacyReceipt');
 const privacyReceiptContent = byId<HTMLElement>('privacyReceiptContent');
+const runReport = byId<HTMLElement>('runReport');
+const runReportContent = byId<HTMLElement>('runReportContent');
+const downloadReport = byId<HTMLButtonElement>('downloadReport');
 const previewModal = byId<HTMLDivElement>('previewModal');
 const previewModalStage = byId<HTMLDivElement>('previewModalStage');
 const previewModalImage = byId<HTMLImageElement>('previewModalImage');
@@ -62,6 +70,7 @@ let previewFallbackFullscreen = false;
 let lastActivity = '';
 let domProofOpen = true;
 let lastDomSnapshotId = '';
+let latestStatus: AgentStatus | null = null;
 
 const PREVIEW_ZOOM_MIN = 0.5;
 const PREVIEW_ZOOM_MAX = 3;
@@ -91,6 +100,7 @@ function renderPreviewFullscreenState(): void {
   previewFullscreen.setAttribute('aria-pressed', String(active));
   previewModal.classList.toggle('is-native-fullscreen', native);
   previewModal.classList.toggle('is-fallback-fullscreen', previewFallbackFullscreen);
+  document.body.classList.toggle('preview-fallback-open', previewFallbackFullscreen);
 }
 
 async function togglePreviewFullscreen(): Promise<void> {
@@ -103,10 +113,18 @@ async function togglePreviewFullscreen(): Promise<void> {
     renderPreviewFullscreenState();
     return;
   }
+  // Browser side panels are extension-owned viewports and commonly reject
+  // the native Fullscreen API. Use the CSS viewport mode directly so this
+  // button always expands the preview across the entire side panel without
+  // navigating away from the website.
+  if (document.body.classList.contains('sidepanel')) {
+    previewFallbackFullscreen = true;
+    renderPreviewFullscreenState();
+    return;
+  }
   if (!previewModal.requestFullscreen) {
     previewFallbackFullscreen = true;
     renderPreviewFullscreenState();
-    void ext.tabs.create({ url: ext.runtime.getURL('preview.html') });
     return;
   }
   try {
@@ -114,16 +132,15 @@ async function togglePreviewFullscreen(): Promise<void> {
     if (document.fullscreenElement !== previewModal) {
       previewFallbackFullscreen = true;
       renderPreviewFullscreenState();
-      void ext.tabs.create({ url: ext.runtime.getURL('preview.html') });
       return;
     }
     renderPreviewFullscreenState();
   } catch {
     // Firefox and some embedded Chromium side panels can refuse fullscreen.
-    // The dedicated preview tab is the reliable full-viewport fallback.
+    // Keep the fallback in this extension surface so the user stays on the
+    // website instead of being navigated to a new preview tab.
     previewFallbackFullscreen = true;
     renderPreviewFullscreenState();
-    void ext.tabs.create({ url: ext.runtime.getURL('preview.html') });
   }
 }
 
@@ -222,8 +239,41 @@ function settings(): ExtensionSettings {
     allowFullMaskFallback: fallback.checked,
     highAssuranceMode: highAssurance.checked,
     autoApproveLocalDemo: autoApproveLocalDemo.checked,
+    allowLocalTransfer: allowLocalTransfer.checked,
+    sourceTabId: sourceTab.value ? Number(sourceTab.value) : null,
     canaries: canaries.value.split(/\r?\n/u).map((item) => item.trim()).filter((item) => item.length >= 3),
   };
+}
+
+async function refreshSourceTabList(): Promise<void> {
+  const previous = sourceTab.value;
+  let tabs: chrome.tabs.Tab[] = [];
+  let destinationId: number | undefined;
+  try { tabs = await ext.tabs.query({}); } catch { tabs = []; }
+  try { destinationId = (await ext.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.id; } catch { destinationId = undefined; }
+  sourceTab.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = allowLocalTransfer.checked ? 'Choose the tab to read locally…' : 'Enable local transfer to choose a source tab…';
+  sourceTab.append(placeholder);
+  const currentCandidates = tabs.filter((tab) => {
+    if (tab.id === undefined || tab.id === destinationId || !tab.url) return false;
+    try { return ['http:', 'https:'].includes(new URL(tab.url).protocol); } catch { return false; }
+  });
+  for (const tab of currentCandidates) {
+    const option = document.createElement('option');
+    option.value = String(tab.id);
+    const url = new URL(tab.url!);
+    const title = (tab.title ?? url.hostname).replace(/[\u0000-\u001f\u007f]/gu, ' ').trim().slice(0, 80);
+    option.textContent = `${title || url.hostname} · ${url.hostname}`;
+    sourceTab.append(option);
+  }
+  sourceTab.value = currentCandidates.some((tab) => String(tab.id) === previous) ? previous : '';
+  sourceTab.disabled = !allowLocalTransfer.checked || currentCandidates.length === 0;
+}
+
+function updateTransferControls(): void {
+  sourceTab.disabled = !allowLocalTransfer.checked || sourceTab.options.length <= 1;
 }
 
 const gradeSummaries: Readonly<Record<PrivacyGrade, string>> = {
@@ -279,6 +329,16 @@ function renderPrivacyReceipt(receipt: PrivacyReceipt | null): void {
     wrapper.append(dt, dd);
     privacyReceiptContent.append(wrapper);
   }
+}
+
+function renderRunReport(report: AgentStatus['latestReport']): void {
+  if (!report) {
+    runReport.hidden = true;
+    runReportContent.replaceChildren();
+    return;
+  }
+  runReport.hidden = false;
+  renderRedactionReport(runReportContent, report, latestStatus?.previewDataUrl ?? null);
 }
 
 async function ensureEndpointPermission(raw: string): Promise<void> {
@@ -338,8 +398,23 @@ async function send(command: PopupCommand): Promise<AgentStatus> {
 }
 
 function render(current: AgentStatus): void {
+  latestStatus = current;
   state.textContent = current.phase;
   state.dataset.phase = current.phase;
+  const orbState = agentPhaseToOrbState(current.phase);
+  document.querySelectorAll<ThinkingOrbElement>('thinking-orb:not(.static-orb)').forEach((orb) => {
+    orb.state = orbState;
+  });
+  const previewOrb = document.getElementById('previewOrb') as ThinkingOrbElement | null;
+  const startOrb = document.getElementById('startOrb') as ThinkingOrbElement | null;
+  if (previewOrb) {
+    if (current.phase === 'capturing' || current.phase === 'sanitizing') previewOrb.removeAttribute('paused');
+    else previewOrb.setAttribute('paused', '');
+  }
+  if (startOrb) {
+    if (current.running) startOrb.removeAttribute('paused');
+    else startOrb.setAttribute('paused', '');
+  }
   const staleGrade = current.sanitizedDomPreview !== null
     && current.sanitizedDomPreview.grade !== normalizePrivacyGrade(Number(privacyGrade.value));
   const visibleMessage = popupError ?? (staleGrade && !current.running
@@ -358,13 +433,18 @@ function render(current: AgentStatus): void {
   maskedArea.textContent = current.maskedAreaPercentage !== undefined ? `${current.maskedAreaPercentage}%` : '—';
   latency.textContent = current.lastLatencyMs === null ? '—' : `${current.lastLatencyMs} ms`;
   renderPrivacyReceipt(current.privacyReceipt);
+  renderRunReport(current.latestReport ?? null);
   start.disabled = current.running;
   preview.disabled = current.running;
   stop.disabled = !current.running;
   privacyGrade.disabled = current.running;
+  allowLocalTransfer.disabled = current.running;
+  sourceTab.disabled = current.running || !allowLocalTransfer.checked || sourceTab.options.length <= 1;
+  refreshSourceTabs.disabled = current.running;
   if (staleGrade) {
     closePreviewViewer();
     privacyReceipt.hidden = true;
+    renderRunReport(null);
   }
   if (current.previewDataUrl && !staleGrade) {
     previewImage.src = current.previewDataUrl;
@@ -394,6 +474,10 @@ function render(current: AgentStatus): void {
 
 async function run(type: 'START' | 'PREVIEW'): Promise<void> {
   popupError = null;
+  const previewOrb = document.getElementById('previewOrb') as ThinkingOrbElement | null;
+  const startOrb = document.getElementById('startOrb') as ThinkingOrbElement | null;
+  if (type === 'PREVIEW' && previewOrb) previewOrb.removeAttribute('paused');
+  if (type === 'START' && startOrb) startOrb.removeAttribute('paused');
   try {
     const value = settings();
     if (type === 'START' && !value.task) throw new Error('Enter a task first');
@@ -413,6 +497,10 @@ async function run(type: 'START' | 'PREVIEW'): Promise<void> {
 start.addEventListener('click', () => void run('START'));
 preview.addEventListener('click', () => void run('PREVIEW'));
 stop.addEventListener('click', () => void send({ type: 'STOP' }).then(render));
+downloadReport.addEventListener('click', () => {
+  const report = latestStatus?.latestReport;
+  if (report) downloadRedactionReport(report, latestStatus?.previewDataUrl ?? null);
+});
 previewFrame.addEventListener('click', openPreviewViewer);
 previewFrame.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {
@@ -445,7 +533,20 @@ previewModalStage.addEventListener('wheel', (event) => {
   setPreviewZoom(previewZoom + (event.deltaY < 0 ? PREVIEW_ZOOM_STEP : -PREVIEW_ZOOM_STEP));
 }, { passive: false });
 openPreviewTab.addEventListener('click', () => {
-  void ext.tabs.create({ url: ext.runtime.getURL('preview.html') });
+  void (async () => {
+    const candidates = await ext.tabs.query({ active: true, lastFocusedWindow: true });
+    const opener = candidates.find((candidate) => {
+      if (!candidate?.id || !candidate.url) return false;
+      try {
+        return ['http:', 'https:'].includes(new URL(candidate.url).protocol);
+      } catch {
+        return false;
+      }
+    });
+    const previewUrl = new URL(ext.runtime.getURL('preview.html'));
+    if (opener?.id !== undefined) previewUrl.searchParams.set('openerTabId', String(opener.id));
+    await ext.tabs.create({ url: previewUrl.toString(), active: true });
+  })();
 });
 previewModal.addEventListener('click', (event) => {
   if (event.target instanceof HTMLElement && event.target.dataset.previewClose === 'true') closePreviewViewer();
@@ -454,7 +555,7 @@ document.addEventListener('keydown', (event) => {
   if (previewModal.hidden) return;
   if (event.key === 'Escape') {
     if (document.fullscreenElement === previewModal) {
-      void document.exitFullscreen();
+      void document.exitFullscreen().then(closePreviewViewer);
     } else if (previewFallbackFullscreen) {
       previewFallbackFullscreen = false;
       renderPreviewFullscreenState();
@@ -484,19 +585,27 @@ privacyGrade.addEventListener('change', () => {
   void ext.storage.local.set({ privacyGrade: grade });
 });
 
-for (const field of [task, endpoint, maxSteps, apiKey, canaries, fallback, highAssurance, autoApproveLocalDemo]) {
+for (const field of [task, endpoint, maxSteps, apiKey, canaries, fallback, highAssurance, autoApproveLocalDemo, allowLocalTransfer]) {
   field.addEventListener('input', () => {
     popupError = null;
   });
 }
 
+allowLocalTransfer.addEventListener('change', () => {
+  updateTransferControls();
+  void refreshSourceTabList();
+});
+refreshSourceTabs.addEventListener('click', () => void refreshSourceTabList());
+
 renderPrivacyGrade(3);
+void refreshSourceTabList();
 void ext.storage.local.get([...PERSISTED_SETTING_KEYS]).then((saved) => {
   if (typeof saved.endpoint === 'string') endpoint.value = saved.endpoint;
   if (typeof saved.maxSteps === 'number') maxSteps.value = String(saved.maxSteps);
   if (typeof saved.allowFullMaskFallback === 'boolean') fallback.checked = saved.allowFullMaskFallback;
   if (typeof saved.highAssuranceMode === 'boolean') highAssurance.checked = saved.highAssuranceMode;
   if (typeof saved.autoApproveLocalDemo === 'boolean') autoApproveLocalDemo.checked = saved.autoApproveLocalDemo;
+  void refreshSourceTabList();
   renderPrivacyGrade(saved.privacyGrade);
 });
 

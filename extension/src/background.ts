@@ -7,8 +7,9 @@ import { localSanitizer } from '#local-sanitizer';
 import { isOffscreenMessage } from './offscreen-protocol';
 import { pseudonymizeOrigin, sanitizeText } from './privacy';
 import { createPrivacyReceipt, markPrivacyReceiptSent } from './privacy-receipt';
+import { buildDomAudit, buildRedactionAudit, buildRedactionReport } from './redaction-report';
 import { isPrivacyGrade, REGISTRY_DIGEST } from './privacy-policy';
-import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type PopupCommand, type RawDomSnapshot, type SanitizedDomPreview, type SanitizedObservation, type ScrollDriftState } from './types';
+import { SCHEMA_VERSION, type AgentAction, type AgentStatus, type ContentResponse, type ExtensionSettings, type InteractionState, type LatencyBreakdown, type PopupCommand, type PolicyBlock, type RawDomSnapshot, type RedactionReport, type SanitizedDomPreview, type SanitizedObservation, type ScrollDriftState, type TransferField } from './types';
 import { validateObservation, type ObservationValidationOptions } from './validation';
 import { ext } from './webext';
 
@@ -17,7 +18,18 @@ const captureRateGate = new CaptureRateGate();
 let stopRequested = false;
 let activeRun = 0;
 let activeReasoningController: AbortController | null = null;
+let activeRunTab: TabContext | null = null;
 let reasoningRequestCount = 0;
+let latestReportContext: { rawDom: RawDomSnapshot; observation: SanitizedObservation; maskedAreaPercentage: number } | null = null;
+let reportRuntime: {
+  reportId: string;
+  startedAt: number;
+  actionsExecuted: number;
+  actionsBlocked: number;
+  networkRequests: number;
+  policyBlocks: PolicyBlock[];
+  latency: LatencyBreakdown;
+} | null = null;
 const tabUpdateGeneration = new Map<number, number>();
 const windowActivationGeneration = new Map<number, number>();
 let status: AgentStatus = {
@@ -31,6 +43,7 @@ let status: AgentStatus = {
   previewDataUrl: null,
   sanitizedDomPreview: null,
   privacyReceipt: null,
+  latestReport: null,
 };
 
 type SidePanelCapableExtension = typeof ext & {
@@ -70,7 +83,7 @@ function update(patch: Partial<AgentStatus>): void {
   status = { ...status, ...patch };
 }
 
-function createSanitizedDomPreview(observation: SanitizedObservation): SanitizedDomPreview {
+function createSanitizedDomPreview(observation: SanitizedObservation, rawDom: RawDomSnapshot): SanitizedDomPreview {
   const redactionKinds: Record<string, number> = {};
   for (const redaction of observation.redactions) {
     redactionKinds[redaction.kind] = (redactionKinds[redaction.kind] ?? 0) + 1;
@@ -87,8 +100,43 @@ function createSanitizedDomPreview(observation: SanitizedObservation): Sanitized
     elementCount: observation.elements.length,
     elements: observation.elements,
     redactionKinds,
+    domAudit: buildDomAudit(rawDom, observation),
+    redactions: buildRedactionAudit(observation.redactions, rawDom.redactions),
     ...(observation.privacy.registryDigest ? { registryDigest: observation.privacy.registryDigest } : {}),
   };
+}
+
+function defaultLatency(): LatencyBreakdown {
+  return { screenshotMs: 0, domInspectionMs: 0, sanitizationMs: 0, networkMs: 0, actionMs: 0, totalMs: 0 };
+}
+
+function refreshLatestReport(statusValue?: RedactionReport['status']): void {
+  if (!latestReportContext || !reportRuntime || !status.privacyReceipt) return;
+  const now = performance.now();
+  const report = buildRedactionReport({
+    rawDom: latestReportContext.rawDom,
+    observation: latestReportContext.observation,
+    maskedAreaPercentage: latestReportContext.maskedAreaPercentage,
+    imageSha256: status.privacyReceipt.imageSha256,
+    transmissionMode: status.privacyReceipt.transmissionMode,
+    reportId: reportRuntime.reportId,
+    status: statusValue ?? (status.running ? 'running' : status.phase === 'blocked' ? 'blocked' : status.phase === 'done' ? 'completed' : 'preview'),
+    actionsExecuted: reportRuntime.actionsExecuted,
+    actionsBlocked: reportRuntime.actionsBlocked,
+    networkRequests: reportRuntime.networkRequests,
+    policyBlocks: reportRuntime.policyBlocks,
+    latency: { ...reportRuntime.latency, totalMs: Math.max(reportRuntime.latency.totalMs, now - reportRuntime.startedAt) },
+  });
+  update({ latestReport: report, latencyBreakdown: report.latency });
+}
+
+function addPolicyBlock(code: string, error: unknown): void {
+  if (!reportRuntime) return;
+  const message = safeMessage(error);
+  if (!reportRuntime.policyBlocks.some((block) => block.code === code && block.message === message)) {
+    reportRuntime.policyBlocks.push({ code, message });
+  }
+  refreshLatestReport('blocked');
 }
 
 function safeMessage(error: unknown): string {
@@ -129,6 +177,9 @@ function validateSettings(settings: ExtensionSettings, requireTask = true): void
   if (!isPrivacyGrade(settings.privacyGrade)) throw new Error('Privacy grade is invalid');
   if (typeof settings.highAssuranceMode !== 'boolean') throw new Error('High-assurance mode is invalid');
   if (typeof settings.autoApproveLocalDemo !== 'boolean') throw new Error('Local demo approval setting is invalid');
+  if (settings.allowLocalTransfer !== undefined && typeof settings.allowLocalTransfer !== 'boolean') throw new Error('Local transfer setting is invalid');
+  if (settings.sourceTabId !== undefined && settings.sourceTabId !== null && (!Number.isInteger(settings.sourceTabId) || settings.sourceTabId < 0)) throw new Error('Source tab is invalid');
+  if (settings.allowLocalTransfer === true && !Number.isInteger(settings.sourceTabId)) throw new Error('Choose a source tab for local transfer');
   if (settings.canaries.length > 100 || settings.canaries.some((item) => item.length > 500)) throw new Error('Canary list is invalid');
 }
 
@@ -175,6 +226,84 @@ async function ensureContent(tabId: number): Promise<void> {
   } catch {
     throw new Error('Page access is unavailable. Allow access to this page and retry');
   }
+}
+
+async function setAutomationActive(tabId: number, active: boolean): Promise<InteractionState | null> {
+  try {
+    const response = await ext.tabs.sendMessage(tabId, { type: 'SET_AUTOMATION_ACTIVE', active }) as ContentResponse;
+    return response.ok ? response.interaction ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readInteractionState(tabId: number): Promise<InteractionState | null> {
+  try {
+    const response = await ext.tabs.sendMessage(tabId, { type: 'GET_INTERACTION_STATE' }) as ContentResponse;
+    return response.ok ? response.interaction ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Watch trusted page input while the reasoning request is in flight. */
+function monitorManualTakeover(tabId: number, runId: number, controller: AbortController): () => void {
+  let closed = false;
+  const timer = setInterval(() => {
+    if (closed || controller.signal.aborted) return;
+    void readInteractionState(tabId).then((interaction) => {
+      if (closed || !interaction?.manualTakeover || runId !== activeRun || stopRequested) return;
+      stopRequested = true;
+      activeRun += 1;
+      update({ running: false, phase: 'idle', message: 'Paused: you interacted with the page. Review your changes and start a fresh run.' });
+      controller.abort(new Error('Manual takeover detected; run paused'));
+    });
+  }, 250);
+  return () => { closed = true; clearInterval(timer); };
+}
+
+async function prepareLocalTransfer(settings: ExtensionSettings, destination: TabContext): Promise<void> {
+  if (settings.allowLocalTransfer !== true) return;
+  const sourceId = settings.sourceTabId;
+  if (!Number.isInteger(sourceId) || sourceId === destination.id) throw new Error('Choose a different source tab for local transfer');
+  const source = await ext.tabs.get(sourceId as number);
+  if (source.id === undefined || !source.url || source.windowId === undefined) throw new Error('Source tab is unavailable');
+  const sourceUrl = new URL(source.url);
+  if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Source tab must be an HTTP(S) page');
+  await ensureContent(source.id);
+  const sourceResponse = await ext.tabs.sendMessage(source.id, { type: 'CAPTURE_TRANSFER_FIELDS' }) as ContentResponse;
+  if (!sourceResponse.ok || !sourceResponse.transferFields) throw new Error('Could not read transferable fields from source tab');
+  const fields = sourceResponse.transferFields as readonly TransferField[];
+  if (!fields.length) throw new Error('No safe editable fields found in source tab');
+  const destinationResponse = await ext.tabs.sendMessage(destination.id, {
+    type: 'APPLY_TRANSFER_FIELDS', fields, overwrite: false,
+  }) as ContentResponse;
+  if (!destinationResponse.ok || !destinationResponse.transfer) throw new Error(destinationResponse.ok ? 'Local transfer did not complete' : destinationResponse.error);
+  const result = destinationResponse.transfer;
+  update({ message: `Local transfer filled ${result.filled} field${result.filled === 1 ? '' : 's'}; ${result.skipped + result.unmatched} left unchanged.` });
+}
+
+type PageRevision = NonNullable<Extract<ContentResponse, { ok: true }>['revision']>;
+
+async function readPageRevision(tabId: number): Promise<PageRevision> {
+  let response: ContentResponse | undefined;
+  try {
+    response = (await ext.tabs.sendMessage(tabId, { type: 'VERIFY_REVISION' })) as ContentResponse;
+  } catch {
+    // A page navigation can briefly tear down the content-script channel while
+    // the tab itself remains valid. Reconnect once before treating it as a
+    // stale capture.
+  }
+  if (response?.ok && response.revision) return response.revision;
+  try {
+    await ensureContent(tabId);
+    await capturePause(undefined, 120);
+    response = (await ext.tabs.sendMessage(tabId, { type: 'VERIFY_REVISION' })) as ContentResponse;
+  } catch {
+    // The caller will discard this capture and retry with fresh DOM and pixels.
+  }
+  if (response?.ok && response.revision) return response.revision;
+  throw new CaptureChangedError();
 }
 
 async function captureVisible(windowId: number): Promise<string> {
@@ -256,6 +385,7 @@ async function captureOnce(
   signal?.throwIfAborted();
   const snapshotId = crypto.randomUUID();
   update({ phase: 'capturing', message: 'Capturing locally…' });
+  const domStarted = performance.now();
   let contentResponse: ContentResponse;
   try {
     contentResponse = (await ext.tabs.sendMessage(tab.id, {
@@ -266,9 +396,12 @@ async function captureOnce(
   }
   if (!contentResponse.ok || !contentResponse.snapshot) throw new Error(contentResponse.ok ? 'DOM capture failed' : contentResponse.error);
   const dom = contentResponse.snapshot;
+  const domInspectionMs = performance.now() - domStarted;
   if (dom.documentId !== expectedDocumentId) throw new Error('Document changed before capture');
   if (dom.origin !== tab.origin) throw new Error('Tab origin changed during capture');
+  const screenshotStarted = performance.now();
   const screenshot = await captureVisible(tab.windowId);
+  const screenshotMs = performance.now() - screenshotStarted;
   const tabAfterCapture = await activeTab();
   signal?.throwIfAborted();
   if (
@@ -279,6 +412,7 @@ async function captureOnce(
     throw new Error('Active tab changed during screenshot capture');
   }
   update({ phase: 'sanitizing', message: 'Running local privacy filters…' });
+  const sanitizationStarted = performance.now();
   const raster = await localSanitizer.sanitize(
     screenshot,
     dom,
@@ -288,6 +422,7 @@ async function captureOnce(
     settings.task,
     settings.highAssuranceMode,
   );
+  const sanitizationMs = performance.now() - sanitizationStarted;
   signal?.throwIfAborted();
   // Do not retain the raw screenshot. Only the freshly encoded sanitized PNG is kept for preview/request.
   const observation: SanitizedObservation = {
@@ -312,14 +447,14 @@ async function captureOnce(
       ...(raster.detectorArch ? { detectorArch: raster.detectorArch } : {}),
     },
   };
-  let revisionResponse: ContentResponse;
+  let revision: PageRevision;
   try {
-    revisionResponse = (await ext.tabs.sendMessage(tab.id, { type: 'VERIFY_REVISION' })) as ContentResponse;
-  } catch {
+    revision = await readPageRevision(tab.id);
+  } catch (error) {
+    if (error instanceof CaptureChangedError) throw error;
     throw new Error('Page revision check is unavailable. Reload the page and retry');
   }
-  const revision = revisionResponse.ok ? revisionResponse.revision : undefined;
-  if (!revision || revision.documentId !== dom.documentId || revision.origin !== dom.origin) {
+  if (revision.documentId !== dom.documentId || revision.origin !== dom.origin) {
     throw new Error('Document or origin changed during capture');
   }
   if (
@@ -344,12 +479,25 @@ async function captureOnce(
     detectorBackend: raster.detectorBackend,
     redactionCount: raster.redactions.length,
     previewDataUrl: raster.previewDataUrl,
-    sanitizedDomPreview: createSanitizedDomPreview(observation),
+    sanitizedDomPreview: createSanitizedDomPreview(observation, dom),
     categoryCounts: raster.categoryCounts,
     maskedAreaPercentage: raster.maskedAreaPercentage,
     privacyReceipt,
     message: `Sanitized locally (${raster.redactions.length} masks)`,
   });
+  latestReportContext = { rawDom: dom, observation, maskedAreaPercentage: raster.maskedAreaPercentage };
+  if (reportRuntime) {
+    // A run can capture several viewports while the agent works. Keep the
+    // end-to-end report honest by accounting for every measured phase rather
+    // than replacing the previous step with the latest snapshot.
+    reportRuntime.latency = {
+      ...reportRuntime.latency,
+      screenshotMs: reportRuntime.latency.screenshotMs + screenshotMs,
+      domInspectionMs: reportRuntime.latency.domInspectionMs + domInspectionMs,
+      sanitizationMs: reportRuntime.latency.sanitizationMs + sanitizationMs,
+    };
+    refreshLatestReport();
+  }
   return {
     tab,
     dom,
@@ -405,6 +553,16 @@ async function preview(settings: ExtensionSettings): Promise<void> {
   // A preview is a local privacy inspection and does not need a user goal.
   // Agent execution still validates a non-empty task before any capture.
   validateSettings(settings, false);
+  latestReportContext = null;
+  reportRuntime = {
+    reportId: crypto.randomUUID(),
+    startedAt: performance.now(),
+    actionsExecuted: 0,
+    actionsBlocked: 0,
+    networkRequests: 0,
+    policyBlocks: [],
+    latency: defaultLatency(),
+  };
   update({
     running: true,
     phase: 'capturing',
@@ -412,13 +570,16 @@ async function preview(settings: ExtensionSettings): Promise<void> {
     message: 'Preparing privacy preview…',
     previewDataUrl: null,
     sanitizedDomPreview: null,
+    latestReport: null,
   });
   try {
     await captureAndSanitize(settings, undefined, { allowEmptyTask: true }, 0);
     update({ running: false, phase: 'idle', message: 'Preview ready. No data was sent.' });
+    refreshLatestReport('preview');
   } catch (error) {
     reportBlockedOperation('preview', error);
     update({ running: false, phase: 'blocked', message: safeMessage(error) });
+    addPolicyBlock('PREVIEW_CAPTURE_BLOCKED', error);
   }
 }
 
@@ -428,7 +589,18 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
   const runId = ++activeRun;
   const reasoningController = new AbortController();
   activeReasoningController = reasoningController;
+  let stopManualMonitor: () => void = () => undefined;
   stopRequested = false;
+  latestReportContext = null;
+  reportRuntime = {
+    reportId: crypto.randomUUID(),
+    startedAt: performance.now(),
+    actionsExecuted: 0,
+    actionsBlocked: 0,
+    networkRequests: 0,
+    policyBlocks: [],
+    latency: defaultLatency(),
+  };
   update({
     running: true,
     phase: 'capturing',
@@ -436,6 +608,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     message: 'Starting locally…',
     previewDataUrl: null,
     sanitizedDomPreview: null,
+    latestReport: null,
   });
   try {
     // Bind the complete run to the page selected by the user gesture. A tab
@@ -444,6 +617,10 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     const pinnedTab = await activeTab();
     await ensureContent(pinnedTab.id);
     await fillExplicitPublicFields(pinnedTab.id, settings.task);
+    await prepareLocalTransfer(settings, pinnedTab);
+    activeRunTab = pinnedTab;
+    if (!await setAutomationActive(pinnedTab.id, true)) throw new Error('Page interaction guard is unavailable; reload the page and retry');
+    stopManualMonitor = monitorManualTakeover(pinnedTab.id, runId, reasoningController);
     let context: CapturedContext;
     let plannedAction: AgentAction | null = null;
     let requestCount = 0;
@@ -459,6 +636,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       // the VLM call. The service worker cannot observe webpage scroll events.
       const guardState = await setScrollGuard(context.tab.id, true);
       const started = performance.now();
+      if (reportRuntime) reportRuntime.networkRequests += 1;
       let accepted = false;
       let progressTimer: ReturnType<typeof setInterval> | undefined;
       const progressOptions: ReasoningRequestOptions = {
@@ -470,6 +648,7 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
             reasoningRequestCount = requestCount;
             if (status.privacyReceipt?.imageSha256) {
               update({ privacyReceipt: markPrivacyReceiptSent(status.privacyReceipt, requestCount) });
+              refreshLatestReport();
             }
           }
           const elapsed = Math.max(0, Math.round((performance.now() - started) / 1_000));
@@ -495,6 +674,8 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       let driftState: ScrollDriftState = guardState;
       try {
         signal.throwIfAborted();
+        const interaction = await readInteractionState(context.tab.id);
+        if (interaction?.manualTakeover) throw new Error('Manual takeover detected; run paused');
         update({ phase: 'reasoning', message: 'Sending sanitized observation…', scrollDrift: guardState });
         response = await keepServiceWorkerAlive(
           sendSanitizedObservation(settings.endpoint, settings.apiKey, context.observation, settings.canaries, progressOptions),
@@ -518,7 +699,12 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
         });
         return 'drift' as const;
       }
-      update({ lastLatencyMs: Math.round(performance.now() - started), scrollDrift: driftState });
+      const networkMs = performance.now() - started;
+      update({ lastLatencyMs: Math.round(networkMs), scrollDrift: driftState });
+      if (reportRuntime) {
+        reportRuntime.latency = { ...reportRuntime.latency, networkMs: reportRuntime.latency.networkMs + networkMs };
+        refreshLatestReport();
+      }
       plannedAction = response.action;
       return 'continue' as const;
       },
@@ -531,10 +717,26 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
       async dispatch(signal) {
         if (!plannedAction) throw new Error('Action is missing');
         update({ phase: 'executing', message: `Executing ${plannedAction.type}…` });
-        const result = await execute(context, plannedAction, signal, settings.autoApproveLocalDemo);
+        const actionStarted = performance.now();
+        let result: string;
+        try {
+          result = await execute(context, plannedAction, signal, settings.autoApproveLocalDemo);
+        } catch (error) {
+          if (reportRuntime) {
+            reportRuntime.actionsBlocked += 1;
+            reportRuntime.latency = { ...reportRuntime.latency, actionMs: reportRuntime.latency.actionMs + (performance.now() - actionStarted) };
+          }
+          addPolicyBlock(`ACTION_${plannedAction.type.toUpperCase()}`, error);
+          throw error;
+        }
         signal.throwIfAborted();
+        if (reportRuntime) {
+          reportRuntime.actionsExecuted += 1;
+          reportRuntime.latency = { ...reportRuntime.latency, actionMs: reportRuntime.latency.actionMs + (performance.now() - actionStarted) };
+        }
         const done = plannedAction.type === 'done';
         update({ message: result, ...(done ? { running: false, phase: 'done' as const } : {}) });
+        refreshLatestReport(done ? 'completed' : 'running');
         return done;
       },
       async settle() { await new Promise(resolve => setTimeout(resolve, 300)); },
@@ -544,7 +746,13 @@ async function runAgent(settings: ExtensionSettings): Promise<void> {
     if (runId !== activeRun || stopRequested || reasoningController.signal.aborted) return;
     reportBlockedOperation('agent run', error);
     update({ running: false, phase: 'blocked', message: safeMessage(error) });
+    addPolicyBlock('RUN_BLOCKED', error);
   } finally {
+    stopManualMonitor();
+    if (activeRunTab) {
+      await setAutomationActive(activeRunTab.id, false);
+      activeRunTab = null;
+    }
     if (activeReasoningController === reasoningController) activeReasoningController = null;
   }
 }
@@ -558,7 +766,14 @@ async function handlePopup(message: unknown): Promise<AgentStatus> {
     activeRun += 1;
     activeReasoningController?.abort();
     activeReasoningController = null;
+    if (activeRunTab) {
+      const tabId = activeRunTab.id;
+      void ext.tabs.sendMessage(tabId, { type: 'CANCEL_PENDING_APPROVAL' }).catch(() => undefined);
+      void setAutomationActive(tabId, false);
+      activeRunTab = null;
+    }
     update({ running: false, phase: 'idle', message: 'Stopped by user' });
+    refreshLatestReport('cancelled');
     return status;
   }
   if (command.type === 'PREVIEW') {

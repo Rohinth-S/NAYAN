@@ -4,6 +4,8 @@ import { classifyDocumentType, classifyMediaElement, type DocumentMediaType, typ
 import { categoryForFinding, isPrivacyGrade, type PrivacyCategory, type PrivacyGrade } from './privacy-policy';
 import { ScrollDriftGuard } from './scroll-drift-guard';
 import { captureDocumentSource, DOCUMENT_SOURCE_PIXEL_BUDGET, type LocalDocumentImage } from './document-source';
+import { normalizedTransferLabel, transferLabelMatches } from './tab-transfer';
+import { extractPublicTaskFields, type PublicTaskField } from './public-task-fields';
 import type {
   AgentAction,
   Bounds,
@@ -13,8 +15,12 @@ import type {
   RawDomSnapshot,
   RawElement,
   RedactionKind,
+  InteractionState,
+  TransferField,
+  TransferResult,
 } from './types';
 import { ext } from './webext';
+import { createThinkingOrb } from './thinking-orb';
 
 declare global {
   interface Window {
@@ -29,6 +35,11 @@ let currentElements = new Map<string, Element>();
 let lastExecutedActionKey = '';
 let destructiveActionInFlight = false;
 let pendingApproval: Promise<boolean> | null = null;
+let pendingApprovalCancel: (() => void) | null = null;
+let automationActive = false;
+let manualTakeover = false;
+let interactionRevision = 0;
+let agentMutationDepth = 0;
 const scrollDriftGuard = new ScrollDriftGuard();
 
 new MutationObserver(() => {
@@ -39,6 +50,38 @@ window.addEventListener('resize', () => { documentRevision += 1; }, { passive: t
 window.addEventListener('orientationchange', () => { documentRevision += 1; }, { passive: true });
 window.visualViewport?.addEventListener('resize', () => { documentRevision += 1; }, { passive: true });
 window.visualViewport?.addEventListener('scroll', () => { documentRevision += 1; }, { passive: true });
+
+function eventFromAgent(event: Event): boolean {
+  return agentMutationDepth > 0 || !event.isTrusted;
+}
+
+function isAgentUiEvent(event: Event): boolean {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  return path.some((item) => item instanceof Element && item.closest('[data-sih-agent-ui="true"]'));
+}
+
+function noteManualInteraction(event: Event): void {
+  if (!automationActive || eventFromAgent(event) || isAgentUiEvent(event)) return;
+  manualTakeover = true;
+  interactionRevision += 1;
+  documentRevision += 1;
+  pendingApprovalCancel?.();
+}
+
+for (const eventName of ['pointerdown', 'keydown', 'beforeinput', 'input', 'change', 'click']) {
+  window.addEventListener(eventName, noteManualInteraction, { capture: true, passive: true });
+}
+
+function interactionState(): InteractionState {
+  return { automationActive, manualTakeover, interactionRevision, documentRevision };
+}
+
+function setAutomationActive(active: boolean): void {
+  automationActive = active;
+  manualTakeover = false;
+  if (active) destructiveActionInFlight = false;
+  if (!active) pendingApprovalCancel?.();
+}
 
 function opaqueElementId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -493,49 +536,6 @@ function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: 
   element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-type PublicTaskField = 'preferredName' | 'workEmail' | 'phoneNumber' | 'city' | 'benefitPlan' | 'startDate';
-
-/**
- * The demo's public-field shortcut stays entirely in the content script. It
- * accepts values only from the user's task and only writes to controls that
- * explicitly opt in with data-public-field="true". Private, credential, and
- * unknown controls are never included in this path.
- */
-function extractPublicTaskFields(task: string): Map<PublicTaskField, string> {
-  const markers: Array<{ key: PublicTaskField; start: number; end: number }> = [];
-  const markerPattern = /\b(preferred\s+name|work\s+email|phone(?:\s+number)?|city|benefit\s+plan|coverage\s+start\s+date)\b\s*(?:(?:is|equals?)\s+|[:=]\s*)?/giu;
-  for (const match of task.matchAll(markerPattern)) {
-    if (match.index === undefined || !match[1]) continue;
-    const label = match[1].toLocaleLowerCase().replace(/\s+/gu, ' ');
-    const key: PublicTaskField = label === 'preferred name'
-      ? 'preferredName'
-      : label === 'work email'
-        ? 'workEmail'
-        : label.startsWith('phone')
-          ? 'phoneNumber'
-          : label === 'city'
-            ? 'city'
-            : label === 'benefit plan'
-              ? 'benefitPlan'
-              : 'startDate';
-    markers.push({ key, start: match.index, end: match.index + match[0].length });
-  }
-  const values = new Map<PublicTaskField, string>();
-  for (let index = 0; index < markers.length; index += 1) {
-    const marker = markers[index];
-    if (!marker) continue;
-    const next = markers[index + 1]?.start ?? task.length;
-    let value = task.slice(marker.end, next).trim();
-    value = value
-      .replace(/^[,;:\s]+/u, '')
-      .replace(/,?\s+(?:then|and then)\s+(?:check|submit|confirm)\b[\s\S]*$/iu, '')
-      .replace(/[\s,;.]+$/u, '')
-      .trim();
-    if (value && value.length <= 200 && !values.has(marker.key)) values.set(marker.key, value);
-  }
-  return values;
-}
-
 function publicFieldKey(element: Element): PublicTaskField | null {
   if (element.getAttribute('data-public-field') !== 'true') return null;
   const metadata = [element.getAttribute('name'), element.getAttribute('id'), labelOf(element)]
@@ -543,6 +543,9 @@ function publicFieldKey(element: Element): PublicTaskField | null {
   if (/preferred\s+name|\bname\b/u.test(metadata)) return 'preferredName';
   if (/work\s+email|\bemail\b/u.test(metadata)) return 'workEmail';
   if (/phone|mobile|telephone/u.test(metadata)) return 'phoneNumber';
+  if (/requested.?cent(?:re|er)/u.test(metadata)) return 'requestedCentre';
+  if (/transfer.?type/u.test(metadata)) return 'transferType';
+  if (/effective.?date/u.test(metadata)) return 'effectiveDate';
   if (/\bcity\b|locality/u.test(metadata)) return 'city';
   if (/benefit\s+plan/u.test(metadata)) return 'benefitPlan';
   if (/coverage\s+start|start\s+date/u.test(metadata)) return 'startDate';
@@ -591,6 +594,75 @@ function fillPublicFieldsFromTask(task: string): string {
     ? `Filled ${filled.length} public field${filled.length === 1 ? '' : 's'} locally. Review every value before submission.`
     : 'No matching public fields were available; continuing with the agent planner.';
 }
+
+function transferLabel(element: Element): string {
+  if (element.getAttribute('aria-label')) return element.getAttribute('aria-label')!.trim();
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+    const labels = element.labels ? Array.from(element.labels).map((item) => item.innerText.trim()).filter(Boolean) : [];
+    return (labels[0] ?? element.getAttribute('placeholder') ?? element.getAttribute('name') ?? element.id ?? '').trim();
+  }
+  return (element.getAttribute('data-transfer-key') ?? element.getAttribute('name') ?? element.id ?? '').trim();
+}
+
+function transferKind(element: Element, label: string): TransferField['kind'] {
+  const metadata = `${label} ${element.getAttribute('autocomplete') ?? ''} ${element.getAttribute('name') ?? ''} ${element.getAttribute('id') ?? ''}`.toLowerCase();
+  if (element instanceof HTMLSelectElement) return 'select';
+  if (/email/u.test(metadata) || element instanceof HTMLInputElement && element.type === 'email') return 'email';
+  if (/phone|mobile|telephone/u.test(metadata) || element instanceof HTMLInputElement && element.type === 'tel') return 'phone';
+  if (/address|street|city|postal|pincode|locality/u.test(metadata)) return 'address';
+  if (/date|dob|birth/u.test(metadata) || element instanceof HTMLInputElement && element.type === 'date') return 'date';
+  if (/number|amount|count|age/u.test(metadata) || element instanceof HTMLInputElement && element.type === 'number') return 'number';
+  return 'text';
+}
+
+function transferableControls(): Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> {
+  return Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select'))
+    .filter((element) => {
+      if (!visible(element) || element.disabled || ('readOnly' in element && element.readOnly)) return false;
+      if (element instanceof HTMLInputElement && ['hidden', 'password', 'file', 'submit', 'button', 'reset', 'image'].includes(element.type)) return false;
+      return Boolean(transferLabel(element));
+    });
+}
+
+/** Read source-tab form values locally. This command is extension-local only. */
+function captureTransferFields(): readonly TransferField[] {
+  const fields: TransferField[] = [];
+  for (const element of transferableControls().slice(0, 100)) {
+    const value = element instanceof HTMLSelectElement
+      ? (element.selectedOptions[0]?.text ?? element.value)
+      : element.value;
+    const normalized = value.trim();
+    if (!normalized || normalized.length > 1_000) continue;
+    const label = transferLabel(element);
+    fields.push({ label: label.slice(0, 300), value: normalized, kind: transferKind(element, label) });
+  }
+  return fields;
+}
+
+/** Apply source values only to unambiguous matching destination controls. */
+function applyTransferFields(fields: readonly TransferField[], overwrite = false): TransferResult {
+  const controls = transferableControls();
+  let filled = 0;
+  let skipped = 0;
+  let unmatched = 0;
+  for (const source of fields.slice(0, 100)) {
+    const candidates = controls.filter((target) => transferLabelMatches(source.label, transferLabel(target)));
+    if (candidates.length !== 1) { unmatched += 1; continue; }
+    const target = candidates[0]!;
+    const existing = target instanceof HTMLSelectElement ? target.value.trim() : target.value.trim();
+    if (existing && !overwrite) { skipped += 1; continue; }
+    try {
+      if (target instanceof HTMLSelectElement) setNativeSelectValue(target, source.value);
+      else setNativeValue(target, source.value);
+      filled += 1;
+    } catch {
+      skipped += 1;
+    }
+  }
+  return { scanned: fields.length, filled, skipped, unmatched };
+}
+
+export const transferInternals = { normalizedTransferLabel, transferLabelMatches };
 
 function requireCheckboxTarget(target: Element): HTMLInputElement | Element {
   const isNativeCheckbox = target instanceof HTMLInputElement && target.type === 'checkbox';
@@ -641,8 +713,10 @@ function requestPageApproval(label: string): Promise<boolean> {
         box-shadow: 0 24px 64px rgba(0, 0, 0, .58), 0 0 0 1px rgba(255, 255, 255, .04);
         font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      .eyebrow { margin: 0 0 7px; color: #8f8f94; font-size: 11px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-      h2 { margin: 0 0 8px; font-size: 17px; line-height: 1.2; }
+      .card-header-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+      .orb-slot { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.12), rgba(0,0,0,.6)); border: 1px solid rgba(255,255,255,.2); box-shadow: 0 0 20px rgba(79, 134, 255, .25); }
+      .eyebrow { margin: 0 0 4px; color: #8f8f94; font-size: 11px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+      h2 { margin: 0; font-size: 16px; line-height: 1.25; }
       p { margin: 0 0 14px; color: #b1b1b6; }
       .label { color: #fff; font-weight: 650; }
       .actions { display: flex; gap: 9px; justify-content: flex-end; }
@@ -656,20 +730,35 @@ function requestPageApproval(label: string): Promise<boolean> {
       @media (max-width: 520px) { .card { right: 10px; bottom: 10px; width: calc(100vw - 20px); } }
     </style>
     <section class="card" role="dialog" aria-labelledby="agent-confirm-title" aria-describedby="agent-confirm-copy" aria-modal="false">
-      <p class="eyebrow">Private Browser Agent</p>
-      <h2 id="agent-confirm-title">Review before submitting</h2>
+      <div class="card-header-row">
+        <div class="orb-slot"></div>
+        <div>
+          <p class="eyebrow">Private Browser Agent</p>
+          <h2 id="agent-confirm-title">Review before submitting</h2>
+        </div>
+      </div>
       <p id="agent-confirm-copy">Review every populated field on this page. The agent is ready to click <span class="label"></span>.</p>
       <div class="actions"><button class="cancel" type="button">Cancel</button><button class="approve" type="button">Approve submission</button></div>
     </section>`;
+  const orbSlot = shadow.querySelector<HTMLDivElement>('.orb-slot');
+  let orbInstance: ReturnType<typeof createThinkingOrb> | null = null;
+  if (orbSlot) {
+    orbInstance = createThinkingOrb({ state: 'listening', size: 36, theme: 'dark' });
+    orbSlot.replaceChildren(orbInstance.canvas);
+  }
   const labelNode = shadow.querySelector('.label');
   if (labelNode) labelNode.textContent = label;
   const cancel = shadow.querySelector<HTMLButtonElement>('.cancel');
   const approve = shadow.querySelector<HTMLButtonElement>('.approve');
   const promise = new Promise<boolean>((resolve) => {
     const finish = (approved: boolean) => {
+      orbInstance?.destroy();
       host.remove();
+      if (pendingApprovalCancel === cancelApproval) pendingApprovalCancel = null;
       resolve(approved);
     };
+    const cancelApproval = () => finish(false);
+    pendingApprovalCancel = cancelApproval;
     cancel?.addEventListener('click', () => finish(false), { once: true });
     approve?.addEventListener('click', () => finish(true), { once: true });
   });
@@ -689,8 +778,15 @@ async function confirmDestructiveAction(target: Element, autoApproveIrreversible
     return true;
   }
   const label = labelOf(target);
+  const approvalInteractionRevision = interactionRevision;
   if (!await requestPageApproval(label)) {
     throw new Error('User rejected irreversible action');
+  }
+  // Scrolling is allowed while the review card is open so the user can inspect
+  // the entire page. Trusted clicks, typing, and DOM replacement still cancel
+  // the approval through the interaction revision and target connectivity.
+  if (manualTakeover || interactionRevision !== approvalInteractionRevision || !target.isConnected) {
+    throw new Error('Page changed during review; action cancelled');
   }
   if (destructiveActionInFlight) return false;
   destructiveActionInFlight = true;
@@ -707,6 +803,7 @@ function isSyntheticLocalDemo(): boolean {
 async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_ACTION' }>): Promise<string> {
   if (command.snapshotId !== currentSnapshotId) throw new Error('Snapshot is stale');
   if (command.documentId !== documentId || command.documentRevision !== documentRevision) throw new Error('Document changed after capture');
+  if (automationActive && manualTakeover) throw new Error('Manual takeover detected; agent paused');
   const action: AgentAction = command.action;
   const actionKey = `${command.snapshotId}:${JSON.stringify(action)}`;
   if (actionKey === lastExecutedActionKey) throw new Error('Duplicate action rejected');
@@ -743,23 +840,34 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
         throw new Error('Cross-origin navigation is blocked');
       }
       if (!await confirmDestructiveAction(target, command.autoApproveIrreversible === true)) return 'Submission already approved; waiting for the page result';
-      target.focus();
-      target.click();
+      if (manualTakeover || !target.isConnected) throw new Error('Page changed before click');
+      agentMutationDepth += 1;
+      try {
+        target.focus();
+        target.click();
+      } finally {
+        agentMutationDepth -= 1;
+      }
       return 'Clicked element';
     }
     if (action.type === 'input') {
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
         if (target.disabled || target.readOnly) throw new Error('Action target is not editable');
-        setNativeValue(target, action.text ?? '');
+        agentMutationDepth += 1;
+        try { setNativeValue(target, action.text ?? ''); } finally { agentMutationDepth -= 1; }
       }
       else if (target.isContentEditable) {
         if ((target as HTMLElement).getAttribute('aria-readonly') === 'true') throw new Error('Action target is not editable');
-        target.textContent = action.text ?? '';
-        target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: action.text ?? '' }));
+        agentMutationDepth += 1;
+        try {
+          target.textContent = action.text ?? '';
+          target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: action.text ?? '' }));
+        } finally { agentMutationDepth -= 1; }
       } else if (target instanceof HTMLSelectElement) {
         if (target.disabled) throw new Error('Action target is not editable');
         try {
-          setNativeSelectValue(target, action.text ?? '');
+          agentMutationDepth += 1;
+          try { setNativeSelectValue(target, action.text ?? ''); } finally { agentMutationDepth -= 1; }
         } catch (error) {
           // A local public-field pass may already have selected the option;
           // the model cannot see the option text at strict privacy grades.
@@ -775,7 +883,15 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
     if (action.type === 'select') {
       if (!(target instanceof HTMLSelectElement)) throw new Error('Action target is not a select');
       if (target.disabled) throw new Error('Action target is not editable');
-      setNativeSelectValue(target, action.option ?? '');
+      // The local public-field fast path may have already selected this
+      // control. At strict grades the option text is deliberately omitted
+      // from the sanitized observation, so a repeated model select can carry
+      // an opaque or stale token. Preserve the verified local choice instead
+      // of turning an idempotent action into a false privacy failure.
+      const current = target.selectedOptions[0];
+      if (target.value && current && !/^choose\b|^select\b/iu.test(current.text.trim())) return 'Select already set';
+      agentMutationDepth += 1;
+      try { setNativeSelectValue(target, action.option ?? ''); } finally { agentMutationDepth -= 1; }
       return 'Selected option';
     }
     if (action.type === 'focus') {
@@ -792,8 +908,12 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
         throw new Error('Action target is disabled');
       }
       if (!await confirmDestructiveAction(target, command.autoApproveIrreversible === true)) return 'Submission already approved; waiting for the page result';
-      target.focus();
-      target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
+      if (manualTakeover || !target.isConnected) throw new Error('Page changed before double-click');
+      agentMutationDepth += 1;
+      try {
+        target.focus();
+        target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
+      } finally { agentMutationDepth -= 1; }
       return 'Double-clicked element';
     }
     if (action.type === 'check' || action.type === 'uncheck') {
@@ -803,8 +923,11 @@ async function executeAction(command: Extract<ContentCommand, { type: 'EXECUTE_A
       }
       const shouldBeChecked = action.type === 'check';
       if (targetChecked(checkbox) === shouldBeChecked) return shouldBeChecked ? 'Checkbox already checked' : 'Checkbox already unchecked';
-      checkbox.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
-      (checkbox as HTMLElement).click();
+      agentMutationDepth += 1;
+      try {
+        checkbox.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+        (checkbox as HTMLElement).click();
+      } finally { agentMutationDepth -= 1; }
       return shouldBeChecked ? 'Checked checkbox' : 'Unchecked checkbox';
     }
     throw new Error('Unsupported action');
@@ -838,7 +961,28 @@ async function handleMessage(message: unknown): Promise<ContentResponse> {
     if (command.type === 'GET_SCROLL_DRIFT') {
       return { ok: true, scrollDrift: scrollDriftGuard.state };
     }
+    if (command.type === 'SET_AUTOMATION_ACTIVE') {
+      setAutomationActive(command.active);
+      return { ok: true, interaction: interactionState() };
+    }
+    if (command.type === 'GET_INTERACTION_STATE') {
+      return { ok: true, interaction: interactionState() };
+    }
+    if (command.type === 'CANCEL_PENDING_APPROVAL') {
+      pendingApprovalCancel?.();
+      return { ok: true, interaction: interactionState() };
+    }
+    if (command.type === 'CAPTURE_TRANSFER_FIELDS') {
+      return { ok: true, transferFields: captureTransferFields() };
+    }
+    if (command.type === 'APPLY_TRANSFER_FIELDS') {
+      if (!Array.isArray(command.fields) || command.fields.length > 100) throw new Error('Transfer field list is invalid');
+      const valid = command.fields.every((field) => field && typeof field.label === 'string' && field.label.length <= 300 && typeof field.value === 'string' && field.value.length <= 1_000);
+      if (!valid) throw new Error('Transfer field list is invalid');
+      return { ok: true, transfer: applyTransferFields(command.fields, command.overwrite === true) };
+    }
     if (command.type === 'CAPTURE_DOM') {
+      if (automationActive && manualTakeover) throw new Error('Manual takeover detected; agent paused');
       if (!isPrivacyGrade(command.privacyGrade)) throw new Error('Invalid privacy grade');
       return { ok: true, snapshot: captureDom(command.snapshotId, command.knownValues, command.privacyGrade) };
     }

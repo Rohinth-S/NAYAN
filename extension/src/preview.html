@@ -14,16 +14,22 @@
           <h1>Sanitized page preview</h1>
           <p>Sensitive regions were replaced on this device before the preview was made available.</p>
         </div>
-        <span class="local-pill"><i></i> Local filter active</span>
+        <span class="local-pill"><thinking-orb state="shaping" size="16"></thinking-orb> Local filter active</span>
       </header>
       <section class="stage" aria-live="polite">
-        <p id="message">Loading local preview…</p>
+        <p id="message"><thinking-orb id="previewLoadingOrb" state="shaping" size="20"></thinking-orb> Loading local preview…</p>
         <div id="preview-container" class="preview-container" hidden>
           <div class="metrics-panel">
             <h3>Privacy Metrics</h3>
             <p><strong>Masked Area:</strong> <span id="masked-area-stat">0</span>%</p>
             <div id="category-counts-container"></div>
-            <p class="why-hidden-tooltip" title="Categories are detected locally using ONNX/WASM or regex. No data leaves the device until verified.">ℹ️ Why is this hidden?</p>
+            <button id="whyHiddenToggle" class="why-hidden-toggle" type="button" aria-expanded="false" aria-controls="whyHiddenExplanation">ℹ️ Why is this hidden?</button>
+            <div id="whyHiddenExplanation" class="why-hidden-explanation" hidden>
+              <strong>Local privacy decision</strong>
+              <p id="whyHiddenText">These regions were classified as sensitive on this device before the preview was created.</p>
+              <ul id="whyHiddenCategories"></ul>
+              <p class="why-hidden-note">Only the sanitized image and safe structure can be sent to the reasoning server. Original values stay on this device.</p>
+            </div>
           </div>
           <div id="previewImagePanel" class="image-panel">
             <div class="preview-page-toolbar" aria-label="Preview controls">
@@ -52,8 +58,19 @@
           </header>
           <div id="dom-preview-content"></div>
         </section>
+        <section id="runReport" class="run-report" hidden aria-labelledby="runReportTitle">
+          <header class="run-report-header">
+            <div>
+              <p class="eyebrow">LOCAL AUDIT TRAIL</p>
+              <h2 id="runReportTitle">Redaction report</h2>
+              <p>Before → after DOM proof, policy decisions, detector confidence, and latency for this run.</p>
+            </div>
+            <button id="downloadReport" class="run-report-download" type="button">Download report</button>
+          </header>
+          <div id="runReportContent"></div>
+        </section>
       </section>
-      <footer><span>Nothing on this page is sent to the reasoning server.</span><button id="close" type="button">Close tab</button></footer>
+      <footer><span>Nothing on this page is sent to the reasoning server.</span><button id="close" type="button">Return to website</button></footer>
     </main>
     <script src="preview.js"></script>
   </body>

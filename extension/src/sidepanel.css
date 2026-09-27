@@ -69,7 +69,7 @@ body.sidepanel main {
 .sidepanel figcaption,
 .sidepanel .chat-intro strong { color: var(--side-ink); }
 .sidepanel .badge { border-color: var(--side-ink); color: var(--side-ink); background: #fff; }
-.sidepanel .badge::before { background: #aaa; }
+.sidepanel .badge::before { display: none; content: none; }
 .sidepanel .badge[data-phase="capturing"]::before,
 .sidepanel .badge[data-phase="sanitizing"]::before,
 .sidepanel .badge[data-phase="reasoning"]::before,
@@ -80,8 +80,8 @@ body.sidepanel main {
 
 .chat-intro {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
+  gap: 14px;
+  align-items: center;
   margin: 0 0 18px;
   padding: 17px 18px;
   border: 1px solid var(--side-line-strong);
@@ -91,12 +91,13 @@ body.sidepanel main {
 }
 .chat-avatar {
   display: grid;
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
   place-items: center;
   border: 1px solid var(--side-ink);
-  border-radius: 11px;
+  border-radius: 16px;
+  overflow: hidden;
   color: #fff;
   background: var(--side-black);
   box-shadow: 3px 3px 0 #d0d0cb;
@@ -185,6 +186,11 @@ body.sidepanel main {
 .sidepanel .status-label { font-size: 11px; }
 .sidepanel .local-pill { font-size: 11px; }
 .sidepanel .status p { min-height: 22px; margin-bottom: 12px; font-size: 14px; }
+.sidepanel .status-message-row { display: flex; align-items: center; gap: 14px; margin: 10px 0 14px; }
+.sidepanel .status-message-row p { min-height: 0; margin: 0; color: #fff; font-size: 15px; font-weight: 650; flex: 1; }
+.sidepanel .btn-orb-slot { display: inline-flex; align-items: center; justify-content: center; margin-right: 8px; vertical-align: middle; }
+.sidepanel thinking-orb { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+.sidepanel .thinking-orb-canvas { display: block; border-radius: 50%; }
 .sidepanel .status-label,
 .sidepanel dt { color: #aaa; }
 .sidepanel .local-pill { color: #fff; }
@@ -194,6 +200,18 @@ body.sidepanel main {
 .sidepanel dt { font-size: 10px; }
 .sidepanel dd { font-size: 15px; }
 .sidepanel dd { color: #fff; }
+
+/* The global side-panel status rule above intentionally uses white values on
+   the black status card. The run report is a light card, so scope an explicit
+   high-contrast palette here to prevent those generic dd rules from washing
+   out measured timings. */
+.sidepanel .run-report .report-header h2,
+.sidepanel .run-report .report-dom-audit h3,
+.sidepanel .run-report .report-table-section h3 { color: #123b4a; }
+.sidepanel .run-report .report-latency-note { color: #315b68; }
+.sidepanel .run-report .report-latency-list { border: 1px solid #7daab7; border-radius: 9px; padding: 5px 10px; background: #e7f3f6; }
+.sidepanel .run-report .report-latency-list dt { color: #204b59 !important; font-weight: 700; }
+.sidepanel .run-report .report-latency-list dd { color: #092b3a !important; font-size: 15px; font-weight: 900; }
 
 .activity-card { margin-top: 16px; padding: 18px; }
 .activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--side-ink); font-size: 14px; font-weight: 800; }

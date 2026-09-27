@@ -77,15 +77,39 @@ rejects non-HTTP(S) tabs, no page data is sent by the permission itself, and
 the egress gateway still accepts only sanitized context. Firefox uses explicit
 HTTP(S) host patterns for the same local capture boundary.
 
-The synthetic enrollment preset has a local public-field fast path. It parses
-only values explicitly supplied in the task and writes only to controls opted
-into `data-public-field="true"`; no field value is sent to the reasoning
+The DOM proof view is designed for a live judge walkthrough: it presents a
+three-step **Detect → Replace → Transmit** story, a before/after count, and a
+plain-language protection inventory. A safe handle such as `[PHONE_1]` remains
+available for tracing, while the main label says **Phone number**, **Email
+address**, or **Aadhaar number** and the detector badge explains whether the
+match came from DOM metadata, a local pattern rule, OCR, or vision.
+
+Each preview or agent run also creates a local audit trail. The panel shows a
+**DOM before → after** comparison, a handle table such as `[PHONE_1]` with its
+detector layer, confidence, and pixel bounds, blocked-action explanations,
+safe payload references, and a capture/DOM/sanitization/network/action latency
+breakdown. **Download report** saves a self-contained HTML report containing
+those facts and the sanitized screenshot. It never includes raw values,
+selectors, cookies, the real URL, or the raw DOM snapshot.
+
+Latency values are measured in the extension background context with
+`performance.now()` and accumulated across every capture, sanitization,
+reasoning request, and action in the run. A dash (`—`) means that a phase did
+not execute (for example, preview has no network request or browser action),
+so the UI never presents a placeholder zero as a measured duration.
+
+The synthetic staff-transfer preset has a local public-field fast path. It
+parses only values explicitly supplied in the task and writes only to controls
+opted into `data-public-field="true"`; no field value is sent to the reasoning
 server. The sanitized structure carries boolean progress markers so the
 server can advance to consent and submit without re-planning every field. An
 in-page review card tells the user to verify every populated field
 without blocking access to the website. The user approves or cancels the
 terminal submit click, and repeated submit responses are held while navigation
-is in flight. Unambiguous enrollment controls receive a
+is in flight. The parser supports applicant name, official email, mobile
+number, requested centre, transfer type, and effective date, while retaining
+older benefits aliases for compatibility. It never extracts government
+identifiers from task text. Unambiguous transfer controls receive a
 synchronous structural decision, avoiding a model queue/poll round-trip;
 ambiguous pages still use the model-backed async path.
 
@@ -94,6 +118,29 @@ submissions** switch for the synthetic `http://127.0.0.1:8765/demo` page. It
 is disabled by default and is ignored on every other origin, so ordinary
 websites continue to require the in-page review card.
 
+### Manual takeover and cross-tab transfer
+
+During an active run the content script listens for trusted pointer, keyboard,
+input, change, and click events from the page. A website interaction pauses the
+run, aborts any in-flight reasoning request, dismisses a pending approval card,
+and asks the user to start a fresh run. Agent-generated events and clicks in the
+extension panel are marked as internal and do not trigger the takeover. Page
+scrolling is intentionally allowed while the approval card is open so the user
+can inspect the form; scrolling or resizing during model reasoning invalidates
+the current observation through the page-side scroll-drift guard and causes a
+fresh capture.
+
+The Advanced privacy controls expose **Allow local tab-to-tab transfer** and a
+source-tab picker. When enabled, the background worker asks the selected source
+tab for visible, editable, non-password form controls, then asks the destination
+tab to fill only unambiguous matching controls that are still empty. Matching
+uses local canonical labels (for example, `Email address` → `Work email` and
+`Phone` → `Mobile number`). Passwords, file inputs, hidden controls, ambiguous
+labels, and existing destination values are excluded. Raw source values exist
+only in extension-local messages; they never enter `SanitizedObservation`, the
+reasoning request, activity logs, or the server. The source choice is temporary
+and is not written to extension storage.
+
 The default endpoint is `http://127.0.0.1:8765/v1/reason`. Non-loopback
 endpoints must use HTTPS. API keys and known private values are kept in the
 background/panel memory and are not saved to extension storage. The endpoint,
@@ -101,11 +148,14 @@ step count, full-mask preference, and selected privacy grade are saved locally.
 The default is Grade 3 (strict). See [`../PRIVACY_LEVELS.md`](../PRIVACY_LEVELS.md)
 for the complete category matrix and detector limits.
 
-The synthetic demo page includes a privacy-spectrum gallery and comparison
-fields for critical data (password, PAN, Aadhaar, and bank account), personal
-data (email, phone, address, date of birth, customer ID, and IP address), and
-identity data (name, username, and employee code). Run **Privacy preview** at
-each grade on a fresh page to show the redaction set expanding progressively.
+The synthetic demo page includes a privacy-spectrum gallery and a realistic
+staff-transfer form. Its critical examples are the portal password, PAN,
+Aadhaar-style number, payment-card fixture, and face; personal examples are
+official email, mobile, address, and date of birth; identity examples are the
+applicant name and employee ID. The six public transfer fields remain locally
+fillable while the mixed relocation notes exercise repeated contact PII. Run
+**Privacy preview** at each grade on a fresh page to show the redaction set
+expanding progressively.
 
 ### Troubleshoot a blocked local preview
 

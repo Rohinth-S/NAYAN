@@ -156,7 +156,8 @@ async def test_success_page_requires_confirmed_submission(settings: Settings) ->
         await client.post("/demo/api/submit", json={"consent": True})
         success = await client.get("/demo/success")
         assert success.status_code == 200
-        assert "Enrollment submitted successfully" in success.text
+        assert "Transfer request submitted" in success.text
+        assert "successfully." in success.text
         assert 'href="/demo"' in success.text
         assert "no-store" in success.headers["cache-control"]
         assert "aarav.sharma@example.test" not in success.text

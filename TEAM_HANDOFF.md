@@ -9,6 +9,36 @@
 | Current branch | `main` |
 | Current stage | Controlled synthetic prototype with a complete privacy-boundary path, Chrome/Firefox packages, a local Ollama reasoning path, a synthetic end-to-end demo, automated release checks, and explicit asset/evidence gates. |
 
+## 0. Current reliability extension (19 September 2026)
+
+The latest reliability pass adds three user-visible capabilities that are now
+implemented in the extension runtime, rather than being design-only items:
+
+- **Manual takeover:** while an agent run is active, trusted page pointer,
+  keyboard, input, change, and click events pause the run. The background worker
+  aborts the in-flight reasoning request, the page broker rejects further model
+  actions, and the panel reports that a fresh run is required. Agent-generated
+  events and extension-panel controls are excluded. Scroll/resize remain usable
+  during the non-blocking submit review; scroll/resize during reasoning still
+  invalidate the captured viewport through the page-owned drift guard.
+- **Revalidated submit approval:** destructive actions use an in-page review card
+  instead of a blocking browser dialog. The user can scroll and inspect the
+  website, then choose **Approve submission** or **Cancel**. Approval is checked
+  against the interaction revision and connected target immediately before the
+  click. Stop dismisses the card and clears the in-flight action reservation.
+- **Local tab-to-tab transfer:** the panel can opt in to a selected HTTP(S)
+  source tab. Only visible, editable, non-password form controls are read, and
+  matching empty destination controls are filled locally by canonical labels.
+  Passwords, file/hidden controls, ambiguous labels, and existing destination
+  values are excluded. Source values never enter the sanitized observation,
+  network request, activity log, or server; the source choice is session-only.
+
+Validation for this pass: `npm --prefix extension run check` (TypeScript,
+169 Vitest tests, Chrome/Firefox packaging) and `python -m pytest server/tests -q`
+pass on the development host. These tests cover the local transfer label policy
+and existing protocol/action contracts; a live Chrome/Firefox manual takeover
+and two-tab run remains browser-matrix evidence to record before a release.
+
 This is the detailed handoff for the current repository. It describes the behavior that is present in source code, the behavior that is optional or asset-gated, the evidence that has actually been recorded, and the work that still requires a real browser run, model asset, deployment, or independent review. It is intentionally conservative: a module existing in the repository is not described as an active default feature unless the build and runtime select it.
 
 ## 1. Executive state of the repository
@@ -29,14 +59,14 @@ The project is an extension and reasoning service. It is **not a custom browser 
 - Chrome uses an offscreen document for decoding, inference, composition, and PNG encoding. Firefox uses the compatible direct local path.
 - A page-owned scroll-drift guard invalidates a captured set-of-mark registry when the user scrolls or the viewport changes while the server is reasoning.
 - The extension executes only the allowlisted actions `click`, `input`, `scroll`, `wait`, `done`, `hover`, `focus`, `doubleClick`, `check`, `uncheck`, and `select`, after snapshot, document, revision, visibility, editability, origin, tab, window, and duplicate-action checks.
-- Potentially destructive clicks such as submit, pay, delete, or navigation require native user confirmation.
+- Potentially destructive clicks such as submit, pay, delete, or navigation require a non-blocking in-page user confirmation card that revalidates the page before dispatch.
 - The FastAPI server validates the strict protocol, PNG structure, mask evidence, policy digest, request limits, authentication, origins, and model responses.
 - Slow reasoning is admitted through a bounded asynchronous job queue. The development profile uses in-memory jobs by default; SQLite metadata or Redis can be selected. Production configuration requires Redis.
 - Ollama is the default provider adapter. The local setup uses `qwen3-vl:2b-instruct` on loopback and asks for strict JSON action output.
 - A provider-neutral sanitized gateway adapter is implemented for a hosted or air-gapped reasoning service.
 - A deterministic structural planner is available only as a development fallback for unambiguous schema-valid tasks. Production configuration forces it off.
 - The synthetic portal includes Indian-style PII, a face, sensitive fields, privacy-grade labels, synthetic credit-card, PAN-card, and Aadhaar-style document fixtures, a person-image/object media lab, a confirmation checkbox, and a submit action.
-- The release gate currently reports 148 extension, 174 server, and 34 evaluation tests in `evidence/latest-release.json`, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
+- The checked local release gate currently reports 169 extension, 178 server, and 34 evaluation tests, plus typecheck, lint, package, governance, security, SBOM, metadata, source-egress, browser-matrix, and supply-chain checks where the host supports them.
 
 ### What is deliberately not claimed as default
 
@@ -78,6 +108,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 | `extension/src/scroll-drift-guard.ts` | Content-script passive scroll/viewport drift detection and Step 0 abort state. |
 | `extension/src/egress.ts` | The only source file allowed to call `fetch` for the reasoning service. |
 | `extension/src/context-guard.ts` | Active tab/window/origin/document generation binding and stale-context checks. |
+| `extension/src/tab-transfer.ts` | Local-only canonical label matching for explicitly selected source-tab form transfer. |
 | `extension/src/capture-rate-gate.ts` | Demand-driven `captureVisibleTab` rate gate. |
 | `extension/src/task-presets.ts` | Safe task presets used by the UI and tests. |
 | `extension/src/settings.ts` | Extension setting persistence and normalization. |
@@ -112,7 +143,7 @@ The project is an extension and reasoning service. It is **not a custom browser 
 | `evidence/` | Aggregate synthetic E2E, Ollama, perception, release, and SIH demo evidence. |
 | `governance/` | Detector-registry schema, protocol manifest/migrations, and security review records. |
 | `scripts/` | Release gate, governance check, security scan, SBOM generation, disk budget, demo preflight, retention cleanup, local preview, and signing helpers. |
-| `scripts/workflow-smoke.mjs` | Isolated Chrome end-to-end smoke: sanitized extension capture, local server, real graph execution, native submit confirmation, and aggregate evidence. |
+| `scripts/workflow-smoke.mjs` | Isolated Chrome end-to-end smoke: sanitized extension capture, local server, real graph execution, in-page submit approval, and aggregate evidence. |
 | `README.md`, `ARCHITECTURE.md`, `ARCHITECTURE_REVIEW.md`, `INTEGRATION_REVIEW.md` | Product, trust-boundary, architecture decision, and integration documentation. |
 | `PRIVACY_LEVELS.md`, `PROTOCOL.md`, `EDGE_CASE_MATRIX.md`, `THREAT_MODEL.md` | Policy, wire contract, failure behavior, and threat model. |
 | `TEAM_WORK_SPLIT.md` | Detailed task ownership, completed workstream audit, remaining release gates, and acceptance criteria. |
@@ -232,7 +263,7 @@ Each agent step follows this order:
 13. The extension polls `GET /v1/reason/{jobId}`. Poll responses are bodyless until the job completes; they do not contain the sanitized observation.
 14. Ollama or the configured sanitized gateway reasons over the sanitized image and element list and returns strict JSON containing one allowlisted action.
 15. The extension disables the page-owned scroll guard after the response. If drift occurred, it discards the response and captures a new step.
-16. The content script verifies the action against the current snapshot/document/revision and live DOM. Destructive clicks require a native confirmation.
+16. The content script verifies the action against the current snapshot/document/revision and live DOM. Destructive clicks require a non-blocking in-page review card that can be cancelled by trusted user input.
 17. The action executes, status/activity metrics update, and the loop repeats until `done`, the maximum step count, timeout, user stop, or a fail-closed error.
 
 ### Handoff visual: server admission
@@ -731,7 +762,7 @@ Load `extension\dist\chrome` as an unpacked Chrome extension. For Firefox, load 
 6. Click **Privacy preview** and inspect the sanitized image and metrics. Preview must perform no network request.
 7. Click **Start agent**.
 8. Observe the activity log, redaction count, detector backend, mask area, and server latency.
-9. Approve the native confirmation if the agent requests a destructive submit click.
+9. Review the populated fields and approve the in-page confirmation card if the agent requests a destructive submit click.
 10. Confirm the portal reports successful enrollment.
 
 If the default model or server is unavailable, the extension should enter a blocked/error state. Only select the explicit full-mask fallback when the team understands that the image becomes opaque and only safe DOM structure remains.
@@ -809,7 +840,7 @@ The recommended demonstration sequence is:
 2. Show Grade 1, Grade 2, and Grade 3 on the synthetic portal and explain the cumulative matrix.
 3. Click **Privacy preview** and show that the preview is generated locally with zero network requests.
 4. Show the detector backend, mask count, mask area, and redaction categories.
-5. Start the same synthetic task and show the activity log, async polling, and native confirmation.
+5. Start the same synthetic task and show the activity log, async polling, and in-page confirmation card.
 6. Show that enrollment succeeds after the checkbox and submit action.
 7. Show the exact receiver verifier/evidence statement that canaries are absent and poll bodies are empty.
 8. Demonstrate a detector/capture failure and show that request count remains zero or the image is fully opaque.

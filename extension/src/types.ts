@@ -149,7 +149,71 @@ export type SanitizedDomPreview = Readonly<{
   elementCount: number;
   elements: readonly SanitizedElement[];
   redactionKinds: Readonly<Record<string, number>>;
+  /** Local-only before/after accounting for the DOM proof panel. */
+  domAudit?: DomSanitizationAudit;
+  /** Local-only inventory of handles; values and selectors are never retained. */
+  redactions?: readonly RedactionAuditItem[];
   registryDigest?: string;
+}>;
+
+/** A safe, displayable record for one local redaction. No original value is retained. */
+export type RedactionAuditItem = Readonly<{
+  handle: string;
+  fieldId: string;
+  type: string;
+  layer: 'dom' | 'regex' | 'ner' | 'vision' | 'ocr' | 'fallback';
+  source: Redaction['source'];
+  confidence: number;
+  bounds: Bounds;
+  hasOnScreenBox: boolean;
+  placeholder: string;
+}>;
+
+/** Counts are intentionally coarse: they prove minimisation without exposing the raw DOM. */
+export type DomSanitizationAudit = Readonly<{
+  rawInteractiveCount: number;
+  rawCandidateRedactions: number;
+  rawSensitiveFields: number;
+  sanitizedInteractiveCount: number;
+  sanitizedRedactions: number;
+  valuesOmitted: true;
+  selectorsOmitted: true;
+}>;
+
+export type LatencyBreakdown = Readonly<{
+  screenshotMs: number;
+  domInspectionMs: number;
+  sanitizationMs: number;
+  networkMs: number;
+  actionMs: number;
+  totalMs: number;
+}>;
+
+export type PolicyBlock = Readonly<{
+  code: string;
+  message: string;
+}>;
+
+/** Extension-local audit artifact. It is never part of SanitizedObservation. */
+export type RedactionReport = Readonly<{
+  reportId: string;
+  generatedAt: string;
+  status: 'preview' | 'running' | 'completed' | 'blocked' | 'cancelled';
+  privacyGrade: PrivacyGrade;
+  detectorBackend: SanitizedObservation['privacy']['detectorBackend'];
+  detectorArch?: SanitizedObservation['privacy']['detectorArch'];
+  redactionCount: number;
+  maskedAreaPercentage: number;
+  actionsExecuted: number;
+  actionsBlocked: number;
+  networkRequests: number;
+  imageSha256: string;
+  redactionMode: PrivacyReceipt['redactionMode'];
+  transmissionMode: PrivacyReceipt['transmissionMode'];
+  domAudit: DomSanitizationAudit;
+  redactions: readonly RedactionAuditItem[];
+  policyBlocks: readonly PolicyBlock[];
+  latency: LatencyBreakdown;
 }>;
 
 export type AgentAction = Readonly<{
@@ -227,6 +291,10 @@ export type ExtensionSettings = Readonly<{
   allowFullMaskFallback: boolean;
   /** Skip terminal confirmation only for the synthetic loopback demo page. */
   autoApproveLocalDemo: boolean;
+  /** Enable an explicit, local-only transfer from a selected source tab. */
+  allowLocalTransfer?: boolean;
+  /** Source tab chosen in the extension UI; never persisted or sent to the server. */
+  sourceTabId?: number | null;
   /**
    * High-assurance mode deliberately discards all screenshot semantics. The
    * server receives an opaque black PNG plus the already-sanitized DOM
@@ -268,6 +336,10 @@ export type AgentStatus = Readonly<{
   latencyBudget?: LatencyBudget;
   /** Local-only receipt for the latest eligible or transmitted observation. */
   privacyReceipt: PrivacyReceipt | null;
+  /** Local-only audit report for the latest preview/run. */
+  latestReport?: RedactionReport | null;
+  /** Stage timings for the latest capture/request cycle. */
+  latencyBreakdown?: LatencyBreakdown;
 }>;
 
 export type PopupCommand =
@@ -284,6 +356,16 @@ export type ContentCommand =
   | { type: 'VERIFY_REVISION' }
   | { type: 'SET_SCROLL_GUARD'; active: boolean }
   | { type: 'GET_SCROLL_DRIFT' }
+  /** Mark the page as being controlled by the agent; trusted user input pauses it. */
+  | { type: 'SET_AUTOMATION_ACTIVE'; active: boolean }
+  /** Read local interaction state without exposing page values. */
+  | { type: 'GET_INTERACTION_STATE' }
+  /** Capture editable values locally for an explicitly selected source tab. */
+  | { type: 'CAPTURE_TRANSFER_FIELDS' }
+  /** Fill matching destination controls using extension-local values only. */
+  | { type: 'APPLY_TRANSFER_FIELDS'; fields: readonly TransferField[]; overwrite?: boolean }
+  /** Dismiss an in-page approval card when the run is stopped or taken over. */
+  | { type: 'CANCEL_PENDING_APPROVAL' }
   | {
       type: 'EXECUTE_ACTION';
       snapshotId: string;
@@ -304,6 +386,30 @@ export type ContentResponse =
         viewport: { width: number; height: number; scrollX: number; scrollY: number };
       };
       scrollDrift?: ScrollDriftState;
+      interaction?: InteractionState;
+      transfer?: TransferResult;
+      transferFields?: readonly TransferField[];
       result?: string;
     }
   | { ok: false; error: string };
+
+/** Extension-local field categories used for tab-to-tab matching. */
+export type TransferField = Readonly<{
+  label: string;
+  value: string;
+  kind: 'text' | 'email' | 'phone' | 'address' | 'date' | 'number' | 'select';
+}>;
+
+export type TransferResult = Readonly<{
+  scanned: number;
+  filled: number;
+  skipped: number;
+  unmatched: number;
+}>;
+
+export type InteractionState = Readonly<{
+  automationActive: boolean;
+  manualTakeover: boolean;
+  interactionRevision: number;
+  documentRevision: number;
+}>;

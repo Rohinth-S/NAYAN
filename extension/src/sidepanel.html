@@ -11,18 +11,20 @@
     <main>
       <header class="topbar sidepanel-topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">✦</div>
+          <div class="brand-mark" aria-hidden="true"><thinking-orb id="brandOrb" state="breathing" size="20" theme="dark"></thinking-orb></div>
           <div>
             <p class="eyebrow">SIH26171 · LOCAL FIRST</p>
             <h1>Private Browser Agent</h1>
             <p class="subtitle">Your privacy-aware browser copilot</p>
           </div>
         </div>
-        <span id="state" class="badge">idle</span>
+        <span id="stateBadge" class="badge"><thinking-orb id="badgeOrb" state="breathing" size="20" theme="auto"></thinking-orb><span id="state">idle</span></span>
       </header>
 
       <section class="chat-intro" aria-label="Agent status">
-        <div class="chat-avatar" aria-hidden="true">✦</div>
+        <div class="chat-avatar" aria-hidden="true">
+          <thinking-orb id="chatAvatarOrb" state="breathing" size="64" theme="dark"></thinking-orb>
+        </div>
         <div>
           <strong>What should I do on this page?</strong>
           <p>I can inspect the visible page, redact private data locally, then scroll, click, fill fields, and submit with your approval. On first use, Chrome may ask to access this page.</p>
@@ -104,17 +106,32 @@
           <input id="autoApproveLocalDemo" type="checkbox" />
           <span><strong>Auto-approve local demo submissions.</strong> Skip the in-page submit review only on the synthetic <code>127.0.0.1:8765/demo</code> page.</span>
         </label>
+        <label class="check" for="allowLocalTransfer">
+          <input id="allowLocalTransfer" type="checkbox" />
+          <span><strong>Allow local tab-to-tab transfer.</strong> Read non-password form fields from the selected source tab and fill matching empty fields here. Values stay on this device.</span>
+        </label>
+        <div class="row transfer-source-row">
+          <label class="grow" for="sourceTab">Source tab
+            <select id="sourceTab" disabled>
+              <option value="">Enable local transfer to choose a source tab…</option>
+            </select>
+          </label>
+          <button id="refreshSourceTabs" class="preview-expand" type="button">Refresh tabs</button>
+        </div>
       </details>
 
       <div class="actions">
-        <button id="preview" type="button" class="secondary"><span aria-hidden="true">◉</span> Privacy preview</button>
-        <button id="start" type="button"><span aria-hidden="true">▶</span> Start agent</button>
+        <button id="preview" type="button" class="secondary"><span class="btn-orb-slot"><thinking-orb id="previewOrb" state="shaping" size="20" theme="dark" paused></thinking-orb></span><span class="btn-text">Privacy preview</span></button>
+        <button id="start" type="button"><span class="btn-orb-slot"><thinking-orb id="startOrb" state="working" size="20" theme="dark" paused></thinking-orb></span><span class="btn-text">Start agent</span></button>
         <button id="stop" type="button" class="danger" disabled><span aria-hidden="true">■</span> Stop</button>
       </div>
 
       <section class="status" aria-live="polite">
-        <div class="status-header"><span class="status-label">RUN STATUS</span><span class="local-pill"><span></span> local filter active</span></div>
-        <p id="message">Ready</p>
+        <div class="status-header"><span class="status-label">RUN STATUS</span><span class="local-pill"><thinking-orb id="statusHeaderOrb" state="breathing" size="16"></thinking-orb> local filter active</span></div>
+        <div class="status-message-row">
+          <thinking-orb id="agentOrb" state="breathing" size="32" theme="auto"></thinking-orb>
+          <p id="message">Ready</p>
+        </div>
         <dl>
           <div><dt>Step</dt><dd id="step">0</dd></div>
           <div><dt>Detector</dt><dd id="detector">not run</dd></div>
@@ -171,6 +188,18 @@
         <dl id="privacyReceiptContent" class="privacy-receipt-grid"></dl>
       </section>
 
+      <section id="runReport" class="run-report" hidden aria-labelledby="runReportTitle">
+        <header class="run-report-header">
+          <div>
+            <p class="dom-proof-kicker">LOCAL AUDIT TRAIL</p>
+            <h2 id="runReportTitle">Redaction report</h2>
+            <p>Before → after DOM proof, policy decisions, detector confidence, and latency for this run.</p>
+          </div>
+          <button id="downloadReport" class="run-report-download" type="button">Download report</button>
+        </header>
+        <div id="runReportContent"></div>
+      </section>
+
       <div id="previewModal" class="preview-modal" hidden>
         <div class="preview-modal-backdrop" data-preview-close="true"></div>
         <section class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="previewDialogTitle" aria-describedby="previewDialogDescription">
@@ -182,7 +211,7 @@
             </div>
             <div class="preview-dialog-header-actions">
               <button id="previewFullscreen" class="preview-fullscreen" type="button" aria-pressed="false">Fullscreen</button>
-              <button id="previewClose" class="preview-close" type="button" aria-label="Close full-screen preview">×</button>
+              <button id="previewClose" class="preview-close" type="button" aria-label="Exit preview and return to website" title="Exit preview and return to website">×</button>
             </div>
           </header>
           <div id="previewModalStage" class="preview-modal-stage">

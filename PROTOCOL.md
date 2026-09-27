@@ -177,11 +177,17 @@ flowchart TD
     SNAP -- Yes --> TARGET{Target visible, connected, enabled, editable as required?}
     TARGET -- No --> REJECT
     TARGET -- Yes --> RISK{Destructive or irreversible?}
-    RISK -- Yes --> CONFIRM[Native user confirmation]
+    RISK -- Yes --> CONFIRM[Non-blocking in-page review card]
     RISK -- No --> EXECUTE[Execute locally]
     CONFIRM -- Approved --> EXECUTE
     CONFIRM -- Denied --> STOP[Stop safely]
 ```
+
+The review card is page-owned and non-blocking: the user can scroll and inspect
+the form before approving. Trusted page input while it is open cancels the
+pending action, and approval rechecks the interaction revision and target
+connectivity immediately before dispatch. The extension Stop control also
+dismisses an open card.
 
 ## Failure behavior
 

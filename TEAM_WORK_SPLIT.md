@@ -4,6 +4,31 @@ This document is the working task contract for Rohinth, Mithul, and Prajjwal. It
 
 The project is a controlled-demonstration prototype today. The core privacy boundary is implemented, but detector coverage, deployment controls, browser-matrix validation, and independent assurance still need work before the system handles real personal data.
 
+## Reliability extension — 19 September 2026
+
+The browser workflow now includes the following completed reliability work in
+the extension and background controller:
+
+1. **Manual takeover and cancellation.** Trusted page pointer/keyboard/input/
+   change/click events set a local interaction revision. A 250 ms background
+   monitor observes that state, aborts in-flight reasoning, stops the run, and
+   requires a fresh start. Agent-generated events and extension UI events are
+   excluded. Scroll/resize remain allowed during the review card; reasoning
+   captures still use the page-owned scroll-drift guard.
+2. **Safe, inspectable submit approval.** Destructive actions use a non-blocking
+   in-page card. Approval revalidates the interaction revision and connected
+   target immediately before the action, and Stop cancels any pending card.
+3. **Local tab transfer.** An explicit panel opt-in and source-tab selector
+   transfer visible editable non-password form values locally into matching
+   empty destination controls. Canonical label matching handles common aliases;
+   ambiguous labels, secrets, hidden/file controls, and non-empty destination
+   fields are skipped. Transfer values never enter the sanitized wire protocol.
+
+The extension check currently passes TypeScript, 169 Vitest tests, and both
+browser package builds. Server tests pass separately. A live browser matrix
+must still record the manual takeover and two-tab flows; source-level tests do
+not claim universal browser behavior.
+
 ## Current baseline
 
 The latest integrated branch includes:
@@ -20,9 +45,9 @@ Latest local validation baseline:
 
 | Area | Result |
 | --- | ---: |
-| Extension tests | 92 passed |
-| Server tests | 157 passed |
-| Evaluation tests | 32 passed |
+| Extension tests | 169 passed |
+| Server tests | 178 passed |
+| Evaluation tests | 34 passed |
 | Chrome package | Builds successfully |
 | Firefox package | Builds successfully |
 | Full `Test-Prototype.ps1` | Passed, exit code 0 |

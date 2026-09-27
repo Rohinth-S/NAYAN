@@ -374,6 +374,14 @@ def create_app(
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/demo/assets/thinking-orbs.js", include_in_schema=False)
+    async def demo_thinking_orbs() -> FileResponse:
+        return FileResponse(
+            DEMO_DIR / "thinking-orbs.js",
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.get("/demo/assets/app.css", include_in_schema=False)
     async def demo_stylesheet() -> FileResponse:
         return FileResponse(

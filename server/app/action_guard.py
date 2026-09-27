@@ -9,6 +9,7 @@ from app.schemas import BrowserAction, Element, ReasoningResponse, SanitizedObse
 # model selection and ordinary action validation.
 _TASK_TERMS = (
     "submit",
+    "submitting",
     "confirm",
     "continue",
     "proceed",
@@ -20,7 +21,7 @@ _TASK_TERMS = (
     "apply",
 )
 _BUTTON_TERMS = (*_TASK_TERMS, "next")
-_STRONG_TERMINAL_TASK_TERMS = ("submit", "enroll", "register", "save", "apply", "finish", "complete")
+_STRONG_TERMINAL_TASK_TERMS = ("submit", "submitting", "enroll", "register", "save", "apply", "finish", "complete")
 _FILL_TERMS = ("fill", "enter", "type", "write", "provide", "input")
 _COMPLETION_TERMS = ("complete", "completed", "submitted", "success", "successful", "finished", "done")
 _PREREQUISITE_TERMS = (
@@ -152,7 +153,7 @@ def deterministic_form_action(observation: SanitizedObservation) -> BrowserActio
     # Recognize the new confirmation page from sanitized context, instead of
     # asking the model to click its return link and restarting the form.
     confirmation_page = re.search(
-        r"\b(?:enrollment|form|application|registration)\s+(?:submitted|completed)\s+successfully\b",
+        r"\b(?:enrollment|form|application|registration|transfer\s+request)\s+(?:submitted|completed)\s+successfully\b",
         observation.page.title,
         re.I,
     )
@@ -160,7 +161,7 @@ def deterministic_form_action(observation: SanitizedObservation) -> BrowserActio
         element.role in {"textbox", "checkbox", "radio", "combobox", "button"}
         and not element.state.disabled for element in elements
     ):
-        return BrowserAction(type="done", message="The page reports successful enrollment submission.")
+        return BrowserAction(type="done", message="The page reports successful form submission.")
     # The extension performs explicit public-field filling locally. Once all
     # visible opted-in fields carry the boolean [filled] marker, the same
     # deterministic consent/submit plan is safe for a fill-and-submit task.

@@ -21,8 +21,8 @@ export const TASK_PRESETS: readonly TaskPreset[] = [
   },
   {
     id: 'fill-public-fields',
-    label: 'Fill public fields from my instructions',
-    task: 'Fill the public demo form fields with: preferred name Rohan Mehta, work email rohan.mehta@example.test, phone +91 91234 56789, city Pune, benefit plan Family Care Standard, coverage start date 2026-11-15. Then check the consent box and submit the enrollment.',
+    label: 'Fill a staff transfer request',
+    task: 'Fill the transfer request with: applicant name Aarav Sharma; official email aarav.sharma@example.test; mobile number +91 98765 43210; requested centre Orbital Satellite Centre, Bengaluru; transfer type Family relocation; effective date 2026-11-15. Then check the consent box and ask me to review all fields before submitting the transfer request.',
   },
   {
     id: 'find-information',

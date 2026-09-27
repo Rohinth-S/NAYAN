@@ -20,7 +20,8 @@
     "@langchain/langgraph": "1.4.15",
     "@zxing/library": "0.21.3",
     "onnxruntime-web": "1.22.0",
-    "tesseract.js": "6.0.1"
+    "tesseract.js": "6.0.1",
+    "thinking-orbs": "^0.3.2"
   },
   "devDependencies": {
     "@types/chrome": "0.0.326",

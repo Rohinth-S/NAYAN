@@ -37,6 +37,8 @@ The critical architectural property is the direction of the arrows: the reasonin
 10. The egress gateway enforces exact keys, types, ranges, the integer `privacy.grade`, unsafe-key exclusions, endpoint policy, payload size, and caller-supplied canaries over the final serialized bytes. It submits that body once with `Prefer: respond-async`; subsequent authenticated polls contain only the server-generated UUID job ID.
 11. Short submit/poll requests avoid Chrome MV3's long-fetch service-worker limit. Each poll waits on the server for at most 10 seconds and returns immediately on completion, reducing wakeups without approaching the browser limit. A bounded extension-API heartbeat runs only while one reasoning operation is active, and the entire operation expires after 100 seconds.
 12. The returned action must echo the current snapshot ID and match its exact action-specific schema. The content script verifies the live document again immediately before acting. The safe broker supports click, input, scroll, wait, done, hover, focus, doubleClick, explicit checkbox check/uncheck, and native select; it does not expose arbitrary JavaScript, selectors, URLs, keyboard injection, cookies, storage, downloads, or uploads.
+13. During an active run, trusted page pointer, keyboard, input, change, and click events set a local interaction revision. The background monitor aborts the current reasoning request and pauses the run; extension UI events and agent-generated events are excluded. A fresh run is required after takeover so user edits are never overwritten.
+14. Destructive actions use a non-blocking page-owned review card. Scrolling is allowed while the user reviews the form, while approval, target connectivity, and interaction revision are checked immediately before dispatch. Stop dismisses the card. An explicit local tab-transfer option can read visible, editable, non-password controls from a selected source tab and fill matching empty destination fields; those values never enter the sanitized protocol.
 
 ### Client trust-boundary sequence
 
@@ -64,6 +66,8 @@ sequenceDiagram
     E-->>BG: Validated response
     BG->>CS: Snapshot-bound action
     CS->>Page: Safe click/input/scroll/hover/focus/select/check
+    Page-->>CS: Trusted user input (manual takeover)
+    CS-->>BG: Abort + require fresh run
 ```
 
 ## Architecture decision: direct capture and sanitization with per-step snapshots
@@ -159,6 +163,7 @@ flowchart TD
 | Session site alias | yes | yes | no content logging |
 | DOM/HTML/attributes | yes | no | no |
 | Form values/passwords | page only | no | no |
+| Local transfer source values | extension-local during opt-in transfer | no | no |
 | Sanitized labels and roles | yes | yes | no content logging |
 | Opaque element IDs/bounds | yes | yes | no content logging |
 | ID-to-DOM mapping | yes | no | no |
@@ -205,4 +210,3 @@ The browser extension (Chrome MV3) form factor is deliberately chosen over a nat
 The decision to retain a CNN (YOLOv8n/v10n) for per-frame dense prediction (bounding boxes) over a Vision Transformer (ViT) is driven by the strict local processing budget on integrated GPUs (iGPUs). 
 
 Vision Transformers scale quadratically with sequence length (image resolution). For a $640 \times 640$ input, the number of patches $N$ is large, making self-attention $O(N^2 \cdot d)$ prohibitively slow on shared-memory iGPUs. CNNs scale linearly $O(H \cdot W \cdot C)$ with resolution. On consumer hardware (e.g., Intel Iris Xe, AMD 600M), the buffer-mapping stall from a ViT's memory-bandwidth demands easily violates the $\le 100-120\text{ms}$ p95 local processing budget. Therefore, a small ViT is reserved exclusively for the rare scene-gating task, while the unified YOLO CNN handles the per-frame PII redaction pipeline.
-
