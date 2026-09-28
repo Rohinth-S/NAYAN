@@ -299,62 +299,168 @@ function renderDomAudit(parent: HTMLElement, audit: DomSanitizationAudit): void 
 export function renderRedactionReport(root: HTMLElement, report: RedactionReport, sanitizedImage: string | null = null): void {
   root.replaceChildren();
 
-  // ── Status banner: preview vs actual transmission ──
-  const statusBanner = create('div', report.networkRequests > 0 ? 'report-status-banner report-status-sent' : 'report-status-banner report-status-preview');
-  if (report.networkRequests > 0) {
-    statusBanner.innerHTML = `<strong>⬆️ DATA TRANSMITTED</strong><p>${report.networkRequests} reasoning request(s) were sent. The redacted data shown below was actually transmitted to the server.</p>`;
-  } else {
-    statusBanner.innerHTML = `<strong>👁️ LOCAL PREVIEW ONLY</strong><p>Nothing was sent to any server. This is a local-only preview of what <em>would</em> be transmitted if a reasoning request runs.</p>`;
+  // ── § 1  JUDGE VERDICT — answers "What / Where / What happened" in 3 seconds ──
+  const isSent = report.networkRequests > 0;
+  const verdict = create('section', 'judge-verdict');
+
+  // Transmission status pill
+  const statusPill = create('div', isSent ? 'jv-status jv-status-sent' : 'jv-status jv-status-preview');
+  statusPill.innerHTML = isSent
+    ? `<span class="jv-status-dot jv-dot-sent"></span><strong>DATA TRANSMITTED</strong> — ${report.networkRequests} request(s) sent after redaction`
+    : `<span class="jv-status-dot jv-dot-preview"></span><strong>LOCAL PREVIEW</strong> — nothing left this device`;
+  verdict.append(statusPill);
+
+  // Big verdict title
+  const verdictTitle = create('h2', 'jv-title');
+  verdictTitle.textContent = 'Privacy Audit Verdict';
+  const verdictStamp = create('p', 'jv-stamp');
+  verdictStamp.textContent = `${new Date(report.generatedAt).toLocaleString()} · Grade ${report.privacyGrade} · ${report.detectorBackend}`;
+  verdict.append(verdictTitle, verdictStamp);
+
+  // Three answer cards: WHAT / WHERE / WHAT HAPPENED
+  const answers = create('div', 'jv-answers');
+
+  // Group redactions by type for the "WHAT" answer
+  const typeGroups = new Map<string, RedactionAuditItem[]>();
+  report.redactions.forEach((item) => {
+    const list = typeGroups.get(item.type) ?? [];
+    list.push(item);
+    typeGroups.set(item.type, list);
+  });
+  const typeSummaryParts: string[] = [];
+  for (const [type, items] of typeGroups) {
+    const icon = TYPE_ICONS[type] ?? '🛡️';
+    const name = CATEGORY_GROUP_NAME[type] ?? friendlyType(type);
+    typeSummaryParts.push(`${icon} ${items.length}× ${name}`);
   }
-  root.append(statusBanner);
 
-  const header = create('div', 'report-header');
-  const title = create('h2'); title.textContent = 'Run audit report';
-  const subtitle = create('p'); subtitle.textContent = `Local-only evidence · ${report.status} · ${new Date(report.generatedAt).toLocaleString()}`;
-  header.append(title, subtitle);
-  const metrics = create('div', 'report-metrics');
-  metric(metrics, 'Redacted', String(report.redactionCount));
-  metric(metrics, 'Blocked', String(report.actionsBlocked));
-  metric(metrics, 'Executed', String(report.actionsExecuted));
-  metric(metrics, 'Requests', String(report.networkRequests));
-  metric(metrics, 'Total latency', formatLatency(report.latency.totalMs));
+  // Layer breakdown for "WHERE"
+  const layerGroups = new Map<RedactionAuditItem['layer'], number>();
+  report.redactions.forEach((item) => layerGroups.set(item.layer, (layerGroups.get(item.layer) ?? 0) + 1));
 
-  const note = create('div', 'report-note');
-  note.textContent = report.redactions.some((item) => !item.hasOnScreenBox)
-    ? 'Some detected items had no visible box. Their values were replaced by handles in the structured payload; no raw text is shown here.'
-    : 'Only semantic handles, safe labels, and sanitized pixels are eligible for transmission. Original values are never displayed.';
-  root.append(header, metrics, note);
+  const whatCard = create('article', 'jv-card');
+  whatCard.innerHTML = `<div class="jv-card-icon">🔍</div><h3>What was detected?</h3><p class="jv-card-big">${report.redactions.length} sensitive region${report.redactions.length === 1 ? '' : 's'}</p><p class="jv-card-detail">${typeSummaryParts.join('<br>') || 'Nothing detected'}</p>`;
+
+  const whereCard = create('article', 'jv-card');
+  const layerLines = Array.from(layerGroups.entries()).map(([layer, count]) => {
+    const info = layerInfo(layer);
+    return `<span class="jv-layer-pill ${layerClass(layer)}">${info.label}</span> found ${count}`;
+  }).join('<br>');
+  whereCard.innerHTML = `<div class="jv-card-icon">📍</div><h3>How were they found?</h3><p class="jv-card-big">${layerGroups.size} detection layer${layerGroups.size === 1 ? '' : 's'}</p><p class="jv-card-detail">${layerLines || 'No detections'}</p>`;
+
+  const actionCard = create('article', 'jv-card');
+  const actionVerb = isSent ? 'Redacted before transmission' : 'Would be redacted before any transmission';
+  actionCard.innerHTML = `<div class="jv-card-icon">🛡️</div><h3>What happened to it?</h3><p class="jv-card-big">${actionVerb}</p><p class="jv-card-detail">All ${report.redactions.length} region${report.redactions.length === 1 ? '' : 's'}: original values replaced with safe handles, pixels masked with opaque overlay.<br>Raw values: <strong>0 transmitted</strong></p>`;
+
+  answers.append(whatCard, whereCard, actionCard);
+  verdict.append(answers);
+  root.append(verdict);
+
+  // ── § 2  VISUAL PROOF — annotated screenshot right after verdict ──
+  if (sanitizedImage) {
+    const proofSection = create('section', 'judge-proof');
+    const proofTitle = create('h3', 'jp-title');
+    proofTitle.textContent = '📸 Visual proof — what the server receives';
+    const proofNote = create('p', 'jp-note');
+    proofNote.textContent = 'Each numbered circle marks a masked region. Numbers match the findings below. The server only sees this sanitized version.';
+    proofSection.append(proofTitle, proofNote);
+    renderAnnotatedScreenshot(proofSection, sanitizedImage, report.redactions);
+    root.append(proofSection);
+  }
+
+  // ── § 3  FINDINGS — grouped by document/field type with plain-language explanations ──
+  const findingsSection = create('section', 'judge-findings');
+  const findingsTitle = create('h3', 'jf-title');
+  findingsTitle.textContent = '🔎 Detailed findings';
+  findingsSection.append(findingsTitle);
+
+  if (report.redactions.length > 0) {
+    // Key insight for document types
+    const docTypes = Array.from(typeGroups.entries()).filter(([type]) => type === 'AADHAAR_CARD' || type === 'PAN_CARD');
+    if (docTypes.length > 0) {
+      const insightBox = create('div', 'jf-insight');
+      insightBox.innerHTML = `<strong>💡 Important</strong> Each entry below is a <em>masked area</em> on a document — not a separate document. A single Aadhaar card has ~6 sensitive zones (photo, name, number, DOB, address, QR code). Each zone gets its own privacy mask.`;
+      findingsSection.append(insightBox);
+    }
+
+    const findingsGrid = create('div', 'jf-grid');
+    let globalIndex = 0;
+    for (const [type, items] of typeGroups) {
+      const card = create('article', 'jf-card');
+      const icon = TYPE_ICONS[type] ?? '🛡️';
+      const groupName = CATEGORY_GROUP_NAME[type] ?? friendlyType(type);
+      const isDoc = type === 'AADHAAR_CARD' || type === 'PAN_CARD';
+
+      // Card header
+      const header = create('div', 'jf-card-header');
+      header.innerHTML = `<span class="jf-icon">${icon}</span><div><strong>${escapeHtml(groupName)}</strong><span class="jf-count">${items.length} zone${items.length === 1 ? '' : 's'} masked</span></div>`;
+      card.append(header);
+
+      if (isDoc) {
+        const docNote = create('p', 'jf-doc-note');
+        const docName = type === 'AADHAAR_CARD' ? 'Aadhaar card' : 'PAN card';
+        docNote.textContent = `1 ${docName} detected → ${items.length} sensitive zones masked individually.`;
+        card.append(docNote);
+      }
+
+      // Zone list
+      const zoneList = create('div', 'jf-zone-list');
+      for (const item of items) {
+        globalIndex++;
+        const zone = create('div', 'jf-zone');
+        const num = create('span', 'jf-zone-num'); num.textContent = String(globalIndex);
+        const desc = create('div', 'jf-zone-desc');
+        const category = inferFieldCategory(item);
+        const layerTag = create('span', `jf-layer-tag ${layerClass(item.layer)}`);
+        layerTag.textContent = layerInfo(item.layer).label;
+        desc.innerHTML = `<strong>${escapeHtml(category)}</strong><code>${escapeHtml(item.handle)}</code>`;
+        const conf = create('span', 'jf-zone-conf');
+        conf.textContent = `${Math.round(item.confidence)}%`;
+        zone.append(num, desc, layerTag, conf);
+        zoneList.append(zone);
+      }
+      card.append(zoneList);
+      findingsGrid.append(card);
+    }
+    findingsSection.append(findingsGrid);
+  } else {
+    const emptyMsg = create('p', 'jf-empty');
+    emptyMsg.textContent = 'No sensitive regions were detected in this snapshot.';
+    findingsSection.append(emptyMsg);
+  }
+  root.append(findingsSection);
+
+  // ── § 4  HOW IT WORKS — simple 3-step flow ──
   renderAuditStory(root);
-  renderDomAudit(root, report.domAudit);
 
-  const overview = create('section');
-  overview.innerHTML = renderProtectionOverview(report);
-  root.append(overview);
+  // ── § 5  TECHNICAL DETAILS — all behind collapsible details ──
+  const techSection = create('section', 'judge-tech');
+  const techTitle = create('h3', 'jt-title');
+  techTitle.textContent = '⚙️ Technical details';
+  const techNote = create('p', 'jt-note');
+  techNote.textContent = 'Expand the sections below for raw data. These are for developers and advanced reviewers.';
+  techSection.append(techTitle, techNote);
 
-  const safeSummary = renderSafeSummarySection(report);
-  root.append(safeSummary);
+  // 5a. DOM before/after
+  const domDetails = create('details', 'jt-details');
+  const domSummaryEl = create('summary');
+  domSummaryEl.textContent = `DOM inspection (${report.domAudit.rawCandidateRedactions} candidates → ${report.domAudit.sanitizedRedactions} handles)`;
+  domDetails.append(domSummaryEl);
+  const domContent = create('div', 'jt-dom-content');
+  renderDomAudit(domContent, report.domAudit);
+  domDetails.append(domContent);
+  techSection.append(domDetails);
 
-  const payloadDetails = create('details', 'report-payload-details');
-  const payloadSummary = create('summary');
-  payloadSummary.textContent = 'Raw technical payload (for developers)';
-  const payload = create('pre');
-  payload.textContent = JSON.stringify({
-    transmissionMode: report.transmissionMode,
-    redactionMode: report.redactionMode,
-    redactionHandles: report.redactions.map((item) => item.handle),
-    rawValues: 'omitted',
-    selectors: 'omitted',
-  }, null, 2);
-  payloadDetails.append(payloadSummary, payload);
-  root.append(payloadDetails);
-
-  const redactionSection = create('section', 'report-table-section report-inventory-section');
-  const redactionHeading = create('h3'); redactionHeading.textContent = `Redaction inventory · ${report.redactions.length} protected`;
-  const redactionCopy = create('p', 'report-section-copy'); redactionCopy.textContent = 'Plain-language labels explain what was protected. Handles are safe references; original values are never shown.';
-  renderInventorySummary(redactionSection, report.redactions);
+  // 5b. Full redaction inventory table
+  const invDetails = create('details', 'jt-details');
+  const invSummaryEl = create('summary');
+  invSummaryEl.textContent = `Full redaction inventory (${report.redactions.length} items)`;
+  invDetails.append(invSummaryEl);
+  const invContent = create('div');
+  renderInventorySummary(invContent, report.redactions);
   const table = create('table', 'report-table');
   const thead = create('thead'); const headRow = create('tr');
-  for (const label of ['What was protected', 'Safe handle', 'Detected locally by', 'Confidence', 'Screen area']) { const th = create('th'); th.textContent = label; headRow.append(th); }
+  for (const label of ['What was protected', 'Safe handle', 'Detected by', 'Confidence', 'Screen area']) { const th = create('th'); th.textContent = label; headRow.append(th); }
   thead.append(headRow); table.append(thead);
   const tbody = create('tbody');
   for (const item of report.redactions) {
@@ -370,45 +476,76 @@ export function renderRedactionReport(root: HTMLElement, report: RedactionReport
     row.append(what, handle, detected, confidenceCell, bounds);
     tbody.append(row);
   }
-  if (report.redactions.length === 0) { const row = create('tr'); const cell = create('td'); cell.colSpan = 5; cell.textContent = 'No sensitive regions were detected in this snapshot.'; row.append(cell); tbody.append(row); }
-  table.append(tbody); redactionSection.append(redactionHeading, redactionCopy, table); root.append(redactionSection);
+  if (report.redactions.length === 0) { const row = create('tr'); const cell = create('td'); cell.colSpan = 5; cell.textContent = 'No sensitive regions detected.'; row.append(cell); tbody.append(row); }
+  table.append(tbody);
+  invContent.append(table);
+  invDetails.append(invContent);
+  techSection.append(invDetails);
 
-  const policy = create('section', 'report-table-section');
-  const policyHeading = create('h3'); policyHeading.textContent = `Blocked by policy (${report.policyBlocks.length})`;
-  policy.append(policyHeading);
-  if (report.policyBlocks.length === 0) { const empty = create('p', 'report-empty'); empty.textContent = 'No policy blocks recorded.'; policy.append(empty); }
-  for (const block of report.policyBlocks) { const card = create('article', 'report-policy-block'); const code = create('strong'); code.textContent = block.code; const copy = create('p'); copy.textContent = block.message; card.append(code, copy); policy.append(card); }
-  root.append(policy);
-
-  const imageSection = create('section', 'report-table-section');
-  const imageHeading = create('h3'); imageHeading.textContent = 'Sanitized screenshot · numbered mask map';
-  if (sanitizedImage) {
-    const imageCopy = create('p', 'report-section-copy');
-    imageCopy.textContent = 'Each numbered circle marks one masked region on the screenshot. Numbers match the inventory table above.';
-    renderAnnotatedScreenshot(imageSection, sanitizedImage, report.redactions);
-    imageSection.prepend(imageHeading, imageCopy);
-  } else {
-    const empty = create('p', 'report-empty'); empty.textContent = 'No sanitized screenshot was retained for this run.'; imageSection.append(imageHeading, empty);
+  // 5c. Policy blocks
+  if (report.policyBlocks.length > 0) {
+    const policyDetails = create('details', 'jt-details');
+    const policySummaryEl = create('summary');
+    policySummaryEl.textContent = `Policy blocks (${report.policyBlocks.length})`;
+    policyDetails.append(policySummaryEl);
+    for (const block of report.policyBlocks) { const pCard = create('article', 'report-policy-block'); const code = create('strong'); code.textContent = block.code; const copy = create('p'); copy.textContent = block.message; pCard.append(code, copy); policyDetails.append(pCard); }
+    techSection.append(policyDetails);
   }
-  root.append(imageSection);
 
-  const latency = create('section', 'report-table-section');
-  const latencyHeading = create('h3'); latencyHeading.textContent = 'Latency breakdown';
-  const latencyCopy = create('p', 'report-latency-note');
-  latencyCopy.textContent = 'Measured locally for this run. “—” means that stage did not execute.';
+  // 5d. Raw payload
+  const payloadDetails = create('details', 'jt-details');
+  const payloadSummary = create('summary');
+  payloadSummary.textContent = 'Raw technical payload';
+  const payload = create('pre', 'jt-pre');
+  payload.textContent = JSON.stringify({
+    transmissionMode: report.transmissionMode,
+    redactionMode: report.redactionMode,
+    redactionHandles: report.redactions.map((item) => item.handle),
+    rawValues: 'omitted',
+    selectors: 'omitted',
+  }, null, 2);
+  payloadDetails.append(payloadSummary, payload);
+  techSection.append(payloadDetails);
+
+  // 5e. Latency
+  const latencyDetails = create('details', 'jt-details');
+  const latencySummaryEl = create('summary');
+  latencySummaryEl.textContent = `Latency breakdown (${formatLatency(report.latency.totalMs)} total)`;
+  latencyDetails.append(latencySummaryEl);
   const latencyList = create('dl', 'report-latency-list');
   for (const [label, value] of [['Screenshot capture', report.latency.screenshotMs], ['DOM inspection', report.latency.domInspectionMs], ['Local sanitization', report.latency.sanitizationMs], ['Network round trip', report.latency.networkMs], ['Action execution', report.latency.actionMs], ['Total', report.latency.totalMs]] as const) {
     const item = create('div'); const term = create('dt'); term.textContent = label; const detail = create('dd'); detail.textContent = formatLatency(value); item.append(term, detail); latencyList.append(item);
   }
-  latency.append(latencyHeading, latencyCopy, latencyList); root.append(latency);
+  latencyDetails.append(latencyList);
+  techSection.append(latencyDetails);
+
+  root.append(techSection);
+
+  // ── § 6 Protection overview (still used by downloadable HTML report + tests) ──
+  const overviewHidden = create('section');
+  overviewHidden.style.display = 'none';
+  overviewHidden.innerHTML = renderProtectionOverview(report);
+  root.append(overviewHidden);
 }
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/gu, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character] ?? character));
 }
 
-/** Infer a likely field category from the pixel dimensions of a masked region. */
+/** Infer a likely field category from the type, detection layer, and dimensions. */
 function inferFieldCategory(item: RedactionAuditItem): string {
+  if (item.type === 'PASSWORD') return 'Password input field';
+  if (item.type === 'UNINSPECTABLE_MEDIA') return 'Uninspectable image / media (safety mask)';
+  if (item.type === 'FACE') return 'Facial biometric region';
+  if (item.type === 'PII_TEXT') {
+    if (item.layer === 'regex') return 'Sensitive text pattern (regex match)';
+    if (item.layer === 'dom') return 'Sensitive text (page element)';
+    if (item.layer === 'ocr') return 'Extracted document text (local OCR)';
+    return 'Personal information text';
+  }
+  if (item.type === 'SENSITIVE_FIELD') {
+    return 'Sensitive form field (DOM attribute / label)';
+  }
   if (!item.hasOnScreenBox) return 'Structured data (text only)';
   const { width, height } = item.bounds;
   const aspect = width / Math.max(1, height);
@@ -418,7 +555,7 @@ function inferFieldCategory(item: RedactionAuditItem): string {
   if (aspect > 3 && height < 45) return 'Single-line text field';
   if (aspect > 2) return 'Wide text region';
   if (area > 60000) return 'Full document zone';
-  return 'Sensitive region';
+  return friendlyType(item.type);
 }
 
 /** Draw numbered circle markers onto the sanitized screenshot via canvas. */
@@ -610,9 +747,32 @@ export function downloadRedactionReport(report: RedactionReport, sanitizedImage:
   const image = sanitizedImage ? `<img class="sent-image" src="${escapeHtml(sanitizedImage)}" alt="Sanitized screenshot" />` : '<p>No sanitized screenshot was retained for this run.</p>';
   const payloadJson = JSON.stringify({ transmissionMode: report.transmissionMode, redactionMode: report.redactionMode, redactionHandles: report.redactions.map((item) => item.handle), rawValues: 'omitted', selectors: 'omitted' }, null, 2);
   const audit = report.domAudit;
+  const layerGroups = new Map<string, number>();
+  report.redactions.forEach((item) => layerGroups.set(item.layer, (layerGroups.get(item.layer) ?? 0) + 1));
+  const typeSummaryHtml = (() => {
+    const tg = new Map<string, number>();
+    report.redactions.forEach((item) => tg.set(item.type, (tg.get(item.type) ?? 0) + 1));
+    return Array.from(tg, ([type, count]) => {
+      const icon = TYPE_ICONS[type] ?? '🛡️';
+      const name = CATEGORY_GROUP_NAME[type] ?? friendlyType(type);
+      return `${icon} ${count}× ${escapeHtml(name)}`;
+    }).join('<br>') || 'Nothing detected';
+  })();
+  const layerSummaryHtml = (() => {
+    const lg = new Map<string, number>();
+    report.redactions.forEach((item) => lg.set(item.layer, (lg.get(item.layer) ?? 0) + 1));
+    return Array.from(lg, ([layer, count]) => {
+      const info = layerInfo(layer as RedactionAuditItem['layer']);
+      return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;color:#fff;background:${layer === 'dom' ? '#245c91' : layer === 'regex' ? '#785619' : layer === 'vision' || layer === 'ocr' ? '#63368b' : '#8a2f45'}">${escapeHtml(info.label)}</span> found ${count}`;
+    }).join('<br>') || 'No detections';
+  })();
+  const isSentReport = report.networkRequests > 0;
+  const actionVerbHtml = isSentReport ? 'Redacted before transmission' : 'Would be redacted before any transmission';
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SIH redaction report ${escapeHtml(report.reportId)}</title><style>
   :root{color-scheme:dark;--bg:#07111d;--panel:#0e2030;--line:#29465d;--muted:#9eb4c7;--text:#edf7ff;--accent:#67e8d4;--warn:#ffca73}*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#06101c,#12263a);color:var(--text);font:15px/1.5 Inter,Segoe UI,system-ui,sans-serif}main{max-width:1120px;margin:0 auto;padding:42px 24px 72px}.eyebrow{color:var(--accent);font-size:12px;letter-spacing:.16em;font-weight:700}h1{margin:4px 0;font-size:36px}h2{margin:0 0 8px}h3{margin:0 0 12px;color:var(--accent)}p{color:var(--muted)}section,.hero{background:rgba(14,32,48,.9);border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:18px;box-shadow:0 16px 40px #0003}.hero{border-top:3px solid var(--accent)}.stamp{color:var(--muted)}.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:16px}.metric b{display:block;font-size:24px;color:var(--accent)}.metric span{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.audit{display:grid;grid-template-columns:1fr 1fr;gap:14px}.audit article{border:1px solid var(--line);border-radius:12px;padding:16px}.audit article:last-child{border-color:#2f887f}.audit h4{margin:0 0 12px}.row{display:flex;justify-content:space-between;border-top:1px solid #244054;padding:7px 0;color:var(--muted)}.row b{color:var(--text)}.note{border-left:4px solid var(--warn);padding:12px 16px;background:#3b2d1833;color:#ffe1a9;border-radius:8px}.sent-image{display:block;max-width:100%;max-height:760px;object-fit:contain;border:1px solid var(--line);border-radius:12px;background:#fff}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:640px}th,td{text-align:left;padding:10px;border-bottom:1px solid #244054}th{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:.08em}td{color:#d6e7f2}ul{padding:0;list-style:none}li{display:flex;gap:14px;padding:12px;border-left:3px solid #ff6b82;background:#2e172033;margin:8px 0}li span{color:var(--muted)}.latency-note{margin:-4px 0 8px;color:#b9d7e8;font-size:13px}footer{color:var(--muted);margin-top:18px;font-size:13px}@media(max-width:720px){.metrics,.audit{grid-template-columns:1fr 1fr}.metrics .metric:last-child{grid-column:span 2}}@media(max-width:480px){.metrics,.audit{grid-template-columns:1fr}.metrics .metric:last-child{grid-column:auto}}
-  .story{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.story article{border:1px solid var(--line);border-radius:12px;padding:14px}.story strong{display:block}.story p{margin:5px 0 0}.latency-note{margin:-4px 0 8px;color:#b9d7e8;font-size:13px}.table-wrap table td small,.table-wrap table td strong,.table-wrap table td code{display:block}.table-wrap table td small{color:var(--muted);font-size:11px;margin-top:2px}.table-wrap table td code{color:#b6f6ed;font:13px ui-monospace,Consolas,monospace}.layer-badge{display:inline-block;border:1px solid #4c798f;border-radius:999px;padding:2px 8px;color:#dffcff;background:#1b4355;font-size:12px;font-weight:700}.report-layer-dom{border-color:#60a5fa;background:#153d66}.report-layer-regex{border-color:#fbbf24;background:#594114}.report-layer-vision,.report-layer-ocr{border-color:#c084fc;background:#45285f}.report-layer-fallback{border-color:#fb7185;background:#5c2430}.confidence{display:inline-block;width:70px;height:7px;margin-right:7px;border-radius:99px;vertical-align:middle;background:#29465d;overflow:hidden}.confidence i{display:block;height:100%;border-radius:inherit;background:var(--accent)}@media(max-width:720px){.story{grid-template-columns:1fr 1fr}}@media(max-width:480px){.story{grid-template-columns:1fr}}</style></head><body><main><header class="hero"><div class="eyebrow">SIH26171 · LOCAL ONLY</div><h1>Privacy redaction report</h1><div class="stamp">${escapeHtml(report.generatedAt)} · ${escapeHtml(report.status)} · Grade ${report.privacyGrade} · detector ${escapeHtml(report.detectorBackend)}</div></header><section class="metrics"><div class="metric"><span>Redacted</span><b>${report.redactionCount}</b></div><div class="metric"><span>Actions blocked</span><b>${report.actionsBlocked}</b></div><div class="metric"><span>Actions executed</span><b>${report.actionsExecuted}</b></div><div class="metric"><span>Network requests</span><b>${report.networkRequests}</b></div><div class="metric"><span>Total latency</span><b>${formatLatency(report.latency.totalMs)}</b></div></section><section><h2>How the privacy boundary works</h2><p>Everything is inspected and sanitized locally before any reasoning request is allowed.</p><div class="story"><article><strong>1 · Detect locally</strong><p>DOM labels, text patterns, and local vision checks find sensitive regions.</p></article><article><strong>2 · Redact locally</strong><p>Values become safe handles and sensitive pixels are masked before egress.</p></article><article><strong>3 · Send safe context</strong><p>Only sanitized structure, handles, and pixels can reach the reasoning endpoint.</p></article></div></section><section><h2>DOM before → after</h2><p>Values, selectors, cookies, URLs, and raw DOM references are deliberately absent.</p><div class="audit"><article><h4>Before sanitization</h4><div class="row"><span>Interactive nodes</span><b>${audit.rawInteractiveCount}</b></div><div class="row"><span>Candidate sensitive regions</span><b>${audit.rawCandidateRedactions}</b></div><div class="row"><span>Sensitive fields</span><b>${audit.rawSensitiveFields}</b></div></article><article><h4>After sanitization</h4><div class="row"><span>Safe nodes retained</span><b>${audit.sanitizedInteractiveCount}</b></div><div class="row"><span>Redaction handles</span><b>${audit.sanitizedRedactions}</b></div><div class="row"><span>Raw values retained</span><b>0</b></div></article></div></section><section class="note">Only handles and sanitized pixels are eligible for egress. Original values are held only in the page and local memory while the run executes.</section><section>${renderProtectionOverview(report)}<details><summary>Raw technical payload (for developers)</summary><pre>${escapeHtml(payloadJson)}</pre></details></section><section><h2>Redaction inventory · ${report.redactions.length} protected</h2><p>${escapeHtml(inventoryBreakdown)} · handles are safe references; original values are never shown.</p><div class="table-wrap"><table><thead><tr><th>What was protected</th><th>Safe handle</th><th>Detected locally by</th><th>Confidence</th><th>Screen area</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No sensitive regions detected.</td></tr>'}</tbody></table></div></section><section><h2>Blocked by policy (${report.policyBlocks.length})</h2><ul>${blocks}</ul></section><section><h2>Sanitized screenshot · local evidence</h2>${image}</section><section><h2>Latency breakdown</h2><p class="latency-note">Measured locally for this run. “—” means that stage did not execute.</p><div class="row"><span>Screenshot capture</span><b>${formatLatency(report.latency.screenshotMs)}</b></div><div class="row"><span>DOM inspection</span><b>${formatLatency(report.latency.domInspectionMs)}</b></div><div class="row"><span>Local sanitization</span><b>${formatLatency(report.latency.sanitizationMs)}</b></div><div class="row"><span>Network round trip</span><b>${formatLatency(report.latency.networkMs)}</b></div><div class="row"><span>Action execution</span><b>${formatLatency(report.latency.actionMs)}</b></div><div class="row"><span>Total</span><b>${formatLatency(report.latency.totalMs)}</b></div></section><footer>Report ID ${escapeHtml(report.reportId)} · image SHA-256 ${escapeHtml(report.imageSha256)} · redaction mode ${escapeHtml(report.redactionMode)} · ${escapeHtml(report.transmissionMode)}</footer></main></body></html>`;
+  .story{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.story article{border:1px solid var(--line);border-radius:12px;padding:14px}.story strong{display:block}.story p{margin:5px 0 0}.latency-note{margin:-4px 0 8px;color:#b9d7e8;font-size:13px}.table-wrap table td small,.table-wrap table td strong,.table-wrap table td code{display:block}.table-wrap table td small{color:var(--muted);font-size:11px;margin-top:2px}.table-wrap table td code{color:#b6f6ed;font:13px ui-monospace,Consolas,monospace}.layer-badge{display:inline-block;border:1px solid #4c798f;border-radius:999px;padding:2px 8px;color:#dffcff;background:#1b4355;font-size:12px;font-weight:700}.report-layer-dom{border-color:#60a5fa;background:#153d66}.report-layer-regex{border-color:#fbbf24;background:#594114}.report-layer-vision,.report-layer-ocr{border-color:#c084fc;background:#45285f}.report-layer-fallback{border-color:#fb7185;background:#5c2430}.confidence{display:inline-block;width:70px;height:7px;margin-right:7px;border-radius:99px;vertical-align:middle;background:#29465d;overflow:hidden}.confidence i{display:block;height:100%;border-radius:inherit;background:var(--accent)}@media(max-width:720px){.story{grid-template-columns:1fr 1fr}}@media(max-width:480px){.story{grid-template-columns:1fr}}
+  .verdict-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}.verdict-card{border:1px solid var(--line);border-radius:14px;padding:18px;background:rgba(14,32,48,.7)}.verdict-card h3{margin:0 0 6px;font-size:14px;color:var(--muted)}.verdict-big{margin:0;font-size:22px;font-weight:900;color:var(--accent);line-height:1.2}.verdict-detail{margin:8px 0 0;font-size:13px;line-height:1.5}.verdict-icon{font-size:28px;margin-bottom:6px}.verdict-status{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;margin-bottom:10px}.verdict-preview{background:#29465d;color:#9eb4c7;border:1px solid #3d6070}.verdict-sent{background:#1a4a42;color:#67e8d4;border:1px solid #2f887f}@media(max-width:720px){.verdict-cards{grid-template-columns:1fr}}
+  </style></head><body><main><header class="hero"><div class="eyebrow">SIH26171 · LOCAL ONLY</div><h1>Privacy redaction report</h1><div class="stamp">${escapeHtml(report.generatedAt)} · ${escapeHtml(report.status)} · Grade ${report.privacyGrade} · detector ${escapeHtml(report.detectorBackend)}</div><div class="verdict-status ${isSentReport ? 'verdict-sent' : 'verdict-preview'}">${isSentReport ? `⬆️ DATA TRANSMITTED — ${report.networkRequests} request(s) sent` : '👁️ LOCAL PREVIEW — nothing left this device'}</div><div class="verdict-cards"><article class="verdict-card"><div class="verdict-icon">🔍</div><h3>What was detected?</h3><p class="verdict-big">${report.redactions.length} sensitive region${report.redactions.length === 1 ? '' : 's'}</p><p class="verdict-detail">${typeSummaryHtml}</p></article><article class="verdict-card"><div class="verdict-icon">📍</div><h3>How were they found?</h3><p class="verdict-big">${layerGroups.size} detection layer${layerGroups.size === 1 ? '' : 's'}</p><p class="verdict-detail">${layerSummaryHtml}</p></article><article class="verdict-card"><div class="verdict-icon">🛡️</div><h3>What happened to it?</h3><p class="verdict-big">${escapeHtml(actionVerbHtml)}</p><p class="verdict-detail">All ${report.redactions.length} region${report.redactions.length === 1 ? '' : 's'}: original values replaced with safe handles, pixels masked.<br>Raw values: <strong>0 transmitted</strong></p></article></div></header><section class="metrics"><div class="metric"><span>Redacted</span><b>${report.redactionCount}</b></div><div class="metric"><span>Actions blocked</span><b>${report.actionsBlocked}</b></div><div class="metric"><span>Actions executed</span><b>${report.actionsExecuted}</b></div><div class="metric"><span>Network requests</span><b>${report.networkRequests}</b></div><div class="metric"><span>Total latency</span><b>${formatLatency(report.latency.totalMs)}</b></div></section><section><h2>Sanitized screenshot · local evidence</h2>${image}</section><section><h2>How the privacy boundary works</h2><p>Everything is inspected and sanitized locally before any reasoning request is allowed.</p><div class="story"><article><strong>1 · Detect locally</strong><p>DOM labels, text patterns, and local vision checks find sensitive regions.</p></article><article><strong>2 · Redact locally</strong><p>Values become safe handles and sensitive pixels are masked before egress.</p></article><article><strong>3 · Send safe context</strong><p>Only sanitized structure, handles, and pixels can reach the reasoning endpoint.</p></article></div></section><section><h2>DOM before → after</h2><p>Values, selectors, cookies, URLs, and raw DOM references are deliberately absent.</p><div class="audit"><article><h4>Before sanitization</h4><div class="row"><span>Interactive nodes</span><b>${audit.rawInteractiveCount}</b></div><div class="row"><span>Candidate sensitive regions</span><b>${audit.rawCandidateRedactions}</b></div><div class="row"><span>Sensitive fields</span><b>${audit.rawSensitiveFields}</b></div></article><article><h4>After sanitization</h4><div class="row"><span>Safe nodes retained</span><b>${audit.sanitizedInteractiveCount}</b></div><div class="row"><span>Redaction handles</span><b>${audit.sanitizedRedactions}</b></div><div class="row"><span>Raw values retained</span><b>0</b></div></article></div></section><section class="note">Only handles and sanitized pixels are eligible for egress. Original values are held only in the page and local memory while the run executes.</section><section>${renderProtectionOverview(report)}<details><summary>Raw technical payload (for developers)</summary><pre>${escapeHtml(payloadJson)}</pre></details></section><section><h2>Redaction inventory · ${report.redactions.length} protected</h2><p>${escapeHtml(inventoryBreakdown)} · handles are safe references; original values are never shown.</p><div class="table-wrap"><table><thead><tr><th>What was protected</th><th>Safe handle</th><th>Detected locally by</th><th>Confidence</th><th>Screen area</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No sensitive regions detected.</td></tr>'}</tbody></table></div></section><section><h2>Blocked by policy (${report.policyBlocks.length})</h2><ul>${blocks}</ul></section><section><h2>Latency breakdown</h2><p class="latency-note">Measured locally for this run. "—" means that stage did not execute.</p><div class="row"><span>Screenshot capture</span><b>${formatLatency(report.latency.screenshotMs)}</b></div><div class="row"><span>DOM inspection</span><b>${formatLatency(report.latency.domInspectionMs)}</b></div><div class="row"><span>Local sanitization</span><b>${formatLatency(report.latency.sanitizationMs)}</b></div><div class="row"><span>Network round trip</span><b>${formatLatency(report.latency.networkMs)}</b></div><div class="row"><span>Action execution</span><b>${formatLatency(report.latency.actionMs)}</b></div><div class="row"><span>Total</span><b>${formatLatency(report.latency.totalMs)}</b></div></section><footer>Report ID ${escapeHtml(report.reportId)} · image SHA-256 ${escapeHtml(report.imageSha256)} · redaction mode ${escapeHtml(report.redactionMode)} · ${escapeHtml(report.transmissionMode)}</footer></main></body></html>`;
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');

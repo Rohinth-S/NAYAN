@@ -77,6 +77,38 @@
     }
     .toggle-btn:hover { background: #24586f; }
 
+    /* Verdict Cards */
+    .verdict-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .verdict-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    .verdict-icon { font-size: 26px; margin-bottom: 6px; }
+    .verdict-card h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .verdict-big { margin: 0; font-size: 20px; font-weight: 800; color: var(--accent); line-height: 1.2; }
+    .verdict-detail { margin: 8px 0 0; font-size: 12px; color: #b8d2e3; line-height: 1.5; }
+    .verdict-detail strong { color: var(--accent); }
+    .layer-badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .report-layer-dom { background: #245c91; }
+    .report-layer-regex { background: #785619; }
+    .report-layer-ocr { background: #63368b; }
+    .report-layer-vision { background: #63368b; }
+
     /* Metrics Bar */
     .metrics {
       display: grid;
@@ -309,6 +341,28 @@
         <p id="bannerText">Nothing was sent to any server. All OCR detection and pixel redaction executed strictly in-browser.</p>
       </div>
       <button class="toggle-btn" onclick="toggleStatus()">Switch Preview / Sent State</button>
+    </div>
+
+    <!-- Judge Verdict: What was detected, where, and what happened to it? -->
+    <div class="verdict-cards">
+      <article class="verdict-card">
+        <div class="verdict-icon">🔍</div>
+        <h3>What was detected?</h3>
+        <p class="verdict-big">9 sensitive regions</p>
+        <p class="verdict-detail">🪪 6× Aadhaar Card (1 document)<br>💳 3× PAN Card (1 document)<br>👤 2× Biometric Portrait</p>
+      </article>
+      <article class="verdict-card">
+        <div class="verdict-icon">📍</div>
+        <h3>How were they found?</h3>
+        <p class="verdict-big">3 detection layers</p>
+        <p class="verdict-detail"><span class="layer-badge report-layer-dom">DOM layer</span> 2 form fields<br><span class="layer-badge report-layer-ocr">Local OCR</span> 5 text zones<br><span class="layer-badge report-layer-vision">WASM Face</span> 2 biometric</p>
+      </article>
+      <article class="verdict-card">
+        <div class="verdict-icon">🛡️</div>
+        <h3>What happened to it?</h3>
+        <p class="verdict-big" id="actionVerb">Would be redacted before transmission</p>
+        <p class="verdict-detail">All 9 regions: original values replaced with safe handles, pixels masked with opaque overlay.<br>Raw values: <strong>0 transmitted</strong></p>
+      </article>
     </div>
 
     <div class="metrics">
@@ -577,6 +631,7 @@
       const banner = document.getElementById('statusBanner');
       const title = document.getElementById('bannerTitle');
       const text = document.getElementById('bannerText');
+      const actionVerb = document.getElementById('actionVerb');
 
       if (isSent) {
         banner.className = 'status-banner sent';
@@ -585,6 +640,7 @@
         banner.style.color = '#86efac';
         title.textContent = '⬆️ DATA TRANSMITTED';
         text.textContent = '1 reasoning request was sent to the server. The sanitized DOM skeleton and blacked screenshot were safely transmitted.';
+        if (actionVerb) actionVerb.textContent = 'Redacted before transmission';
       } else {
         banner.className = 'status-banner preview';
         banner.style.border = '1.5px solid #38bdb0';
@@ -592,6 +648,7 @@
         banner.style.color = '#92ece0';
         title.textContent = '👁️ LOCAL PREVIEW ONLY';
         text.textContent = 'Nothing was sent to any server. All OCR detection and pixel redaction executed strictly in-browser.';
+        if (actionVerb) actionVerb.textContent = 'Would be redacted before transmission';
       }
     }
   </script>

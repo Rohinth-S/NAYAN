@@ -243,4 +243,164 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
   .report-metrics .report-metric:last-child { grid-column: span 3; }
   .run-report-header { display: block; }
   .run-report-download { margin-top: 10px; }
+  .jv-answers { grid-template-columns: 1fr; }
+  .jv-card-big { font-size: 14px; }
+  .jf-zone { grid-template-columns: 22px 1fr auto; }
+  .jf-zone-conf { display: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   JUDGE VERDICT — the hero section answering What / Where / What happened
+   ═══════════════════════════════════════════════════════════════ */
+.judge-verdict {
+  border: 1.5px solid #1c6b7a; border-radius: 14px; padding: 18px;
+  background: linear-gradient(145deg, #effaff, #eaf6f0);
+  box-shadow: 0 4px 20px rgba(20, 80, 100, .08);
+  margin-top: 14px;
+}
+
+/* Status pill */
+.jv-status {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 700;
+}
+.jv-status-preview { background: #e0f0f8; color: #0e4e5e; border: 1px solid #7dbfcc; }
+.jv-status-sent { background: #d4f0ec; color: #0c5d52; border: 1px solid #38bdb0; }
+.jv-status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+}
+.jv-dot-preview { background: #4a9aad; }
+.jv-dot-sent { background: #38bdb0; animation: jv-pulse 1.5s ease-in-out infinite; }
+@keyframes jv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+.jv-title { margin: 10px 0 2px; color: #0b3147; font-size: 18px; font-weight: 900; }
+.jv-stamp { margin: 0 0 12px; color: #4f6871; font-size: 11px; }
+
+/* Three answer cards */
+.jv-answers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 10px; }
+.jv-card {
+  border: 1px solid #b5d8e0; border-radius: 12px; padding: 14px;
+  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.03);
+}
+.jv-card-icon { font-size: 24px; margin-bottom: 6px; }
+.jv-card h3 { margin: 0 0 6px; color: #0b3147; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.jv-card-big {
+  margin: 0; color: #0c5d52; font-size: 17px; font-weight: 900;
+  line-height: 1.2;
+}
+.jv-card-detail { margin: 8px 0 0; color: #3a6070; font-size: 11px; line-height: 1.5; }
+.jv-card-detail strong { color: #0c5d52; }
+.jv-layer-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 800; color: #fff;
+}
+.jv-layer-pill.report-layer-dom { background: #245c91; }
+.jv-layer-pill.report-layer-regex { background: #785619; }
+.jv-layer-pill.report-layer-vision, .jv-layer-pill.report-layer-ocr { background: #63368b; }
+.jv-layer-pill.report-layer-fallback { background: #8a2f45; }
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL PROOF — screenshot section right after verdict
+   ═══════════════════════════════════════════════════════════════ */
+.judge-proof {
+  margin-top: 16px; border: 1px solid #c2dfe4; border-radius: 14px;
+  padding: 16px; background: #fff;
+}
+.jp-title { margin: 0 0 4px; color: #0b3147; font-size: 15px; font-weight: 800; }
+.jp-note { margin: 0 0 10px; color: #4f6871; font-size: 12px; line-height: 1.45; }
+.report-annotated-wrapper { margin-top: 10px; }
+.report-annotated-canvas {
+  display: block; width: 100%; max-height: 600px; object-fit: contain;
+  border: 1px solid #c2dfe4; border-radius: 10px; background: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FINDINGS — grouped cards with zone lists
+   ═══════════════════════════════════════════════════════════════ */
+.judge-findings {
+  margin-top: 16px; border: 1px solid #c2dfe4; border-radius: 14px;
+  padding: 16px; background: linear-gradient(145deg, #f9fdff, #fff);
+}
+.jf-title { margin: 0 0 10px; color: #0b3147; font-size: 15px; font-weight: 800; }
+.jf-insight {
+  margin: 0 0 12px; padding: 10px 14px; border-left: 4px solid #e6a817;
+  border-radius: 8px; background: #fdf8ec; color: #5e4b13; font-size: 12px; line-height: 1.5;
+}
+.jf-insight strong { display: block; margin-bottom: 4px; color: #4a3a0b; font-size: 13px; }
+.jf-insight em { font-weight: 700; }
+
+.jf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.jf-card {
+  border: 1px solid #c2dfe4; border-radius: 12px; padding: 14px;
+  background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.03);
+}
+.jf-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.jf-icon { font-size: 24px; flex: 0 0 auto; }
+.jf-card-header strong { display: block; color: #0b3147; font-size: 13px; }
+.jf-count {
+  display: inline-block; margin-top: 2px; padding: 2px 10px;
+  border: 1px solid #38bdb0; border-radius: 20px;
+  color: #0e6b61; background: #e0f7f4; font-size: 10px; font-weight: 700;
+}
+.jf-doc-note {
+  margin: 0 0 8px; padding: 6px 10px; border-radius: 6px;
+  background: #fef4e0; color: #5e4b13; font-size: 11px; font-weight: 600;
+}
+
+/* Zone list */
+.jf-zone-list { display: grid; gap: 6px; }
+.jf-zone {
+  display: grid; grid-template-columns: 24px 1fr auto auto; align-items: center;
+  gap: 8px; padding: 7px 10px; border: 1px solid #d6ecf0; border-radius: 8px;
+  background: #f4fbfc;
+}
+.jf-zone-num {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #ff4466; color: #fff; font-size: 11px; font-weight: 900;
+}
+.jf-zone-desc strong { display: block; color: #1c4a5a; font-size: 11px; font-weight: 700; }
+.jf-zone-desc code {
+  display: block; margin-top: 2px;
+  color: #15566a; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.jf-layer-tag {
+  display: inline-block; padding: 3px 8px; border-radius: 12px;
+  font-size: 9px; font-weight: 800; color: #fff; white-space: nowrap;
+}
+.jf-layer-tag.report-layer-dom { background: #245c91; }
+.jf-layer-tag.report-layer-regex { background: #785619; }
+.jf-layer-tag.report-layer-vision, .jf-layer-tag.report-layer-ocr { background: #63368b; }
+.jf-layer-tag.report-layer-fallback { background: #8a2f45; }
+.jf-zone-conf {
+  padding: 3px 8px; border-radius: 6px; background: #d4f0ec;
+  color: #0e5e53; font-size: 10px; font-weight: 800; white-space: nowrap;
+}
+.jf-empty { color: #4f6871; font-size: 12px; font-style: italic; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TECHNICAL DETAILS — collapsible details sections
+   ═══════════════════════════════════════════════════════════════ */
+.judge-tech {
+  margin-top: 16px; border: 1px solid #c2dfe4; border-radius: 14px;
+  padding: 16px; background: #f8fcff;
+}
+.jt-title { margin: 0 0 4px; color: #0b3147; font-size: 13px; font-weight: 800; }
+.jt-note { margin: 0 0 10px; color: #6a8e98; font-size: 11px; }
+.jt-details {
+  border: 1px solid #d6ecf0; border-radius: 10px; margin-top: 8px;
+  background: #fff; overflow: hidden;
+}
+.jt-details summary {
+  padding: 9px 14px; color: #0b3147; font-size: 12px; font-weight: 700;
+  cursor: pointer; user-select: none;
+}
+.jt-details summary:hover { background: #edf7fb; }
+.jt-details[open] summary { border-bottom: 1px solid #d6ecf0; background: #f0f8fb; }
+.jt-details > div, .jt-details > dl, .jt-details > pre { padding: 10px 14px; }
+.jt-pre {
+  max-height: 240px; overflow: auto; margin: 0; border: 0; padding: 10px 14px;
+  color: #173b46; background: #f4fbfc;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap;
+}
+

@@ -497,6 +497,155 @@ body.sidepanel .preview-modal.is-fallback-fullscreen .preview-modal-stage {
   border: 1px solid #c2dfe4; border-radius: 8px; background: #fff;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   JUDGE VERDICT — the hero section answering What / Where / What happened
+   ═══════════════════════════════════════════════════════════════ */
+.judge-verdict {
+  border: 1.5px solid #1c6b7a; border-radius: 14px; padding: 14px;
+  background: linear-gradient(145deg, #effaff, #eaf6f0);
+  box-shadow: 0 4px 20px rgba(20, 80, 100, .08);
+}
+
+/* Status pill */
+.jv-status {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 20px; font-size: 10px; font-weight: 700;
+}
+.jv-status-preview { background: #e0f0f8; color: #0e4e5e; border: 1px solid #7dbfcc; }
+.jv-status-sent { background: #d4f0ec; color: #0c5d52; border: 1px solid #38bdb0; }
+.jv-status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+}
+.jv-dot-preview { background: #4a9aad; }
+.jv-dot-sent { background: #38bdb0; animation: jv-pulse 1.5s ease-in-out infinite; }
+@keyframes jv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+.jv-title { margin: 10px 0 2px; color: #0b3147; font-size: 16px; font-weight: 900; }
+.jv-stamp { margin: 0 0 10px; color: #4f6871; font-size: 9px; }
+
+/* Three answer cards */
+.jv-answers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.jv-card {
+  border: 1px solid #b5d8e0; border-radius: 10px; padding: 10px;
+  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.03);
+}
+.jv-card-icon { font-size: 20px; margin-bottom: 4px; }
+.jv-card h3 { margin: 0 0 4px; color: #0b3147; font-size: 10px; font-weight: 800; }
+.jv-card-big {
+  margin: 0; color: #0c5d52; font-size: 14px; font-weight: 900;
+  line-height: 1.2;
+}
+.jv-card-detail { margin: 6px 0 0; color: #3a6070; font-size: 9px; line-height: 1.45; }
+.jv-card-detail strong { color: #0c5d52; }
+.jv-layer-pill {
+  display: inline-block; padding: 1px 6px; border-radius: 10px;
+  font-size: 8px; font-weight: 800; color: #fff;
+}
+.jv-layer-pill.report-layer-dom { background: #245c91; }
+.jv-layer-pill.report-layer-regex { background: #785619; }
+.jv-layer-pill.report-layer-vision, .jv-layer-pill.report-layer-ocr { background: #63368b; }
+.jv-layer-pill.report-layer-fallback { background: #8a2f45; }
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL PROOF — screenshot section right after verdict
+   ═══════════════════════════════════════════════════════════════ */
+.judge-proof {
+  margin-top: 12px; border: 1px solid #c2dfe4; border-radius: 12px;
+  padding: 12px; background: #fff;
+}
+.jp-title { margin: 0 0 4px; color: #0b3147; font-size: 12px; font-weight: 800; }
+.jp-note { margin: 0 0 8px; color: #4f6871; font-size: 9px; line-height: 1.4; }
+
+/* ═══════════════════════════════════════════════════════════════
+   FINDINGS — grouped cards with zone lists
+   ═══════════════════════════════════════════════════════════════ */
+.judge-findings {
+  margin-top: 12px; border: 1px solid #c2dfe4; border-radius: 12px;
+  padding: 12px; background: linear-gradient(145deg, #f9fdff, #fff);
+}
+.jf-title { margin: 0 0 8px; color: #0b3147; font-size: 12px; font-weight: 800; }
+.jf-insight {
+  margin: 0 0 10px; padding: 8px 10px; border-left: 3px solid #e6a817;
+  border-radius: 6px; background: #fdf8ec; color: #5e4b13; font-size: 9px; line-height: 1.45;
+}
+.jf-insight strong { display: block; margin-bottom: 3px; color: #4a3a0b; font-size: 10px; }
+.jf-insight em { font-weight: 700; }
+
+.jf-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.jf-card {
+  border: 1px solid #c2dfe4; border-radius: 10px; padding: 10px;
+  background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.03);
+}
+.jf-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.jf-icon { font-size: 20px; flex: 0 0 auto; }
+.jf-card-header strong { display: block; color: #0b3147; font-size: 11px; }
+.jf-count {
+  display: inline-block; margin-top: 2px; padding: 2px 8px;
+  border: 1px solid #38bdb0; border-radius: 20px;
+  color: #0e6b61; background: #e0f7f4; font-size: 9px; font-weight: 700;
+}
+.jf-doc-note {
+  margin: 0 0 6px; padding: 5px 8px; border-radius: 5px;
+  background: #fef4e0; color: #5e4b13; font-size: 9px; font-weight: 600;
+}
+
+/* Zone list */
+.jf-zone-list { display: grid; gap: 4px; }
+.jf-zone {
+  display: grid; grid-template-columns: 22px 1fr auto auto; align-items: center;
+  gap: 6px; padding: 5px 7px; border: 1px solid #d6ecf0; border-radius: 6px;
+  background: #f4fbfc;
+}
+.jf-zone-num {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #ff4466; color: #fff; font-size: 9px; font-weight: 900;
+}
+.jf-zone-desc strong { display: block; color: #1c4a5a; font-size: 9px; font-weight: 700; }
+.jf-zone-desc code {
+  display: block; margin-top: 1px;
+  color: #15566a; font: 8px ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.jf-layer-tag {
+  display: inline-block; padding: 2px 6px; border-radius: 10px;
+  font-size: 7px; font-weight: 800; color: #fff; white-space: nowrap;
+}
+.jf-layer-tag.report-layer-dom { background: #245c91; }
+.jf-layer-tag.report-layer-regex { background: #785619; }
+.jf-layer-tag.report-layer-vision, .jf-layer-tag.report-layer-ocr { background: #63368b; }
+.jf-layer-tag.report-layer-fallback { background: #8a2f45; }
+.jf-zone-conf {
+  padding: 2px 6px; border-radius: 4px; background: #d4f0ec;
+  color: #0e5e53; font-size: 9px; font-weight: 800; white-space: nowrap;
+}
+.jf-empty { color: #4f6871; font-size: 10px; font-style: italic; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TECHNICAL DETAILS — collapsible details sections
+   ═══════════════════════════════════════════════════════════════ */
+.judge-tech {
+  margin-top: 12px; border: 1px solid #c2dfe4; border-radius: 12px;
+  padding: 12px; background: #f8fcff;
+}
+.jt-title { margin: 0 0 3px; color: #0b3147; font-size: 11px; font-weight: 800; }
+.jt-note { margin: 0 0 8px; color: #6a8e98; font-size: 9px; }
+.jt-details {
+  border: 1px solid #d6ecf0; border-radius: 8px; margin-top: 6px;
+  background: #fff; overflow: hidden;
+}
+.jt-details summary {
+  padding: 7px 10px; color: #0b3147; font-size: 10px; font-weight: 700;
+  cursor: pointer; user-select: none;
+}
+.jt-details summary:hover { background: #edf7fb; }
+.jt-details[open] summary { border-bottom: 1px solid #d6ecf0; background: #f0f8fb; }
+.jt-details > div, .jt-details > dl, .jt-details > pre { padding: 8px 10px; }
+.jt-pre {
+  max-height: 180px; overflow: auto; margin: 0; border: 0; padding: 8px 10px;
+  color: #173b46; background: #f4fbfc;
+  font: 8px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap;
+}
+
 @media (max-width: 450px) {
   .dom-audit-grid, .report-before-after { grid-template-columns: 1fr; }
   .dom-protection-steps { grid-template-columns: 1fr; }
@@ -509,6 +658,10 @@ body.sidepanel .preview-modal.is-fallback-fullscreen .preview-modal-stage {
   .report-metrics .report-metric:last-child { grid-column: span 3; }
   .run-report-header { display: block; }
   .run-report-download { margin-top: 7px; }
+  .jv-answers { grid-template-columns: 1fr; }
+  .jv-card-big { font-size: 12px; }
+  .jf-zone { grid-template-columns: 20px 1fr auto; }
+  .jf-zone-conf { display: none; }
 }
 
 @media (max-width: 450px) {
