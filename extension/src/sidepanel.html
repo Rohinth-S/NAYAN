@@ -122,7 +122,7 @@
 
       <div class="actions">
         <button id="preview" type="button" class="secondary"><span class="btn-orb-slot"><thinking-orb id="previewOrb" state="shaping" size="20" theme="dark" paused></thinking-orb></span><span class="btn-text">Privacy preview</span></button>
-        <button id="start" type="button"><span class="btn-orb-slot"><thinking-orb id="startOrb" state="working" size="20" theme="dark" paused></thinking-orb></span><span class="btn-text">Start agent</span></button>
+        <button id="start" type="button" data-agent-state="idle"><span class="btn-orb-slot" aria-hidden="true"><thinking-orb id="startOrb" class="static-orb" state="breathing" size="32" theme="dark" color="#ffffff"></thinking-orb><svg id="startCompleteIcon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span><span id="startLabel" class="btn-text">Start agent</span></button>
         <button id="stop" type="button" class="danger" disabled><span aria-hidden="true">■</span> Stop</button>
       </div>
 

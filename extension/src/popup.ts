@@ -27,8 +27,9 @@ const allowLocalTransfer = byId<HTMLInputElement>('allowLocalTransfer');
 const sourceTab = byId<HTMLSelectElement>('sourceTab');
 const refreshSourceTabs = byId<HTMLButtonElement>('refreshSourceTabs');
 const start = byId<HTMLButtonElement>('start');
-
-
+const startOrb = byId<ThinkingOrbElement>('startOrb');
+const startCompleteIcon = document.getElementById('startCompleteIcon')!;
+const startLabel = byId<HTMLSpanElement>('startLabel');
 const preview = byId<HTMLButtonElement>('preview');
 const stop = byId<HTMLButtonElement>('stop');
 const state = byId<HTMLSpanElement>('state');
@@ -397,6 +398,18 @@ async function send(command: PopupCommand): Promise<AgentStatus> {
   return (await ext.runtime.sendMessage(command)) as AgentStatus;
 }
 
+function renderStartButton(buttonState: 'idle' | 'running' | 'done'): void {
+  const completed = buttonState === 'done';
+  start.dataset.agentState = buttonState;
+  start.setAttribute('aria-busy', String(buttonState === 'running'));
+  startOrb.state = buttonState === 'running' ? 'working' : 'breathing';
+  startOrb.hidden = completed;
+  startOrb.toggleAttribute('paused', completed);
+  startCompleteIcon.toggleAttribute('hidden', !completed);
+  startLabel.textContent = completed ? 'Run again' : buttonState === 'running' ? 'Running…' : 'Start agent';
+  start.title = completed ? 'Task completed. Start another run.' : '';
+}
+
 function render(current: AgentStatus): void {
   latestStatus = current;
   state.textContent = current.phase;
@@ -406,15 +419,11 @@ function render(current: AgentStatus): void {
     orb.state = orbState;
   });
   const previewOrb = document.getElementById('previewOrb') as ThinkingOrbElement | null;
-  const startOrb = document.getElementById('startOrb') as ThinkingOrbElement | null;
   if (previewOrb) {
     if (current.phase === 'capturing' || current.phase === 'sanitizing') previewOrb.removeAttribute('paused');
     else previewOrb.setAttribute('paused', '');
   }
-  if (startOrb) {
-    if (current.running) startOrb.removeAttribute('paused');
-    else startOrb.setAttribute('paused', '');
-  }
+  renderStartButton(current.running ? 'running' : current.phase === 'done' && !popupError ? 'done' : 'idle');
   const staleGrade = current.sanitizedDomPreview !== null
     && current.sanitizedDomPreview.grade !== normalizePrivacyGrade(Number(privacyGrade.value));
   const visibleMessage = popupError ?? (staleGrade && !current.running
@@ -475,9 +484,8 @@ function render(current: AgentStatus): void {
 async function run(type: 'START' | 'PREVIEW'): Promise<void> {
   popupError = null;
   const previewOrb = document.getElementById('previewOrb') as ThinkingOrbElement | null;
-  const startOrb = document.getElementById('startOrb') as ThinkingOrbElement | null;
   if (type === 'PREVIEW' && previewOrb) previewOrb.removeAttribute('paused');
-  if (type === 'START' && startOrb) startOrb.removeAttribute('paused');
+  if (type === 'START') renderStartButton('running');
   try {
     const value = settings();
     if (type === 'START' && !value.task) throw new Error('Enter a task first');
@@ -490,6 +498,7 @@ async function run(type: 'START' | 'PREVIEW'): Promise<void> {
     render(await send({ type, settings: value }));
   } catch (error) {
     popupError = error instanceof Error ? error.message : 'Could not start';
+    renderStartButton('idle');
     message.textContent = popupError;
   }
 }

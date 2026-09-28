@@ -119,6 +119,12 @@ button:disabled { cursor: default; opacity: .38; transform: none; box-shadow: no
 .btn-orb-slot { display: inline-flex; align-items: center; justify-content: center; margin-right: 5px; vertical-align: middle; }
 thinking-orb { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
 .thinking-orb-canvas { display: block; border-radius: 50%; }
+#start { display: flex; align-items: center; justify-content: center; }
+#start .btn-orb-slot { flex: 0 0 32px; width: 32px; height: 32px; opacity: 1; }
+#start .btn-text { margin-right: 0; font-size: inherit; opacity: 1; }
+#start [hidden] { display: none !important; }
+/* Keep the progress indicator legible while duplicate starts are disabled. */
+#start[data-agent-state="running"]:disabled { opacity: 1; cursor: progress; }
 dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; }
 dl div { min-width: 0; border-left: 1px solid #555; padding-left: 8px; }
 dt { color: #999; font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }

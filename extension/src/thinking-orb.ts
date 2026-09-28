@@ -128,7 +128,10 @@ export function createThinkingOrb(options: ThinkingOrbOptions = {}): ThinkingOrb
     const dpr = Math.min(2, typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1);
     const dark = resolveDarkTheme(theme, canvas);
     const tint = parseTint(color);
-    const { mode, speed: baseSpeed, opts } = resolvePreset(state, size as OrbSize);
+    // The engine only has 20/32/64px presets; smaller UI indicators still
+    // render at their requested size using the nearest supported density.
+    const presetSize: OrbSize = size < 26 ? 20 : size < 48 ? 32 : 64;
+    const { mode, speed: baseSpeed, opts } = resolvePreset(state, presetSize);
     const frameFn = MODE_FRAMES[mode] as ModeFrame;
     const effSpeed = baseSpeed * speed;
 
