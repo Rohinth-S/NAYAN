@@ -21,9 +21,33 @@ _TASK_TERMS = (
     "apply",
 )
 _BUTTON_TERMS = (*_TASK_TERMS, "next")
-_STRONG_TERMINAL_TASK_TERMS = ("submit", "submitting", "enroll", "register", "save", "apply", "finish", "complete")
-_FILL_TERMS = ("fill", "enter", "type", "write", "provide", "input")
-_COMPLETION_TERMS = ("complete", "completed", "submitted", "success", "successful", "finished", "done")
+_STRONG_TERMINAL_TASK_TERMS = (
+    "submit",
+    "submitting",
+    "enroll",
+    "register",
+    "save",
+    "apply",
+    "finish",
+    "complete",
+)
+_FILL_TERMS = (
+    "fill",
+    "enter",
+    "type",
+    "write",
+    "provide",
+    "input",
+)
+_COMPLETION_TERMS = (
+    "complete",
+    "completed",
+    "submitted",
+    "success",
+    "successful",
+    "finished",
+    "done",
+)
 _PREREQUISITE_TERMS = (
     "agree",
     "accept",
